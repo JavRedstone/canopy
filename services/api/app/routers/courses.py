@@ -1,4 +1,5 @@
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
 
@@ -21,7 +22,5 @@ def create_course(request: CreateCourseRequest, current_user: CurrentUser, repos
 
 
 @router.get("/{course_id}/map", response_model=CourseMapResponse)
-def get_course_map(course_id: str, current_user: CurrentUser, repository: Repository) -> CourseMapResponse:
-    from uuid import UUID
-
-    return repository.course_map(current_user, UUID(course_id))
+def get_course_map(course_id: UUID, current_user: CurrentUser, repository: Repository) -> CourseMapResponse:
+    return repository.course_map(current_user, course_id)

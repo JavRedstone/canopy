@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
-import { Google_Sans } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
-const googleSans = Google_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-google-sans"
+// Self-hosted from apps/web/app/fonts (OFL-licensed) rather than next/font/google so
+// `next build` never depends on network access to fonts.googleapis.com/fonts.gstatic.com.
+const googleSans = localFont({
+  src: "./fonts/GoogleSansFlex.woff2",
+  weight: "1 1000",
+  variable: "--font-google-sans",
+  display: "swap"
 });
 
 export const metadata: Metadata = {

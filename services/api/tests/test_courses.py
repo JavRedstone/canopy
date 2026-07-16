@@ -37,3 +37,11 @@ def test_course_vertical_slice() -> None:
     )
     assert other_user_courses.status_code == 200
     assert other_user_courses.json() == []
+
+
+def test_course_map_rejects_a_malformed_course_id() -> None:
+    client = TestClient(app)
+
+    response = client.get("/api/v1/courses/not-a-uuid/map")
+
+    assert response.status_code == 422

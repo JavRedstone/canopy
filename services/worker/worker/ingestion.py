@@ -4,7 +4,9 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import UUID, uuid4
 
-from openai import OpenAI
+from httpx import HTTPError
+from openai import APIConnectionError, InternalServerError, OpenAI, RateLimitError
+from postgrest.exceptions import APIError
 from supabase import Client
 
 from worker.parsing import ParsedChunk, parse_source_document
@@ -13,6 +15,10 @@ from worker.settings import WorkerSettings
 
 
 logger = logging.getLogger(__name__)
+
+# Transient infrastructure failures: the job should stay on the queue and be retried
+# once its visibility timeout expires, rather than being archived and permanently lost.
+RETRYABLE_ERRORS = (HTTPError, APIError, APIConnectionError, RateLimitError, InternalServerError)
 
 
 @dataclass(frozen=True)
@@ -75,12 +81,14 @@ class IngestionWorker:
         try:
             UUID(source_id)
             self.ingest_source(source_id)
+        except RETRYABLE_ERRORS:
+            logger.exception("Source ingestion hit a transient error; leaving job queued for retry", extra={"source_id": source_id})
+            return
         except Exception:
             logger.exception("Source ingestion failed", extra={"source_id": source_id})
             if source_id:
                 self.client.table("source_documents").update({"status": "failed"}).eq("id", source_id).execute()
-        finally:
-            self.queue.archive("ingestion", message.message_id)
+        self.queue.archive("ingestion", message.message_id)
 
     def _handle_generation(self, message: QueueMessage) -> None:
         course_id = str(message.payload.get("course_id", ""))
@@ -89,10 +97,12 @@ class IngestionWorker:
                 raise ValueError("Unsupported generation job.")
             UUID(course_id)
             self.plan_course(course_id)
+        except RETRYABLE_ERRORS:
+            logger.exception("Course planning hit a transient error; leaving job queued for retry", extra={"course_id": course_id})
+            return
         except Exception:
             logger.exception("Course planning failed", extra={"course_id": course_id})
-        finally:
-            self.queue.archive("generation", message.message_id)
+        self.queue.archive("generation", message.message_id)
 
     def ingest_source(self, source_id: str) -> None:
         source = self._one(
@@ -171,6 +181,11 @@ class IngestionWorker:
                 "apply_course_plan",
                 {"p_course_version_id": course_version_id, "p_plan": plan.model_dump(mode="json")},
             ).execute()
+        except RETRYABLE_ERRORS:
+            # claim_course_planning already moved status to 'generating'; put it back to
+            # 'planning' so a retried job can claim it again instead of stranding it.
+            self.client.table("course_versions").update({"status": "planning"}).eq("id", course_version_id).execute()
+            raise
         except Exception:
             self.client.table("course_versions").update({"status": "failed"}).eq("id", course_version_id).execute()
             raise
