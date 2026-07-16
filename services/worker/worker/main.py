@@ -2,10 +2,12 @@ import argparse
 import logging
 import time
 
+import docker
 from openai import OpenAI
 from supabase import create_client
 
 from worker.ingestion import IngestionWorker
+from worker.sandbox import DockerSandbox
 from worker.settings import WorkerSettings
 
 
@@ -30,7 +32,8 @@ def main() -> None:
     settings.require_runtime_configuration()
     client = create_client(settings.supabase_url, settings.supabase_service_role_key)
     openai = _build_openai_client(settings)
-    worker = IngestionWorker(settings, client, openai)
+    sandbox = DockerSandbox(docker.from_env(), timeout_seconds=settings.sandbox_timeout_seconds)
+    worker = IngestionWorker(settings, client, openai, sandbox)
     print(f"Adaptive Source Learning worker started in {settings.environment} mode.")
     while True:
         if not worker.run_once():

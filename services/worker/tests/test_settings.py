@@ -55,7 +55,7 @@ def test_require_runtime_configuration_rejects_azure_without_deployments() -> No
         settings.require_runtime_configuration()
 
 
-def test_require_runtime_configuration_accepts_complete_azure_configuration() -> None:
+def test_require_runtime_configuration_rejects_azure_without_builder_deployment() -> None:
     settings = _settings(
         supabase_url="https://example.supabase.co",
         supabase_service_role_key="service-role-key",
@@ -66,4 +66,30 @@ def test_require_runtime_configuration_accepts_complete_azure_configuration() ->
         azure_openai_embedding_deployment="my-embedding-deployment",
     )
 
+    with pytest.raises(RuntimeError, match="APP_AZURE_OPENAI_BUILDER_DEPLOYMENT"):
+        settings.require_runtime_configuration()
+
+
+def test_require_runtime_configuration_accepts_complete_azure_configuration() -> None:
+    settings = _settings(
+        supabase_url="https://example.supabase.co",
+        supabase_service_role_key="service-role-key",
+        openai_api_key="sk-test",
+        openai_provider="azure",
+        azure_openai_endpoint="https://example.openai.azure.com/",
+        azure_openai_planner_deployment="my-planner-deployment",
+        azure_openai_embedding_deployment="my-embedding-deployment",
+        azure_openai_builder_deployment="my-builder-deployment",
+    )
+
     settings.require_runtime_configuration()
+
+
+def test_azure_provider_uses_builder_deployment_name() -> None:
+    settings = _settings(
+        openai_provider="azure",
+        openai_builder_model="gpt-builder",
+        azure_openai_builder_deployment="my-builder-deployment",
+    )
+
+    assert settings.builder_model == "my-builder-deployment"

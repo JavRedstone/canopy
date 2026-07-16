@@ -137,6 +137,22 @@ Python dependencies are an environment concern, not a learner-runtime concern. A
 
 The first implementation supports public PyPI packages required by a course. Package policy, registry choice, and vulnerability scanning stay behind the provisioner; the runtime contract is always a resolved environment ID and lockfile hash.
 
+### 4.5 Lesson sandbox builder
+
+The Docker sandbox's first and primary role is not isolating untrusted learner code (that is the separate, later-built evaluator sandbox in §4.1's `SandboxAdapter`). It is giving the **content-generation agent itself** a real place to write files, execute them, and observe results — so a coding lesson's exercise proves itself before any learner ever sees it, matching the self-repair guarantee described in `docs/IDEA.md`.
+
+The worker (`services/worker/worker/`) runs this as a background job per coding-concept lesson slot, triggered automatically the moment a course finishes planning:
+
+1. **Trigger.** `apply_course_plan` calls `enqueue_lesson_builds`, which queues a `lesson_build` job on the existing `generation_jobs` queue for every coding-kind `lesson_definitions` row (`supabase/migrations/20260716004000_lesson_build_jobs.sql`). A `lesson_definitions.build_status` column (`pending → building → built | failed`) makes the claim atomic, mirroring the existing `claim_course_planning` pattern.
+2. **Generate (single-shot).** `generate_lesson_bundle` (`worker/lesson_agent.py`) makes one `responses.parse` call — the same structured-output house pattern as course planning — grounded in the concept's own cited source chunks, producing a `LessonBundle` (`worker/lesson_schema.py`): starter files (with the target behavior left unimplemented), test files, a reference solution, an explanation, and hints. `validate_lesson_bundle` checks citation grounding and path consistency before anything touches Docker.
+3. **Execute for real.** `DockerSandbox` (`worker/sandbox.py`) runs the reference solution against the tests inside a disposable, network-isolated container (`services/worker/sandbox_image/`, a minimal `python:3.13-slim` + pytest image, built lazily on first use). This is real execution, not a simulated check.
+4. **Repair (multi-step, only on failure).** If the reference solution fails its own tests, `repair_bundle` hands the model three tools — `read_file`, `write_file`, `run_tests` — and lets it iterate: inspect, patch, re-run for real inside the sandbox, repeat. The loop is capped (`lesson_build_max_attempts`, `lesson_build_max_tool_calls`); the final pass/fail always comes from the sandbox's own last real run, never from the model's self-report.
+5. **Persist.** `apply_lesson_bundle` writes the resulting `lesson_revisions` row with `validation_status = validated | failed`, whether or not it ultimately passed — a lesson that exhausts its retry budget is recorded, not silently dropped, so it is visible for review and reclaimable later.
+
+Containment for this step is scoped to its actual threat model: content the worker itself asked a trusted LLM call to generate, not adversarial learner input. Network-disabled, memory/CPU/PID-limited, wall-clock-timeout containers are enough to stop a runaway process; this is deliberately lighter than what the eventual learner-facing evaluator sandbox will need.
+
+Explicitly out of scope for this pass: the learner-facing "run my code" endpoint, WebSocket streaming, the Monaco editor frontend, the separate evaluator sandbox for graded submissions, and multi-language/environment-catalog support (`environment_definitions` is untouched).
+
 ## 5. Course, versioning, and personalization model
 
 ### 5.1 Canonical course model
@@ -541,7 +557,7 @@ A learner uploads an API-authentication document, chooses a goal, receives a sta
 These decisions do not block scaffolding because they are isolated behind contracts:
 
 - concrete model-provider configuration and model selection;
-- concrete sandbox implementation (managed service versus self-managed runtime);
+- concrete sandbox implementation for the learner-facing evaluator sandbox (managed service versus self-managed runtime) — the lesson sandbox builder's implementation is decided (§4.5: self-managed Docker);
 - Supabase plan, region, and production backup configuration;
 - production retention period and deletion workflow;
 - instructor/admin roles and analytics;
