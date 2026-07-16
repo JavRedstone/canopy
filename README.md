@@ -110,6 +110,6 @@ The current vertical slice uses Supabase Auth and the Supabase-backed course rep
 
 ## Reference documents
 
-- [Revised product idea](./docs/REVISED_IDEA.md)
-- [System design](./docs/SYSTEM_DESIGN.md)
+- [Product idea](./docs/IDEA.md)
+- [Architecture](./docs/ARCHITECTURE.md)
 - [Scaffold status](./docs/SCAFFOLD_STATUS.md)

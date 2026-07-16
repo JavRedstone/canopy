@@ -11,7 +11,7 @@ This document records the current application scaffold, what has been verified, 
 - **Python environments:** dependencies are installed in the project-local `.venv`; no global Python installation is required.
 - **Learning model:** canonical course content is shared and reviewable. Learner-specific adaptation is limited to route/path events and support artifacts such as remediation or concise variants.
 
-The system design and product decisions remain in [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md) and [REVISED_IDEA.md](REVISED_IDEA.md).
+The system design and product decisions remain in [ARCHITECTURE.md](ARCHITECTURE.md) and [IDEA.md](IDEA.md).
 
 ## Repository layout
 

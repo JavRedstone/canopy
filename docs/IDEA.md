@@ -1,4 +1,4 @@
-# AI-Powered Adaptive Learning Platform — Revised Plan (v2)
+# Canopy — Product Idea
 
 ## One-Line Pitch
 

@@ -1,8 +1,8 @@
-# System Design — Adaptive, Source-Grounded Coding Courses
+# Architecture — Adaptive, Source-Grounded Coding Courses
 
 **Status:** Draft for implementation
 **Audience:** Product and engineering team
-**Source of truth for product intent:** [`REVISED_IDEA.md`](./REVISED_IDEA.md)
+**Source of truth for product intent:** [`IDEA.md`](./IDEA.md)
 
 ## 1. Purpose
 
@@ -526,8 +526,8 @@ supabase/
 infra/
   compose/                # Local worker and sandbox services
 docs/
-  SYSTEM_DESIGN.md
-  REVISED_IDEA.md
+  ARCHITECTURE.md
+  IDEA.md
 ```
 
 `packages/contracts` is the integration boundary: planner output, lesson bundles, sandbox requests/results, and API request/response types are defined there before feature code is written.
