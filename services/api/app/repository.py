@@ -41,6 +41,10 @@ class CourseRepository(Protocol):
 
     def concept_detail(self, owner_id: UUID, course_id: UUID, slug: str) -> ConceptDetailResponse: ...
 
+    def lesson_workspace(self, owner_id: UUID, course_id: UUID, slug: str) -> tuple[list[LessonWorkspaceFile], list[LessonWorkspaceFile]]: ...
+
+    def regenerate_lesson(self, owner_id: UUID, course_id: UUID, slug: str) -> None: ...
+
 
 @dataclass
 class SourceRecord:
@@ -163,6 +167,15 @@ class MemoryCourseRepository:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Concept not found.")
         title, kind, summary = dummy_concepts[slug]
         return ConceptDetailResponse(slug=slug, title=title, kind=kind, summary_markdown=summary, citations=[], lesson=None)
+
+    def lesson_workspace(self, owner_id: UUID, course_id: UUID, slug: str) -> tuple[list[LessonWorkspaceFile], list[LessonWorkspaceFile]]:
+        self._course_for_owner(owner_id, course_id)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A generated lesson is required before it can run.")
+
+    def regenerate_lesson(self, owner_id: UUID, course_id: UUID, slug: str) -> None:
+        self._course_for_owner(owner_id, course_id)
+        if slug not in {"core-pattern", "robustness"}:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Concept not found.")
 
     def _source_for_owner(self, owner_id: UUID, source_id: UUID) -> SourceRecord:
         source = self.sources.get(source_id)
@@ -576,6 +589,7 @@ class SupabaseCourseRepository:
                     explanation_markdown=bundle["explanation_markdown"] if bundle else "",
                     starter_files=[LessonWorkspaceFile(**file) for file in bundle["starter_files"]] if bundle else [],
                     hints=bundle["hints"] if bundle else [],
+                    public_test_cases=bundle.get("public_test_cases", []) if bundle else [],
                 )
 
         return ConceptDetailResponse(
@@ -586,6 +600,61 @@ class SupabaseCourseRepository:
             citations=citations,
             lesson=lesson,
         )
+
+    def lesson_workspace(self, owner_id: UUID, course_id: UUID, slug: str) -> tuple[list[LessonWorkspaceFile], list[LessonWorkspaceFile]]:
+        course = self._course_for_owner(owner_id, course_id)
+        version_id = course.get("active_version_id")
+        if not version_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found.")
+        rows = self._data(
+            self.client.table("lesson_definitions")
+            .select("id,build_status,concepts!inner(slug)")
+            .eq("course_version_id", version_id)
+            .eq("kind", "lesson")
+            .eq("concepts.slug", slug),
+            "load lesson workspace",
+        )
+        definition = self._one(rows, "Lesson")
+        if definition["build_status"] != "built":
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This lesson is still being built.")
+        revisions = self._data(
+            self.client.table("lesson_revisions")
+            .select("bundle_json")
+            .eq("lesson_definition_id", definition["id"])
+            .eq("validation_status", "validated")
+            .order("revision", desc=True)
+            .limit(1),
+            "load lesson workspace revision",
+        )
+        bundle = self._one(revisions, "Lesson revision")["bundle_json"]
+        return (
+            [LessonWorkspaceFile(**file) for file in bundle["starter_files"]],
+            [LessonWorkspaceFile(**file) for file in bundle["test_files"]],
+        )
+
+    def regenerate_lesson(self, owner_id: UUID, course_id: UUID, slug: str) -> None:
+        try:
+            self.client.rpc(
+                "regenerate_lesson_build",
+                {"p_course_id": str(course_id), "p_owner_id": str(owner_id), "p_concept_slug": slug},
+            ).execute()
+        except APIError as exc:
+            if exc.code == "PGRST202":
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Lesson regeneration is not deployed yet. Apply migration 20260716007000_lesson_regeneration.sql.",
+                ) from exc
+            logger.exception("Supabase request failed while attempting to regenerate a lesson")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="The course service is temporarily unavailable.",
+            ) from exc
+        except HTTPError as exc:
+            logger.exception("Supabase request failed while attempting to regenerate a lesson")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="The course service is temporarily unavailable.",
+            ) from exc
 
     def _source_for_owner(self, owner_id: UUID, source_id: UUID) -> dict[str, Any]:
         return self._one(

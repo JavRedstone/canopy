@@ -97,6 +97,22 @@ class LessonPreview(BaseModel):
     explanation_markdown: str
     starter_files: list[LessonWorkspaceFile]
     hints: list[str]
+    public_test_cases: list["LessonTestCase"] = Field(default_factory=list)
+
+
+class LessonTestCase(BaseModel):
+    name: str
+    description: str
+
+
+class RunLessonRequest(BaseModel):
+    files: list[LessonWorkspaceFile] = Field(min_length=1, max_length=10)
+
+
+class RunLessonResponse(BaseModel):
+    passed: bool
+    output: str
+    timed_out: bool
 
 
 class ConceptDetailResponse(BaseModel):

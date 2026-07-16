@@ -101,6 +101,7 @@ export interface LessonPreview {
   explanation_markdown: string;
   starter_files: LessonWorkspaceFile[];
   hints: string[];
+  public_test_cases: { name: string; description: string }[];
 }
 
 export interface ConceptDetailResponse {
@@ -112,6 +113,12 @@ export interface ConceptDetailResponse {
   lesson: LessonPreview | null;
 }
 
+export interface LessonRunResult {
+  passed: boolean;
+  output: string;
+  timed_out: boolean;
+}
+
 export async function getConceptDetail(courseId: string, slug: string, accessToken: string): Promise<ConceptDetailResponse> {
   const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/concepts/${slug}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -119,4 +126,22 @@ export async function getConceptDetail(courseId: string, slug: string, accessTok
   });
   if (!response.ok) throw new Error(`Unable to load this concept (HTTP ${response.status}).`);
   return response.json();
+}
+
+export async function runLesson(courseId: string, slug: string, files: LessonWorkspaceFile[], accessToken: string): Promise<LessonRunResult> {
+  const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/concepts/${slug}/run`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ files })
+  });
+  if (!response.ok) throw new Error(`Unable to run exercise tests (HTTP ${response.status}).`);
+  return response.json();
+}
+
+export async function regenerateLesson(courseId: string, slug: string, accessToken: string): Promise<void> {
+  const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/concepts/${slug}/regenerate`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  if (!response.ok) throw new Error(`Unable to regenerate this lesson (HTTP ${response.status}).`);
 }

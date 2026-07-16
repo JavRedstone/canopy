@@ -10,10 +10,16 @@ from worker.sandbox import DockerSandbox, SandboxFile, SandboxRunResult
 logger = logging.getLogger(__name__)
 
 GENERATION_SYSTEM_PROMPT = (
-    "Create a self-contained Python coding exercise for one concept. The starter file must "
+    "Create a detailed, self-contained Python coding lesson and exercise for one concept. Write "
+    "explanation_markdown as a practical mini-lesson of roughly 500-1,200 words with clear Markdown headings for "
+    "the objective, core idea, a guided walkthrough, exercise requirements, and common mistakes. Make the "
+    "explanation useful on its own, but do not reveal the reference solution verbatim. The starter file must "
     "compile but leave the target behavior unimplemented (a stub or a deliberate gap), the reference "
     "solution must implement it correctly and use the exact same file paths as the starter files, "
-    "and the tests must exercise the behavior described in the explanation."
+    "and the tests must exercise normal, edge, and failure behavior described in the explanation. Include 2-4 "
+    "actionable hints that progressively guide the learner without giving away the final implementation. Provide 2-5 "
+    "public_test_cases with a short name and description of each behavior the learner should satisfy; these describe "
+    "the checks but never include the hidden pytest code."
 )
 
 REPAIR_SYSTEM_PROMPT = (

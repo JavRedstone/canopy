@@ -13,6 +13,15 @@ class WorkspaceFile(BaseModel):
     content: str = Field(min_length=1, max_length=20_000)
 
 
+class PublicTestCase(BaseModel):
+    """A learner-visible behavior check; private pytest files remain server-side."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=120)
+    description: str = Field(min_length=1, max_length=500)
+
+
 class LessonBundle(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -24,6 +33,7 @@ class LessonBundle(BaseModel):
     test_files: list[WorkspaceFile] = Field(min_length=1, max_length=5)
     reference_solution_files: list[WorkspaceFile] = Field(min_length=1, max_length=10)
     hints: list[str] = Field(default_factory=list, max_length=5)
+    public_test_cases: list[PublicTestCase] = Field(default_factory=list, max_length=6)
 
     @model_validator(mode="after")
     def paths_are_consistent(self) -> "LessonBundle":

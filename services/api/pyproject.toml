@@ -8,6 +8,7 @@ version = "0.1.0"
 description = "FastAPI command service for Adaptive Source Learning"
 requires-python = ">=3.13"
 dependencies = [
+  "docker>=7.0",
   "fastapi>=0.115",
   "pydantic-settings>=2.6",
   "supabase>=2.0",

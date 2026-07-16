@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     supabase_service_role_key: str | None = None
     database_url: str | None = None
     cors_origins: str = "http://localhost:3000"
+    sandbox_timeout_seconds: int = 20
 
     @property
     def cors_origin_list(self) -> list[str]:

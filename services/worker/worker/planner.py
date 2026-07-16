@@ -10,7 +10,7 @@ class PlannerConcept(BaseModel):
     id: str = Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
     title: str = Field(min_length=1, max_length=160)
     kind: Literal["conceptual", "coding"]
-    summary_markdown: str = Field(min_length=1, max_length=4000)
+    summary_markdown: str = Field(min_length=1, max_length=400)
     prerequisites: list[str]
     citations: list[str] = Field(default_factory=list)
 

@@ -12,7 +12,8 @@ import { Icon } from "@/components/icon";
 import { conceptKindIcon } from "@/lib/concept-kind";
 import { createClient } from "@/lib/supabase/client";
 
-const pollIntervalMs = 2500;
+const pollIntervalMs = 5000;
+const fullRefreshEveryPolls = 3;
 
 export function CourseDetail({ courseId }: { courseId: string }) {
   const [course, setCourse] = useState<CourseSummary>();
@@ -20,13 +21,16 @@ export function CourseDetail({ courseId }: { courseId: string }) {
   const [map, setMap] = useState<CourseMapResponse>();
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState<string>();
+  const [refreshError, setRefreshError] = useState<string>();
   const [regenerating, setRegenerating] = useState(false);
-  const loadRef = useRef<() => Promise<void>>(async () => {});
+  const fullLoadRef = useRef<() => Promise<void>>(async () => {});
+  const progressRefreshRef = useRef<() => Promise<void>>(async () => {});
+  const pollCountRef = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
 
-    async function load() {
+    async function loadFull() {
       const supabase = createClient();
       const { data } = await supabase.auth.getSession();
       if (!data.session) return;
@@ -41,6 +45,7 @@ export function CourseDetail({ courseId }: { courseId: string }) {
         setCourse(courseSummary);
         setProgress(courseProgress);
         setMap(courseMap);
+        setRefreshError(undefined);
         setState("ready");
       } catch (caught) {
         if (!cancelled) {
@@ -50,8 +55,33 @@ export function CourseDetail({ courseId }: { courseId: string }) {
       }
     }
 
-    loadRef.current = load;
-    void load();
+    async function refreshProgress() {
+      const supabase = createClient();
+      const { data } = await supabase.auth.getSession();
+      if (!data.session) return;
+      try {
+        const nextProgress = await getCourseProgress(courseId, data.session.access_token);
+        if (cancelled) return;
+        setProgress(nextProgress);
+        setRefreshError(undefined);
+        pollCountRef.current += 1;
+        if (
+          pollCountRef.current % fullRefreshEveryPolls === 0 ||
+          nextProgress.stage === "ready" ||
+          nextProgress.stage === "failed"
+        ) {
+          await loadFull();
+        }
+      } catch (caught) {
+        if (!cancelled) {
+          setRefreshError(caught instanceof Error ? caught.message : "Unable to refresh course progress.");
+        }
+      }
+    }
+
+    fullLoadRef.current = loadFull;
+    progressRefreshRef.current = refreshProgress;
+    void loadFull();
     return () => {
       cancelled = true;
     };
@@ -59,7 +89,7 @@ export function CourseDetail({ courseId }: { courseId: string }) {
 
   useEffect(() => {
     if (!progress || progress.stage === "ready" || progress.stage === "failed") return;
-    const timer = setTimeout(() => void loadRef.current(), pollIntervalMs);
+    const timer = setTimeout(() => void progressRefreshRef.current(), pollIntervalMs);
     return () => clearTimeout(timer);
   }, [progress]);
 
@@ -72,7 +102,7 @@ export function CourseDetail({ courseId }: { courseId: string }) {
       await regenerateCourse(courseId, data.session.access_token);
       setMap(undefined);
       setState("loading");
-      await loadRef.current();
+      await fullLoadRef.current();
     } catch (caught) {
       setErrorMessage(caught instanceof Error ? caught.message : "Unable to regenerate the course.");
       setState("error");
@@ -103,6 +133,7 @@ export function CourseDetail({ courseId }: { courseId: string }) {
       </header>
 
       {progress.stage !== "ready" ? <CourseProgressSteps progress={progress} /> : null}
+      {refreshError ? <p className="error">{refreshError} Retrying automatically…</p> : null}
 
       {map.modules.length === 0 ? (
         progress.stage === "ready" ? <p className="muted">This course has no modules yet.</p> : null
