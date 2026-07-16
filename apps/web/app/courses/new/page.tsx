@@ -9,8 +9,13 @@ export default async function NewCoursePage() {
   if (!user) redirect("/login");
   return (
     <main className="shell">
-      <nav className="nav"><Link className="brand" href="/courses">SourceLab</Link></nav>
-      <section className="hero" style={{ maxWidth: 620 }}><span className="eyebrow">New canonical course</span><h1>Start from a source you trust.</h1><p>Choose a document and define the learning goal that should shape its course map.</p><NewCourseForm /></section>
+      <nav className="nav"><Link className="brand" href="/courses">Canopy</Link></nav>
+      <section className="hero" style={{ maxWidth: 560 }}>
+        <span className="eyebrow">New canonical course</span>
+        <h1>Start from a source you trust.</h1>
+        <p>Choose a document and define the learning goal that should shape its course map.</p>
+        <NewCourseForm />
+      </section>
     </main>
   );
 }

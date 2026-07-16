@@ -3,7 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
+    "predev": "node scripts/sync-env.js",
     "dev": "next dev",
+    "prebuild": "node scripts/sync-env.js",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",

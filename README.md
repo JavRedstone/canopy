@@ -22,6 +22,20 @@ Python dependencies are installed in the project-local `.venv`; nothing is insta
 
 ## First-run plan
 
+### macOS (zsh)
+
+```zsh
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e 'services/api[dev]' -e 'services/worker'
+
+npm install
+npm run dev:web
+```
+
+### Windows (PowerShell)
+
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
@@ -34,6 +48,15 @@ npm run dev:web
 
 Start local Supabase from the repository root:
 
+### macOS (zsh)
+
+```zsh
+npx supabase start
+npx supabase db reset
+```
+
+### Windows (PowerShell)
+
 ```powershell
 npx supabase start
 npx supabase db reset
@@ -41,13 +64,43 @@ npx supabase db reset
 
 Copy `.env.example` to `.env` and replace the local Supabase keys printed by `npx supabase start`.
 
+On macOS:
+
+```zsh
+cp .env.example .env
+```
+
+On Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+There is a single `.env` at the repository root, shared by `apps/web`, `services/api`, and `services/worker`. Next.js only reads env files from `apps/web` itself, so `npm run dev:web` and `npm run build:web` automatically sync the root `.env` into `apps/web/.env.local` first (`apps/web/scripts/sync-env.js`, wired as `predev`/`prebuild`) — no manual step needed.
+
 Run the API in a separate shell with the virtual environment active:
+
+### macOS (zsh)
+
+```zsh
+python -m uvicorn app.main:app --app-dir services/api --reload --port 8000
+```
+
+### Windows (PowerShell)
 
 ```powershell
 python -m uvicorn app.main:app --app-dir .\services\api --reload --port 8000
 ```
 
 Run the worker after adding `APP_OPENAI_API_KEY` to your uncommitted `.env` file:
+
+### macOS (zsh)
+
+```zsh
+python -m worker.main
+```
+
+### Windows (PowerShell)
 
 ```powershell
 .\.venv\Scripts\python.exe -m worker.main

@@ -10,8 +10,8 @@ export default async function CoursesPage() {
 
   return (
     <main className="shell">
-      <nav className="nav"><Link className="brand" href="/">SourceLab</Link><span className="muted">{user.email}</span></nav>
-      <header className="page-header"><div><span className="eyebrow">Learning library</span><h1>Your courses</h1><p className="muted">Each course has its own source set, route, and mastery record.</p></div><Link className="button-link" href="/courses/new">New course</Link></header>
+      <nav className="nav"><Link className="brand" href="/">Canopy</Link><span className="muted">{user.email}</span></nav>
+      <header className="page-header"><div><span className="eyebrow">Learning library</span><h1>Your courses</h1><p className="muted">Each course has its own source set, route, and mastery record.</p></div><Link className="button" href="/courses/new">New course</Link></header>
       <CourseDashboard />
     </main>
   );

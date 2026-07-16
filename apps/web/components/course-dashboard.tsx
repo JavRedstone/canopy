@@ -27,7 +27,7 @@ export function CourseDashboard() {
   if (state === "loading") return <p className="muted">Loading your courses…</p>;
   if (state === "error") return <p className="error">We could not load courses. Confirm that the API is running.</p>;
   if (courses.length === 0) {
-    return <div className="card"><h2>Your first course starts with a source.</h2><p>Upload a document, choose a goal, and we will create a stable course map.</p><Link className="button-link" href="/courses/new">Create a course</Link></div>;
+    return <div className="card"><h2>Your first course starts with a source.</h2><p>Upload a document, choose a goal, and we will create a stable course map.</p><Link className="button" href="/courses/new">Create a course</Link></div>;
   }
   return (
     <div className="course-list">

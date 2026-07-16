@@ -10,6 +10,7 @@ node_modules/
 dist/
 coverage/
 *.tsbuildinfo
+next-env.d.ts
 
 # Python
 __pycache__/
