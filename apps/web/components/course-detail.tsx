@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { Accordion } from "@base-ui/react/accordion";
 import { Button } from "@base-ui/react/button";
 import { CourseMapResponse, CourseProgressResponse, CourseSummary, getCourse, getCourseMap, getCourseProgress, regenerateCourse } from "@/lib/api";
@@ -8,6 +9,7 @@ import { Breadcrumbs } from "@/components/breadcrumbs";
 import { CourseCategoryBadge } from "@/components/course-category-badge";
 import { CourseProgressSteps } from "@/components/course-progress";
 import { Icon } from "@/components/icon";
+import { conceptKindIcon } from "@/lib/concept-kind";
 import { createClient } from "@/lib/supabase/client";
 
 const pollIntervalMs = 2500;
@@ -129,13 +131,18 @@ export function CourseDetail({ courseId }: { courseId: string }) {
                 ) : (
                   <div className="course-list">
                     {module.concepts.map((concept) => (
-                      <article className="course-row" key={concept.slug}>
-                        <div>
-                          <h3>{concept.title}</h3>
-                          <p className="muted">{concept.summary_markdown}</p>
+                      <Link className="course-row" href={`/courses/${courseId}/concepts/${concept.slug}`} key={concept.slug}>
+                        <div className="course-row-main">
+                          <span className="concept-kind-badge">
+                            <Icon name={conceptKindIcon(concept.kind)} />
+                          </span>
+                          <div>
+                            <h3>{concept.title}</h3>
+                            <p className="muted">{concept.summary_markdown}</p>
+                          </div>
                         </div>
                         <span className="course-status">{concept.kind}</span>
-                      </article>
+                      </Link>
                     ))}
                   </div>
                 )}

@@ -37,10 +37,12 @@ function buildSteps(progress: CourseProgressResponse): Step[] {
   });
 
   if (progress.lessons_total > 0) {
+    const lessonsState: StepState = progress.stage === "building_lessons" ? "active" : progress.stage === "ready" ? "done" : "pending";
+    const currentLesson = lessonsState === "active" && progress.current_lesson_title ? `, now building "${progress.current_lesson_title}"` : "";
     steps.push({
       key: "lessons",
-      label: `Lessons built (${progress.lessons_built}/${progress.lessons_total})`,
-      state: progress.stage === "building_lessons" ? "active" : progress.stage === "ready" ? "done" : "pending"
+      label: `Lessons built (${progress.lessons_built}/${progress.lessons_total})${currentLesson}`,
+      state: lessonsState
     });
   }
 

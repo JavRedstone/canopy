@@ -80,3 +80,29 @@ class CourseProgressResponse(BaseModel):
     sources_total: int
     lessons_built: int
     lessons_total: int
+    current_lesson_title: str | None = None
+
+
+class LessonWorkspaceFile(BaseModel):
+    path: str
+    content: str
+
+
+LessonBuildStatus = Literal["pending", "building", "built", "failed"]
+
+
+class LessonPreview(BaseModel):
+    status: LessonBuildStatus
+    title: str
+    explanation_markdown: str
+    starter_files: list[LessonWorkspaceFile]
+    hints: list[str]
+
+
+class ConceptDetailResponse(BaseModel):
+    slug: str
+    title: str
+    kind: Literal["conceptual", "coding"]
+    summary_markdown: str
+    citations: list[str]
+    lesson: LessonPreview | None = None

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, status
 
 from app.dependencies import CurrentUser
 from app.repository import CourseRepository, get_repository
-from app.schemas import CourseMapResponse, CourseProgressResponse, CourseSummary, CreateCourseRequest
+from app.schemas import ConceptDetailResponse, CourseMapResponse, CourseProgressResponse, CourseSummary, CreateCourseRequest
 
 router = APIRouter(prefix="/courses", tags=["courses"])
 Repository = Annotated[CourseRepository, Depends(get_repository)]
@@ -39,3 +39,8 @@ def get_course_progress(course_id: UUID, current_user: CurrentUser, repository: 
 @router.post("/{course_id}/regenerate", response_model=CourseSummary)
 def regenerate_course(course_id: UUID, current_user: CurrentUser, repository: Repository) -> CourseSummary:
     return repository.regenerate_course(current_user, course_id)
+
+
+@router.get("/{course_id}/concepts/{slug}", response_model=ConceptDetailResponse)
+def get_concept_detail(course_id: UUID, slug: str, current_user: CurrentUser, repository: Repository) -> ConceptDetailResponse:
+    return repository.concept_detail(current_user, course_id, slug)

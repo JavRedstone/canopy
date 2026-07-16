@@ -87,7 +87,7 @@ npm run dev:web
 
 # API
 source .venv/bin/activate
-python -m uvicorn app.main:app --app-dir services/api --reload --port 8000
+python -m uvicorn app.main:app --app-dir services/api --reload --reload-dir services/api --port 8000
 
 # Supabase CLI
 npx supabase --help

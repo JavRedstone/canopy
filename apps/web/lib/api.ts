@@ -67,6 +67,7 @@ export interface CourseProgressResponse {
   sources_total: number;
   lessons_built: number;
   lessons_total: number;
+  current_lesson_title: string | null;
 }
 
 export async function getCourseProgress(courseId: string, accessToken: string): Promise<CourseProgressResponse> {
@@ -84,5 +85,38 @@ export async function regenerateCourse(courseId: string, accessToken: string): P
     headers: { Authorization: `Bearer ${accessToken}` }
   });
   if (!response.ok) throw new Error(`Unable to regenerate the course (HTTP ${response.status}).`);
+  return response.json();
+}
+
+export interface LessonWorkspaceFile {
+  path: string;
+  content: string;
+}
+
+export type LessonBuildStatus = "pending" | "building" | "built" | "failed";
+
+export interface LessonPreview {
+  status: LessonBuildStatus;
+  title: string;
+  explanation_markdown: string;
+  starter_files: LessonWorkspaceFile[];
+  hints: string[];
+}
+
+export interface ConceptDetailResponse {
+  slug: string;
+  title: string;
+  kind: "conceptual" | "coding";
+  summary_markdown: string;
+  citations: string[];
+  lesson: LessonPreview | null;
+}
+
+export async function getConceptDetail(courseId: string, slug: string, accessToken: string): Promise<ConceptDetailResponse> {
+  const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/concepts/${slug}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: "no-store"
+  });
+  if (!response.ok) throw new Error(`Unable to load this concept (HTTP ${response.status}).`);
   return response.json();
 }

@@ -57,6 +57,13 @@ def test_course_vertical_slice() -> None:
     assert regenerated.status_code == 200
     assert regenerated.json()["id"] == course_id
 
+    concept = client.get(f"/api/v1/courses/{course_id}/concepts/core-pattern")
+    assert concept.status_code == 200
+    assert concept.json()["kind"] == "coding"
+
+    missing_concept = client.get(f"/api/v1/courses/{course_id}/concepts/not-a-real-slug")
+    assert missing_concept.status_code == 404
+
 
 def test_goal_only_course_does_not_require_sources() -> None:
     client = TestClient(app)
