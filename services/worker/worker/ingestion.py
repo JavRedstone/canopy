@@ -12,7 +12,7 @@ from supabase import Client
 from worker.lesson_agent import generate_lesson_bundle, repair_bundle
 from worker.lesson_schema import LessonBundle, WorkspaceFile, reference_workspace, validate_lesson_bundle
 from worker.parsing import ParsedChunk, parse_source_document
-from worker.planner import CoursePlan, validate_course_plan
+from worker.planner import CourseSkeleton, ModuleConcepts, validate_course_skeleton, validate_module_concepts
 from worker.sandbox import DockerSandbox, SandboxError, SandboxFile
 from worker.settings import WorkerSettings
 
@@ -153,8 +153,15 @@ class IngestionWorker:
             return
         claimed = claim[0]
         course_version_id = claimed["course_version_id"]
+        goal = claimed["goal"]
+        source_set_hash = claimed["source_set_hash"]
         try:
+            # A previous attempt may have partially written modules/concepts before failing;
+            # each attempt regenerates from scratch rather than trying to resume mid-course.
+            self.client.rpc("reset_course_planning", {"p_course_version_id": course_version_id}).execute()
+
             chunks = self._course_context(course_id)
+            chunk_ids = [chunk["id"] for chunk in chunks]
             context = "\n\n".join(
                 f"[{chunk['id']}]\n{chunk['content']}" for chunk in chunks
             ) or "No source documents were provided."
@@ -166,37 +173,43 @@ class IngestionWorker:
                 else "No source documents were provided. Build the course from the learning goal and return an empty "
                 "citations list for every concept."
             )
-            response = self.openai.responses.parse(
-                model=self.settings.planner_model,
-                input=[
+
+            skeleton = self._generate_course_skeleton(goal, source_set_hash, context, source_instruction)
+            validate_course_skeleton(skeleton, source_set_hash)
+
+            module_rows = self.client.rpc(
+                "apply_course_skeleton",
+                {
+                    "p_course_version_id": course_version_id,
+                    "p_modules": [module.model_dump(mode="json") for module in skeleton.modules],
+                },
+            ).execute().data or []
+            if len(module_rows) != len(skeleton.modules):
+                raise ValueError("Persisted module count does not match the generated skeleton.")
+            module_id_by_position = {row["module_position"]: row["module_id"] for row in module_rows}
+
+            # Generated one module at a time so each module's concepts are visible (via
+            # course_progress/course_map) as soon as they exist, instead of only after the
+            # entire course plan finishes. Prerequisites may only point at already-known
+            # concepts, which also makes the whole graph acyclic by construction.
+            known_concepts: list[tuple[str, str]] = []
+            for position, module in enumerate(skeleton.modules, start=1):
+                module_concepts = self._generate_module_concepts(
+                    goal, module.title, context, source_instruction, known_concepts
+                )
+                validate_module_concepts(module_concepts.concepts, chunk_ids, [concept_id for concept_id, _ in known_concepts])
+
+                self.client.rpc(
+                    "apply_module_concepts",
                     {
-                        "role": "system",
-                        "content": (
-                            "Create a concise technical course plan centered on the learner's goal. Optional source "
-                            f"documents are supporting context, not the course's primary purpose. {source_instruction} "
-                            "Use lowercase hyphenated concept IDs, create an acyclic prerequisite graph, and assign "
-                            "every concept to exactly one titled module."
-                        ),
+                        "p_course_version_id": course_version_id,
+                        "p_module_id": module_id_by_position[position],
+                        "p_concepts": [concept.model_dump(mode="json") for concept in module_concepts.concepts],
                     },
-                    {
-                        "role": "user",
-                        "content": (
-                            f"Learning goal: {claimed['goal']}\n"
-                            f"Source set hash: {claimed['source_set_hash']}\n\n"
-                            f"Optional source excerpts:\n{context}"
-                        ),
-                    },
-                ],
-                text_format=CoursePlan,
-            )
-            plan = response.output_parsed
-            if plan is None:
-                raise ValueError("Planner returned no structured course plan.")
-            validate_course_plan(plan, claimed["source_set_hash"], [chunk["id"] for chunk in chunks])
-            self.client.rpc(
-                "apply_course_plan",
-                {"p_course_version_id": course_version_id, "p_plan": plan.model_dump(mode="json")},
-            ).execute()
+                ).execute()
+                known_concepts.extend((concept.id, concept.title) for concept in module_concepts.concepts)
+
+            self.client.rpc("finalize_course_plan", {"p_course_version_id": course_version_id}).execute()
         except RETRYABLE_ERRORS:
             # claim_course_planning already moved status to 'generating'; put it back to
             # 'planning' so a retried job can claim it again instead of stranding it.
@@ -205,6 +218,65 @@ class IngestionWorker:
         except Exception:
             self.client.table("course_versions").update({"status": "failed"}).eq("id", course_version_id).execute()
             raise
+
+    def _generate_course_skeleton(self, goal: str, source_set_hash: str, context: str, source_instruction: str) -> CourseSkeleton:
+        response = self.openai.responses.parse(
+            model=self.settings.planner_model,
+            input=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Design the module structure for a technical course centered on the learner's goal. "
+                        f"{source_instruction} Produce only an ordered list of module titles; concepts for each "
+                        "module are generated separately afterward. Keep modules focused: prefer more, smaller "
+                        "modules over a few broad ones."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": f"Learning goal: {goal}\nSource set hash: {source_set_hash}\n\nOptional source excerpts:\n{context}",
+                },
+            ],
+            text_format=CourseSkeleton,
+        )
+        skeleton = response.output_parsed
+        if skeleton is None:
+            raise ValueError("Planner returned no structured course skeleton.")
+        return skeleton
+
+    def _generate_module_concepts(
+        self, goal: str, module_title: str, context: str, source_instruction: str, known_concepts: list[tuple[str, str]]
+    ) -> ModuleConcepts:
+        known_summary = "\n".join(f"- {concept_id}: {title}" for concept_id, title in known_concepts) or "(none yet)"
+        response = self.openai.responses.parse(
+            model=self.settings.planner_model,
+            input=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Generate the concepts for one module of a technical course. "
+                        f"{source_instruction} Use lowercase hyphenated concept IDs that do not collide with any "
+                        "already-generated concept. A concept's prerequisites may only reference concepts that "
+                        "already exist, listed below, never a concept from a later module or later in this same "
+                        "list. Assign kind 'coding' to concepts that need a hands-on exercise, 'conceptual' "
+                        "otherwise."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"Learning goal: {goal}\nModule: {module_title}\n\n"
+                        f"Concepts already generated so far:\n{known_summary}\n\n"
+                        f"Optional source excerpts:\n{context}"
+                    ),
+                },
+            ],
+            text_format=ModuleConcepts,
+        )
+        module_concepts = response.output_parsed
+        if module_concepts is None:
+            raise ValueError(f"Planner returned no concepts for module '{module_title}'.")
+        return module_concepts
 
     def build_lesson(self, lesson_definition_id: str) -> None:
         claim = self.client.rpc("claim_lesson_build", {"p_lesson_definition_id": lesson_definition_id}).execute().data or []

@@ -58,10 +58,16 @@ class CourseMapConcept(BaseModel):
     summary_markdown: str
 
 
+class CourseMapModule(BaseModel):
+    title: str
+    position: int
+    concepts: list[CourseMapConcept]
+
+
 class CourseMapResponse(BaseModel):
     course_id: UUID
     version: int
-    concepts: list[CourseMapConcept]
+    modules: list[CourseMapModule]
 
 
 CourseProgressStage = Literal["ingesting_sources", "planning", "building_lessons", "ready", "failed"]

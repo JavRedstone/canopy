@@ -14,10 +14,16 @@ export interface CourseMapConcept {
   summary_markdown: string;
 }
 
+export interface CourseMapModule {
+  title: string;
+  position: number;
+  concepts: CourseMapConcept[];
+}
+
 export interface CourseMapResponse {
   course_id: string;
   version: number;
-  concepts: CourseMapConcept[];
+  modules: CourseMapModule[];
 }
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";

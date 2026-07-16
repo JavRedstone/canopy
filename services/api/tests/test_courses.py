@@ -29,7 +29,8 @@ def test_course_vertical_slice() -> None:
     course_id = course.json()["id"]
     course_map = client.get(f"/api/v1/courses/{course_id}/map")
     assert course_map.status_code == 200
-    assert len(course_map.json()["concepts"]) == 3
+    assert len(course_map.json()["modules"]) == 1
+    assert len(course_map.json()["modules"][0]["concepts"]) == 3
 
     single_course = client.get(f"/api/v1/courses/{course_id}")
     assert single_course.status_code == 200

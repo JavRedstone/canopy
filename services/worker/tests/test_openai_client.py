@@ -4,7 +4,7 @@ from pydantic import SecretStr
 
 from worker.ingestion import IngestionWorker
 from worker.main import _build_openai_client
-from worker.planner import CoursePlan
+from worker.planner import CourseSkeleton, ModuleConcepts
 
 
 class FakeOpenAI:
@@ -26,13 +26,15 @@ class FakeEmbeddings:
 
 
 class FakeResponses:
-    def __init__(self, plan: CoursePlan) -> None:
-        self.plan = plan
+    """Returns one queued parsed output per `.parse()` call, in order."""
+
+    def __init__(self, outputs: list[object]) -> None:
+        self.outputs = list(outputs)
         self.calls: list[dict[str, object]] = []
 
     def parse(self, **kwargs: object) -> SimpleNamespace:
         self.calls.append(kwargs)
-        return SimpleNamespace(output_parsed=self.plan)
+        return SimpleNamespace(output_parsed=self.outputs.pop(0))
 
 
 class FakeRequest:
@@ -59,6 +61,9 @@ class FakePlanningClient:
                     }
                 ]
             )
+        if function == "apply_course_skeleton":
+            modules = arguments["p_modules"]
+            return FakeRequest([{"module_id": f"module-{index}", "module_position": index + 1} for index in range(len(modules))])
         return FakeRequest([])
 
 
@@ -102,10 +107,11 @@ def test_embedding_request_uses_resolved_provider_model() -> None:
 
 
 def test_planner_request_uses_resolved_provider_model() -> None:
-    plan = CoursePlan.model_validate(
+    skeleton = CourseSkeleton.model_validate(
+        {"course_title": "Authentication", "source_set_hash": "source-hash", "modules": [{"id": "basics", "title": "Basics"}]}
+    )
+    module_concepts = ModuleConcepts.model_validate(
         {
-            "course_title": "Authentication",
-            "source_set_hash": "source-hash",
             "concepts": [
                 {
                     "id": "tokens",
@@ -115,11 +121,10 @@ def test_planner_request_uses_resolved_provider_model() -> None:
                     "prerequisites": [],
                     "citations": ["chunk-id"],
                 }
-            ],
-            "modules": [{"id": "basics", "title": "Basics", "concept_ids": ["tokens"]}],
+            ]
         }
     )
-    responses = FakeResponses(plan)
+    responses = FakeResponses([skeleton, module_concepts])
     worker = IngestionWorker.__new__(IngestionWorker)
     worker.settings = SimpleNamespace(planner_model="azure-planner")
     worker.client = FakePlanningClient()
@@ -128,15 +133,22 @@ def test_planner_request_uses_resolved_provider_model() -> None:
 
     worker.plan_course("course-id")
 
-    assert responses.calls[0]["model"] == "azure-planner"
-    assert worker.client.calls[-1][0] == "apply_course_plan"
+    assert [call["model"] for call in responses.calls] == ["azure-planner", "azure-planner"]
+    assert [call[0] for call in worker.client.calls] == [
+        "claim_course_planning",
+        "reset_course_planning",
+        "apply_course_skeleton",
+        "apply_module_concepts",
+        "finalize_course_plan",
+    ]
 
 
 def test_goal_only_planner_request_requires_empty_citations() -> None:
-    plan = CoursePlan.model_validate(
+    skeleton = CourseSkeleton.model_validate(
+        {"course_title": "Python foundations", "source_set_hash": "source-hash", "modules": [{"id": "basics", "title": "Basics"}]}
+    )
+    module_concepts = ModuleConcepts.model_validate(
         {
-            "course_title": "Python foundations",
-            "source_set_hash": "source-hash",
             "concepts": [
                 {
                     "id": "variables",
@@ -146,11 +158,10 @@ def test_goal_only_planner_request_requires_empty_citations() -> None:
                     "prerequisites": [],
                     "citations": [],
                 }
-            ],
-            "modules": [{"id": "basics", "title": "Basics", "concept_ids": ["variables"]}],
+            ]
         }
     )
-    responses = FakeResponses(plan)
+    responses = FakeResponses([skeleton, module_concepts])
     worker = IngestionWorker.__new__(IngestionWorker)
     worker.settings = SimpleNamespace(planner_model="planner")
     worker.client = FakePlanningClient()
@@ -161,4 +172,4 @@ def test_goal_only_planner_request_requires_empty_citations() -> None:
 
     system_prompt = responses.calls[0]["input"][0]["content"]
     assert "empty citations list" in system_prompt
-    assert worker.client.calls[-1][0] == "apply_course_plan"
+    assert worker.client.calls[-1][0] == "finalize_course_plan"

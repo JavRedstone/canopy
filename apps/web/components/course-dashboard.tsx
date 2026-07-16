@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { CourseSummary, getCourses } from "@/lib/api";
+import { CourseCategoryBadge } from "@/components/course-category-badge";
 import { createClient } from "@/lib/supabase/client";
 
 export function CourseDashboard() {
@@ -35,7 +36,10 @@ export function CourseDashboard() {
     <div className="course-list">
       {courses.map((course) => (
         <Link className="course-row" href={`/courses/${course.id}`} key={course.id}>
-          <div><h2>{course.title}</h2><p className="muted">{course.goal}</p></div>
+          <div className="course-row-main">
+            <CourseCategoryBadge title={course.title} goal={course.goal} />
+            <div><h2>{course.title}</h2><p className="muted">{course.goal}</p></div>
+          </div>
           <span className="course-status">{course.status}</span>
         </Link>
       ))}

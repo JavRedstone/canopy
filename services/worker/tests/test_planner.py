@@ -1,22 +1,48 @@
 import pytest
 
-from worker.planner import CoursePlan, validate_course_plan
+from worker.planner import CourseSkeleton, ModuleConcepts, validate_course_skeleton, validate_module_concepts
 
 
-def test_course_plan_validation_accepts_grounded_acyclic_plan() -> None:
-    plan = CoursePlan.model_validate(
+def test_course_skeleton_validation_accepts_matching_source_hash() -> None:
+    skeleton = CourseSkeleton.model_validate(
         {
             "course_title": "JWT basics",
             "source_set_hash": "source-hash",
+            "modules": [{"id": "jwt-basics", "title": "JWT basics"}],
+        }
+    )
+
+    validate_course_skeleton(skeleton, "source-hash")
+
+
+def test_course_skeleton_validation_rejects_mismatched_source_hash() -> None:
+    skeleton = CourseSkeleton.model_validate(
+        {
+            "course_title": "JWT basics",
+            "source_set_hash": "wrong-hash",
+            "modules": [{"id": "jwt-basics", "title": "JWT basics"}],
+        }
+    )
+
+    with pytest.raises(ValueError, match="source set"):
+        validate_course_skeleton(skeleton, "source-hash")
+
+
+def test_course_skeleton_rejects_duplicate_module_ids() -> None:
+    with pytest.raises(ValueError, match="unique"):
+        CourseSkeleton.model_validate(
+            {
+                "course_title": "JWT basics",
+                "source_set_hash": "source-hash",
+                "modules": [{"id": "dup", "title": "One"}, {"id": "dup", "title": "Two"}],
+            }
+        )
+
+
+def test_module_concepts_validation_accepts_grounded_concepts_referencing_known_ids() -> None:
+    concepts = ModuleConcepts.model_validate(
+        {
             "concepts": [
-                {
-                    "id": "headers",
-                    "title": "Authorization headers",
-                    "kind": "conceptual",
-                    "summary_markdown": "Tokens travel in headers.",
-                    "prerequisites": [],
-                    "citations": ["chunk-a"],
-                },
                 {
                     "id": "expiry",
                     "title": "Token expiry",
@@ -24,22 +50,17 @@ def test_course_plan_validation_accepts_grounded_acyclic_plan() -> None:
                     "summary_markdown": "Applications reject expired tokens.",
                     "prerequisites": ["headers"],
                     "citations": ["chunk-b"],
-                },
-            ],
-            "modules": [
-                {"id": "jwt-basics", "title": "JWT basics", "concept_ids": ["headers", "expiry"]}
-            ],
+                }
+            ]
         }
-    )
+    ).concepts
 
-    validate_course_plan(plan, "source-hash", ["chunk-a", "chunk-b"])
+    validate_module_concepts(concepts, ["chunk-a", "chunk-b"], ["headers"])
 
 
-def test_course_plan_validation_rejects_a_cycle() -> None:
-    plan = CoursePlan.model_validate(
+def test_module_concepts_validation_rejects_forward_reference() -> None:
+    concepts = ModuleConcepts.model_validate(
         {
-            "course_title": "Cycle",
-            "source_set_hash": "source-hash",
             "concepts": [
                 {
                     "id": "one",
@@ -54,23 +75,40 @@ def test_course_plan_validation_rejects_a_cycle() -> None:
                     "title": "Two",
                     "kind": "conceptual",
                     "summary_markdown": "Two.",
-                    "prerequisites": ["one"],
+                    "prerequisites": [],
                     "citations": ["chunk-a"],
                 },
-            ],
-            "modules": [{"id": "module", "title": "Module", "concept_ids": ["one", "two"]}],
+            ]
         }
-    )
+    ).concepts
 
-    with pytest.raises(ValueError, match="acyclic"):
-        validate_course_plan(plan, "source-hash", ["chunk-a"])
+    with pytest.raises(ValueError, match="not-yet-generated"):
+        validate_module_concepts(concepts, ["chunk-a"], [])
 
 
-def test_course_plan_validation_accepts_goal_only_plan_without_citations() -> None:
-    plan = CoursePlan.model_validate(
+def test_module_concepts_validation_rejects_self_reference() -> None:
+    concepts = ModuleConcepts.model_validate(
         {
-            "course_title": "Python foundations",
-            "source_set_hash": "goal-only-source-hash",
+            "concepts": [
+                {
+                    "id": "one",
+                    "title": "One",
+                    "kind": "conceptual",
+                    "summary_markdown": "One.",
+                    "prerequisites": ["one"],
+                    "citations": ["chunk-a"],
+                }
+            ]
+        }
+    ).concepts
+
+    with pytest.raises(ValueError, match="cannot depend on itself"):
+        validate_module_concepts(concepts, ["chunk-a"], [])
+
+
+def test_module_concepts_validation_accepts_goal_only_concepts_without_citations() -> None:
+    concepts = ModuleConcepts.model_validate(
+        {
             "concepts": [
                 {
                     "id": "variables",
@@ -80,9 +118,28 @@ def test_course_plan_validation_accepts_goal_only_plan_without_citations() -> No
                     "prerequisites": [],
                     "citations": [],
                 }
-            ],
-            "modules": [{"id": "basics", "title": "Basics", "concept_ids": ["variables"]}],
+            ]
         }
-    )
+    ).concepts
 
-    validate_course_plan(plan, "goal-only-source-hash", [])
+    validate_module_concepts(concepts, [], [])
+
+
+def test_module_concepts_validation_rejects_id_reused_across_modules() -> None:
+    concepts = ModuleConcepts.model_validate(
+        {
+            "concepts": [
+                {
+                    "id": "headers",
+                    "title": "Duplicate",
+                    "kind": "conceptual",
+                    "summary_markdown": "Reuses an earlier module's ID.",
+                    "prerequisites": [],
+                    "citations": [],
+                }
+            ]
+        }
+    ).concepts
+
+    with pytest.raises(ValueError, match="not unique"):
+        validate_module_concepts(concepts, [], ["headers"])

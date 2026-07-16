@@ -216,6 +216,35 @@ a.button.sidebar-new-button {
 .card h2 { font-size: 0.95rem; }
 .card p { color: var(--muted); font-size: 0.9rem; }
 
+.module-list { display: grid; gap: 10px; }
+.module-block {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.module-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 16px 18px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: var(--ink);
+}
+.module-title { font-size: 0.95rem; letter-spacing: -0.01em; font-weight: 700; }
+.module-trigger-meta { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.module-trigger-meta .muted { font-size: 0.82rem; }
+.module-trigger-chevron { color: var(--muted); transition: transform 140ms ease; }
+.module-trigger[data-panel-open] .module-trigger-chevron { transform: rotate(180deg); }
+.module-panel { padding: 0 18px 18px; }
+.module-block .course-row h3 { margin: 0 0 4px; font-size: 0.95rem; }
+
 .course-list { display: grid; gap: 10px; }
 .course-row {
   display: flex;
@@ -231,6 +260,17 @@ a.button.sidebar-new-button {
 }
 .course-row:hover { border-color: var(--ink); }
 .course-row h2 { font-size: 0.95rem; margin-bottom: 4px; }
+.course-row-main { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.course-category-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+}
+.course-category-badge .material-symbol { font-size: 19px; color: var(--ink); opacity: 0.75; }
 .course-status {
   color: var(--ink);
   background: var(--brand-tint);
