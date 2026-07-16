@@ -151,7 +151,7 @@ class IngestionWorker:
                 f"[chunk:{chunk['id']}]\n{chunk['content']}" for chunk in chunks
             )
             response = self.openai.responses.parse(
-                model=self.settings.openai_planner_model,
+                model=self.settings.planner_model,
                 input=[
                     {
                         "role": "system",
@@ -212,7 +212,7 @@ class IngestionWorker:
         embeddings: list[list[float]] = []
         for batch in _batches(texts, self.settings.embedding_batch_size):
             response = self.openai.embeddings.create(
-                model=self.settings.openai_embedding_model,
+                model=self.settings.embedding_model,
                 input=batch,
                 dimensions=self.settings.embedding_dimensions,
             )

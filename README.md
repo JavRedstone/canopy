@@ -92,7 +92,7 @@ python -m uvicorn app.main:app --app-dir services/api --reload --port 8000
 python -m uvicorn app.main:app --app-dir .\services\api --reload --port 8000
 ```
 
-Run the worker after adding `APP_OPENAI_API_KEY` to your uncommitted `.env` file:
+Run the worker after adding `APP_OPENAI_API_KEY` to your uncommitted `.env` file. The worker calls OpenAI directly by default; set `APP_OPENAI_PROVIDER=azure` plus the `APP_AZURE_OPENAI_*` values (see `.env.example`) to route the same calls through an Azure OpenAI resource instead:
 
 ### macOS (zsh)
 
