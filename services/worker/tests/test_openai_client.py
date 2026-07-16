@@ -130,3 +130,35 @@ def test_planner_request_uses_resolved_provider_model() -> None:
 
     assert responses.calls[0]["model"] == "azure-planner"
     assert worker.client.calls[-1][0] == "apply_course_plan"
+
+
+def test_goal_only_planner_request_requires_empty_citations() -> None:
+    plan = CoursePlan.model_validate(
+        {
+            "course_title": "Python foundations",
+            "source_set_hash": "source-hash",
+            "concepts": [
+                {
+                    "id": "variables",
+                    "title": "Variables",
+                    "kind": "coding",
+                    "summary_markdown": "Store and reuse values with variables.",
+                    "prerequisites": [],
+                    "citations": [],
+                }
+            ],
+            "modules": [{"id": "basics", "title": "Basics", "concept_ids": ["variables"]}],
+        }
+    )
+    responses = FakeResponses(plan)
+    worker = IngestionWorker.__new__(IngestionWorker)
+    worker.settings = SimpleNamespace(planner_model="planner")
+    worker.client = FakePlanningClient()
+    worker.openai = SimpleNamespace(responses=responses)
+    worker._course_context = lambda _course_id: []
+
+    worker.plan_course("course-id")
+
+    system_prompt = responses.calls[0]["input"][0]["content"]
+    assert "empty citations list" in system_prompt
+    assert worker.client.calls[-1][0] == "apply_course_plan"

@@ -12,7 +12,7 @@ class PlannerConcept(BaseModel):
     kind: Literal["conceptual", "coding"]
     summary_markdown: str = Field(min_length=1, max_length=4000)
     prerequisites: list[str]
-    citations: list[str] = Field(min_length=1)
+    citations: list[str] = Field(default_factory=list)
 
 
 class PlannerModule(BaseModel):
@@ -51,6 +51,8 @@ def validate_course_plan(plan: CoursePlan, source_set_hash: str, chunk_ids: Iter
             raise ValueError(f"Concept {concept.id} cannot depend on itself.")
         if not set(concept.prerequisites).issubset(concept_ids):
             raise ValueError(f"Concept {concept.id} references an unknown prerequisite.")
+        if available_citations and not concept.citations:
+            raise ValueError(f"Concept {concept.id} must cite the supplied source context.")
         if not set(concept.citations).issubset(available_citations):
             raise ValueError(f"Concept {concept.id} cites a chunk outside the source context.")
 

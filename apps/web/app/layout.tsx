@@ -11,6 +11,12 @@ const googleSans = localFont({
   display: "swap"
 });
 
+const materialSymbols = localFont({
+  src: "./fonts/MaterialSymbolsOutlined.woff2",
+  variable: "--font-material-symbols",
+  display: "block"
+});
+
 export const metadata: Metadata = {
   title: "Canopy",
   description: "Turn your source documents into canonical, source-grounded technical courses."
@@ -18,7 +24,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={googleSans.variable}>
+    <html lang="en" className={`${googleSans.variable} ${materialSymbols.variable}`}>
       <body>{children}</body>
     </html>
   );

@@ -12,7 +12,7 @@ from httpx import HTTPError
 from postgrest.exceptions import APIError
 from supabase import Client
 
-from app.schemas import CourseMapConcept, CourseMapResponse, CourseSummary, CreateCourseRequest, CreateSourceRequest, SourceSummary, SourceUploadTarget
+from app.schemas import CourseMapConcept, CourseMapResponse, CourseProgressResponse, CourseSummary, CreateCourseRequest, CreateSourceRequest, SourceSummary, SourceUploadTarget
 from app.settings import get_settings
 from app.supabase import get_service_client
 
@@ -31,7 +31,13 @@ class CourseRepository(Protocol):
 
     def list_courses(self, owner_id: UUID) -> list[CourseSummary]: ...
 
+    def get_course(self, owner_id: UUID, course_id: UUID) -> CourseSummary: ...
+
     def course_map(self, owner_id: UUID, course_id: UUID) -> CourseMapResponse: ...
+
+    def course_progress(self, owner_id: UUID, course_id: UUID) -> CourseProgressResponse: ...
+
+    def regenerate_course(self, owner_id: UUID, course_id: UUID) -> CourseSummary: ...
 
 
 @dataclass
@@ -107,6 +113,9 @@ class MemoryCourseRepository:
         records = [record for record in self.courses.values() if record.owner_id == owner_id]
         return [self._summary(record) for record in sorted(records, key=lambda item: item.updated_at, reverse=True)]
 
+    def get_course(self, owner_id: UUID, course_id: UUID) -> CourseSummary:
+        return self._summary(self._course_for_owner(owner_id, course_id))
+
     def course_map(self, owner_id: UUID, course_id: UUID) -> CourseMapResponse:
         course = self._course_for_owner(owner_id, course_id)
         source_hash = sha256("".join(str(source_id) for source_id in course.source_ids).encode()).hexdigest()[:8]
@@ -119,6 +128,21 @@ class MemoryCourseRepository:
                 CourseMapConcept(slug="robustness", title="Verify robust behavior", kind="coding", summary_markdown="A later transfer task checks the idea in a fresh context."),
             ],
         )
+
+    def course_progress(self, owner_id: UUID, course_id: UUID) -> CourseProgressResponse:
+        course = self._course_for_owner(owner_id, course_id)
+        source_count = len(course.source_ids)
+        return CourseProgressResponse(
+            course_id=course.id,
+            stage="ready",
+            sources_ready=source_count,
+            sources_total=source_count,
+            lessons_built=2,
+            lessons_total=2,
+        )
+
+    def regenerate_course(self, owner_id: UUID, course_id: UUID) -> CourseSummary:
+        return self._summary(self._course_for_owner(owner_id, course_id))
 
     def _source_for_owner(self, owner_id: UUID, source_id: UUID) -> SourceRecord:
         source = self.sources.get(source_id)
@@ -218,13 +242,15 @@ class SupabaseCourseRepository:
 
     def create_course(self, owner_id: UUID, request: CreateCourseRequest) -> CourseSummary:
         source_ids = list(dict.fromkeys(request.source_ids))
-        source_rows = self._data(
-            self.client.table("source_documents")
-            .select("id,status")
-            .eq("owner_id", str(owner_id))
-            .in_("id", [str(source_id) for source_id in source_ids]),
-            "validate course sources",
-        )
+        source_rows: list[dict[str, Any]] = []
+        if source_ids:
+            source_rows = self._data(
+                self.client.table("source_documents")
+                .select("id,status")
+                .eq("owner_id", str(owner_id))
+                .in_("id", [str(source_id) for source_id in source_ids]),
+                "validate course sources",
+            )
         found_ids = {UUID(row["id"]) for row in source_rows}
         if found_ids != set(source_ids):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found.")
@@ -268,19 +294,20 @@ class SupabaseCourseRepository:
                 .eq("owner_id", str(owner_id)),
                 "activate course version",
             )
-            self._data(
-                self.client.table("course_sources").insert(
-                    [
-                        {
-                            "course_id": str(course_id),
-                            "source_document_id": str(source_id),
-                            "position": position,
-                        }
-                        for position, source_id in enumerate(source_ids, start=1)
-                    ]
-                ),
-                "attach course sources",
-            )
+            if source_ids:
+                self._data(
+                    self.client.table("course_sources").insert(
+                        [
+                            {
+                                "course_id": str(course_id),
+                                "source_document_id": str(source_id),
+                                "position": position,
+                            }
+                            for position, source_id in enumerate(source_ids, start=1)
+                        ]
+                    ),
+                    "attach course sources",
+                )
             self._call(
                 self.client.rpc(
                     "enqueue_course_planning",
@@ -311,6 +338,11 @@ class SupabaseCourseRepository:
         )
         versions = self._versions_for([row["active_version_id"] for row in courses if row["active_version_id"]])
         return [self._summary(row, versions) for row in courses]
+
+    def get_course(self, owner_id: UUID, course_id: UUID) -> CourseSummary:
+        course = self._course_for_owner(owner_id, course_id)
+        versions = self._versions_for([course["active_version_id"]] if course["active_version_id"] else [])
+        return self._summary(course, versions)
 
     def course_map(self, owner_id: UUID, course_id: UUID) -> CourseMapResponse:
         course = self._course_for_owner(owner_id, course_id)
@@ -348,6 +380,93 @@ class SupabaseCourseRepository:
                 for row in concepts
             ],
         )
+
+    def course_progress(self, owner_id: UUID, course_id: UUID) -> CourseProgressResponse:
+        course = self._course_for_owner(owner_id, course_id)
+        version_id = course.get("active_version_id")
+
+        source_rows = self._data(
+            self.client.table("course_sources").select("source_document_id").eq("course_id", str(course_id)),
+            "load course sources",
+        )
+        source_ids = [row["source_document_id"] for row in source_rows]
+        sources_total = len(source_ids)
+        sources_ready = 0
+        if source_ids:
+            statuses = self._data(
+                self.client.table("source_documents").select("status").in_("id", source_ids),
+                "load source statuses",
+            )
+            sources_ready = sum(1 for row in statuses if row["status"] == "ready")
+
+        if not version_id:
+            return CourseProgressResponse(
+                course_id=course_id, stage="planning",
+                sources_ready=sources_ready, sources_total=sources_total,
+                lessons_built=0, lessons_total=0,
+            )
+
+        version = self._one(
+            self._data(
+                self.client.table("course_versions").select("status").eq("id", version_id),
+                "load course version status",
+            ),
+            "Course version",
+        )
+        version_status = version["status"]
+
+        if version_status == "failed":
+            return CourseProgressResponse(
+                course_id=course_id, stage="failed",
+                sources_ready=sources_ready, sources_total=sources_total,
+                lessons_built=0, lessons_total=0,
+            )
+
+        if version_status in ("planning", "generating"):
+            stage = "ingesting_sources" if sources_total > 0 and sources_ready < sources_total else "planning"
+            return CourseProgressResponse(
+                course_id=course_id, stage=stage,
+                sources_ready=sources_ready, sources_total=sources_total,
+                lessons_built=0, lessons_total=0,
+            )
+
+        coding_concepts = self._data(
+            self.client.table("concepts")
+            .select("id")
+            .eq("course_version_id", version_id)
+            .eq("kind", "coding"),
+            "load coding concepts",
+        )
+        lessons_total = 0
+        lessons_built = 0
+        if coding_concepts:
+            lesson_rows = self._data(
+                self.client.table("lesson_definitions")
+                .select("build_status")
+                .eq("kind", "lesson")
+                .in_("concept_id", [row["id"] for row in coding_concepts]),
+                "load lesson build status",
+            )
+            lessons_total = len(lesson_rows)
+            lessons_built = sum(1 for row in lesson_rows if row["build_status"] == "built")
+
+        stage = "building_lessons" if lessons_total > 0 and lessons_built < lessons_total else "ready"
+        return CourseProgressResponse(
+            course_id=course_id, stage=stage,
+            sources_ready=sources_ready, sources_total=sources_total,
+            lessons_built=lessons_built, lessons_total=lessons_total,
+        )
+
+    def regenerate_course(self, owner_id: UUID, course_id: UUID) -> CourseSummary:
+        self._course_for_owner(owner_id, course_id)
+        self._call(
+            self.client.rpc(
+                "regenerate_course_planning",
+                {"p_course_id": str(course_id), "p_owner_id": str(owner_id)},
+            ),
+            "regenerate course planning",
+        )
+        return self.get_course(owner_id, course_id)
 
     def _source_for_owner(self, owner_id: UUID, source_id: UUID) -> dict[str, Any]:
         return self._one(

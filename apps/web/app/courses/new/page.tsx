@@ -1,21 +1,16 @@
-import Link from "next/link";
-import { redirect } from "next/navigation";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 import { NewCourseForm } from "@/components/new-course-form";
-import { createClient } from "@/lib/supabase/server";
 
-export default async function NewCoursePage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+export default function NewCoursePage() {
   return (
-    <main className="shell">
-      <nav className="nav"><Link className="brand" href="/courses">Canopy</Link></nav>
+    <div className="shell">
+      <Breadcrumbs items={[{ label: "My courses", href: "/courses" }, { label: "New course" }]} />
       <section className="hero" style={{ maxWidth: 560 }}>
         <span className="eyebrow">New canonical course</span>
-        <h1>Start from a source you trust.</h1>
-        <p>Choose a document and define the learning goal that should shape its course map.</p>
+        <h1>Start with what you want to learn.</h1>
+        <p>Your goal shapes the course. Add files or pasted text when you want the course grounded in specific material.</p>
         <NewCourseForm />
       </section>
-    </main>
+    </div>
   );
 }

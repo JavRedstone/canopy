@@ -19,7 +19,7 @@ class LessonBundle(BaseModel):
     schema_version: int = 1
     title: str = Field(min_length=1, max_length=160)
     explanation_markdown: str = Field(min_length=1, max_length=8000)
-    citations: list[str] = Field(min_length=1)
+    citations: list[str] = Field(default_factory=list)
     starter_files: list[WorkspaceFile] = Field(min_length=1, max_length=10)
     test_files: list[WorkspaceFile] = Field(min_length=1, max_length=5)
     reference_solution_files: list[WorkspaceFile] = Field(min_length=1, max_length=10)

@@ -1,6 +1,6 @@
 # Adaptive Source Learning
 
-An adaptive coding-course platform that turns source documents into canonical, source-grounded technical courses with learner-controlled support layers.
+An adaptive coding-course platform that turns learner goals into canonical technical courses, with optional source documents for additional grounding and citations.
 
 ## Repository layout
 
@@ -106,10 +106,11 @@ python -m worker.main
 .\.venv\Scripts\python.exe -m worker.main
 ```
 
-The current vertical slice uses Supabase Auth and the Supabase-backed course repository when `APP_AUTH_MODE=supabase` and `APP_REPOSITORY_BACKEND=supabase` are set. The memory adapter remains available only for isolated development tests. Source files upload directly to private Supabase Storage through path-bound signed tokens. The worker consumes durable PGMQ jobs, parses sources, creates 1536-dimensional embeddings, and generates a validated canonical course map.
+The current vertical slice uses Supabase Auth and the Supabase-backed course repository when `APP_AUTH_MODE=supabase` and `APP_REPOSITORY_BACKEND=supabase` are set. A learner goal is enough to create and generate a course; optional source files upload directly to private Supabase Storage through path-bound signed tokens and add grounding citations. The worker consumes durable PGMQ jobs, parses supplied sources, creates 1536-dimensional embeddings, and generates a validated canonical course map centered on the goal.
 
 ## Reference documents
 
 - [Product idea](./docs/IDEA.md)
 - [Architecture](./docs/ARCHITECTURE.md)
 - [Scaffold status](./docs/SCAFFOLD_STATUS.md)
+- [Sample course inputs](./docs/SAMPLE_COURSES.md)

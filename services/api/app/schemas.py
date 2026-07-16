@@ -39,7 +39,7 @@ class SourceSummary(BaseModel):
 class CreateCourseRequest(BaseModel):
     title: str = Field(min_length=1, max_length=120)
     goal: str = Field(min_length=1, max_length=2000)
-    source_ids: list[UUID] = Field(min_length=1)
+    source_ids: list[UUID] = Field(default_factory=list)
 
 
 class CourseSummary(BaseModel):
@@ -62,3 +62,15 @@ class CourseMapResponse(BaseModel):
     course_id: UUID
     version: int
     concepts: list[CourseMapConcept]
+
+
+CourseProgressStage = Literal["ingesting_sources", "planning", "building_lessons", "ready", "failed"]
+
+
+class CourseProgressResponse(BaseModel):
+    course_id: UUID
+    stage: CourseProgressStage
+    sources_ready: int
+    sources_total: int
+    lessons_built: int
+    lessons_total: int

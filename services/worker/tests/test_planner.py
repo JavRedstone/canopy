@@ -64,3 +64,25 @@ def test_course_plan_validation_rejects_a_cycle() -> None:
 
     with pytest.raises(ValueError, match="acyclic"):
         validate_course_plan(plan, "source-hash", ["chunk-a"])
+
+
+def test_course_plan_validation_accepts_goal_only_plan_without_citations() -> None:
+    plan = CoursePlan.model_validate(
+        {
+            "course_title": "Python foundations",
+            "source_set_hash": "goal-only-source-hash",
+            "concepts": [
+                {
+                    "id": "variables",
+                    "title": "Variables",
+                    "kind": "coding",
+                    "summary_markdown": "Store and reuse values with variables.",
+                    "prerequisites": [],
+                    "citations": [],
+                }
+            ],
+            "modules": [{"id": "basics", "title": "Basics", "concept_ids": ["variables"]}],
+        }
+    )
+
+    validate_course_plan(plan, "goal-only-source-hash", [])
