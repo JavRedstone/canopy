@@ -1,0 +1,28 @@
+# Environment and local tooling
+.env
+.env.local
+.venv/
+**/.venv/
+
+# JavaScript
+node_modules/
+.next/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+
+# Supabase
+supabase/.branches/
+supabase/.temp/
+
+# Editor and operating system files
+.DS_Store
+Thumbs.db
+.vscode/

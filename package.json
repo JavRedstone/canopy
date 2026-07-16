@@ -1,0 +1,21 @@
+{
+  "name": "adaptive-source-learning",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm --workspace @adaptive-learning/web run dev",
+    "build:web": "npm --workspace @adaptive-learning/web run build",
+    "typecheck:web": "npm --workspace @adaptive-learning/web run typecheck",
+    "lint:web": "npm --workspace @adaptive-learning/web run lint"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "supabase": "^2.109.1"
+  }
+}

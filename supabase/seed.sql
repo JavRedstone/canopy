@@ -1,0 +1,1 @@
+-- Seed data is deliberately empty. Authentication users are created through Supabase Auth.

@@ -1,0 +1,9 @@
+{
+  "name": "@adaptive-learning/contracts",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    "./course": "./src/course.ts"
+  }
+}

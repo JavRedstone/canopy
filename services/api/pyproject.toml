@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "adaptive-learning-api"
+version = "0.1.0"
+description = "FastAPI command service for Adaptive Source Learning"
+requires-python = ">=3.13"
+dependencies = [
+  "fastapi>=0.115",
+  "pydantic-settings>=2.6",
+  "supabase>=2.0",
+  "uvicorn[standard]>=0.32"
+]
+
+[project.optional-dependencies]
+dev = ["httpx>=0.28", "pytest>=8.3", "ruff>=0.8"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.setuptools]
+packages = ["app", "app.routers"]
