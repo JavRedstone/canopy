@@ -1,4 +1,5 @@
 from collections.abc import Iterable
+from pathlib import PurePosixPath
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -11,6 +12,13 @@ class WorkspaceFile(BaseModel):
 
     path: str = Field(pattern=_SAFE_PY_PATH)
     content: str = Field(min_length=1, max_length=20_000)
+
+    @model_validator(mode="after")
+    def path_is_relative_and_contained(self) -> "WorkspaceFile":
+        path = PurePosixPath(self.path)
+        if path.is_absolute() or ".." in path.parts:
+            raise ValueError("Workspace file paths must be relative and may not traverse directories.")
+        return self
 
 
 class PublicTestCase(BaseModel):

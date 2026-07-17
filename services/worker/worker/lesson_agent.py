@@ -2,10 +2,9 @@ import json
 import logging
 from typing import Any
 
-from openai import OpenAI
-
-from worker.lesson_schema import LessonBundle
-from worker.sandbox import DockerSandbox, SandboxFile, SandboxRunResult
+from worker.lesson_schema import LessonBundle, WorkspaceFile
+from worker.llm import LLMGatewayClient
+from worker.sandbox import SandboxFile, SandboxRunResult, SandboxRunnerClient
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +61,7 @@ REPAIR_TOOLS: list[dict[str, Any]] = [
 
 
 def generate_lesson_bundle(
-    openai_client: OpenAI,
+    openai_client: LLMGatewayClient,
     model: str,
     *,
     concept_title: str,
@@ -101,9 +100,9 @@ def _workspace_files(files: dict[str, str]) -> list[SandboxFile]:
 
 
 def repair_bundle(
-    openai_client: OpenAI,
+    openai_client: LLMGatewayClient,
     model: str,
-    sandbox: DockerSandbox,
+    sandbox: SandboxRunnerClient,
     files: dict[str, str],
     failing_result: SandboxRunResult,
     max_tool_turns: int,
@@ -120,7 +119,7 @@ def repair_bundle(
     ]
 
     for _ in range(max_tool_turns):
-        response = openai_client.responses.create(model=model, input=input_items, tools=REPAIR_TOOLS)
+        response = openai_client.responses.create(model="lesson_repair", input=input_items, tools=REPAIR_TOOLS)
         input_items += response.output
         calls = [item for item in response.output if item.type == "function_call"]
         if not calls:
@@ -130,7 +129,8 @@ def repair_bundle(
             if call.name == "read_file":
                 output = files.get(args["path"], "<file not found>")
             elif call.name == "write_file":
-                files[args["path"]] = args["content"]
+                workspace_file = WorkspaceFile.model_validate({"path": args["path"], "content": args["content"]})
+                files[workspace_file.path] = workspace_file.content
                 output = "written"
             elif call.name == "run_tests":
                 run_result = sandbox.run_pytest(_workspace_files(files))

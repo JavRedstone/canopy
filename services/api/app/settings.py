@@ -1,6 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,6 +16,8 @@ class Settings(BaseSettings):
     database_url: str | None = None
     cors_origins: str = "http://localhost:3000"
     sandbox_timeout_seconds: int = 20
+    sandbox_runner_url: str = "http://localhost:8020"
+    internal_service_token: SecretStr | None = None
 
     @property
     def cors_origin_list(self) -> list[str]:

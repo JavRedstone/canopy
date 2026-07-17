@@ -1,12 +1,11 @@
 from typing import Annotated
 from uuid import UUID
 
-import docker
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.dependencies import CurrentUser
 from app.repository import CourseRepository, get_repository
-from app.sandbox import DockerSandbox, SandboxError, SandboxFile
+from app.sandbox import SandboxError, SandboxFile, SandboxRunnerClient
 from app.schemas import ConceptDetailResponse, CourseMapResponse, CourseProgressResponse, CourseSummary, CreateCourseRequest, RunLessonRequest, RunLessonResponse
 from app.settings import get_settings
 
@@ -14,11 +13,17 @@ router = APIRouter(prefix="/courses", tags=["courses"])
 Repository = Annotated[CourseRepository, Depends(get_repository)]
 
 
-def get_lesson_sandbox() -> DockerSandbox:
-    return DockerSandbox(docker.from_env(), timeout_seconds=get_settings().sandbox_timeout_seconds)
+def get_lesson_sandbox() -> SandboxRunnerClient:
+    settings = get_settings()
+    token = settings.internal_service_token.get_secret_value() if settings.internal_service_token else None
+    return SandboxRunnerClient(
+        settings.sandbox_runner_url,
+        internal_service_token=token,
+        timeout_seconds=settings.sandbox_timeout_seconds,
+    )
 
 
-LessonSandbox = Annotated[DockerSandbox, Depends(get_lesson_sandbox)]
+LessonSandbox = Annotated[SandboxRunnerClient, Depends(get_lesson_sandbox)]
 
 
 @router.get("", response_model=list[CourseSummary])

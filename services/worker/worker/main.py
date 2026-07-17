@@ -2,24 +2,17 @@ import argparse
 import logging
 import time
 
-import docker
-from openai import OpenAI
 from supabase import create_client
 
 from worker.ingestion import IngestionWorker
-from worker.sandbox import DockerSandbox
+from worker.llm import LLMGatewayClient
+from worker.sandbox import SandboxRunnerClient
 from worker.settings import WorkerSettings
 
 
-def _build_openai_client(settings: WorkerSettings) -> OpenAI:
-    api_key = settings.openai_api_key.get_secret_value()
-    if settings.openai_provider == "azure":
-        # The Responses API (used for course planning) needs Azure's newer /openai/v1
-        # surface, which drops the dated api-version parameter entirely; Microsoft's own
-        # docs use the plain OpenAI client with an Azure base_url for this, not AzureOpenAI.
-        base_url = settings.azure_openai_endpoint.rstrip("/") + "/openai/v1/"
-        return OpenAI(api_key=api_key, base_url=base_url)
-    return OpenAI(api_key=api_key)
+def _build_llm_client(settings: WorkerSettings) -> LLMGatewayClient:
+    token = settings.internal_service_token.get_secret_value() if settings.internal_service_token else None
+    return LLMGatewayClient(settings.llm_gateway_url, internal_service_token=token)
 
 
 def main() -> None:
@@ -31,9 +24,14 @@ def main() -> None:
     settings = WorkerSettings()
     settings.require_runtime_configuration()
     client = create_client(settings.supabase_url, settings.supabase_service_role_key)
-    openai = _build_openai_client(settings)
-    sandbox = DockerSandbox(docker.from_env(), timeout_seconds=settings.sandbox_timeout_seconds)
-    worker = IngestionWorker(settings, client, openai, sandbox)
+    llm = _build_llm_client(settings)
+    token = settings.internal_service_token.get_secret_value() if settings.internal_service_token else None
+    sandbox = SandboxRunnerClient(
+        settings.sandbox_runner_url,
+        internal_service_token=token,
+        timeout_seconds=settings.sandbox_timeout_seconds,
+    )
+    worker = IngestionWorker(settings, client, llm, sandbox)
     print(f"Adaptive Source Learning worker started in {settings.environment} mode.")
     while True:
         if not worker.run_once():

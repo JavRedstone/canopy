@@ -3,15 +3,31 @@ from types import SimpleNamespace
 from pydantic import SecretStr
 
 from worker.ingestion import IngestionWorker
-from worker.main import _build_openai_client
+from worker.llm import LLMGatewayClient
+from worker.main import _build_llm_client
 from worker.planner import CourseSkeleton, ModuleConcepts
 
 
-class FakeOpenAI:
-    calls: list[dict[str, object]] = []
+class FakeResponse:
+    def __init__(self, data: dict[str, object]) -> None:
+        self.data = data
+        self.raised = False
 
-    def __init__(self, **kwargs: object) -> None:
-        self.calls.append(kwargs)
+    def raise_for_status(self) -> None:
+        self.raised = True
+
+    def json(self) -> dict[str, object]:
+        return self.data
+
+
+class FakeHttpClient:
+    def __init__(self, responses: list[FakeResponse]) -> None:
+        self.responses = responses
+        self.calls: list[dict[str, object]] = []
+
+    def post(self, url: str, **kwargs: object) -> FakeResponse:
+        self.calls.append({"url": url, **kwargs})
+        return self.responses.pop(0)
 
 
 class FakeEmbeddings:
@@ -67,46 +83,69 @@ class FakePlanningClient:
         return FakeRequest([])
 
 
-def test_build_openai_client_uses_default_api_endpoint(monkeypatch: object) -> None:
-    FakeOpenAI.calls = []
-    monkeypatch.setattr("worker.main.OpenAI", FakeOpenAI)
-    settings = SimpleNamespace(openai_api_key=SecretStr("test-key"), openai_provider="openai")
-
-    _build_openai_client(settings)
-
-    assert FakeOpenAI.calls == [{"api_key": "test-key"}]
-
-
-def test_build_openai_client_uses_azure_v1_endpoint(monkeypatch: object) -> None:
-    FakeOpenAI.calls = []
-    monkeypatch.setattr("worker.main.OpenAI", FakeOpenAI)
+def test_build_llm_client_uses_internal_gateway_configuration() -> None:
     settings = SimpleNamespace(
-        openai_api_key=SecretStr("test-key"),
-        openai_provider="azure",
-        azure_openai_endpoint="https://example.openai.azure.com/",
+        llm_gateway_url="http://llm-gateway:8010/",
+        internal_service_token=SecretStr("internal-token"),
     )
 
-    _build_openai_client(settings)
+    client = _build_llm_client(settings)
 
-    assert FakeOpenAI.calls == [
-        {"api_key": "test-key", "base_url": "https://example.openai.azure.com/openai/v1/"}
+    assert client.base_url == "http://llm-gateway:8010"
+    assert client.internal_service_token == "internal-token"
+
+
+def test_gateway_client_sends_schema_and_validates_structured_output() -> None:
+    http = FakeHttpClient(
+        [
+            FakeResponse(
+                {
+                    "output": {
+                        "course_title": "Authentication",
+                        "source_set_hash": "source-hash",
+                        "modules": [{"id": "basics", "title": "Basics"}],
+                    }
+                }
+            )
+        ]
+    )
+    client = LLMGatewayClient("http://gateway", internal_service_token="secret", http_client=http)
+
+    result = client.responses.parse(
+        model="course_planning",
+        input=[{"role": "user", "content": "Build a course."}],
+        text_format=CourseSkeleton,
+    )
+
+    assert result.output_parsed.course_title == "Authentication"
+    assert http.calls == [
+        {
+            "url": "http://gateway/internal/v1/structured",
+            "headers": {"X-Internal-Service-Token": "secret"},
+            "json": {
+                "task": "course_planning",
+                "input": [{"role": "user", "content": "Build a course."}],
+                "schema_name": "CourseSkeleton",
+                "schema": CourseSkeleton.model_json_schema(),
+            },
+        }
     ]
 
 
-def test_embedding_request_uses_resolved_provider_model() -> None:
+def test_embedding_request_uses_gateway_task() -> None:
     embeddings = FakeEmbeddings()
     worker = IngestionWorker.__new__(IngestionWorker)
-    worker.settings = SimpleNamespace(embedding_batch_size=2, embedding_model="azure-embedding", embedding_dimensions=3)
+    worker.settings = SimpleNamespace(embedding_batch_size=2, embedding_model="embedding", embedding_dimensions=3)
     worker.openai = SimpleNamespace(embeddings=embeddings)
 
     result = worker._embed(["first", "second", "third"])
 
-    assert [call["model"] for call in embeddings.calls] == ["azure-embedding", "azure-embedding"]
+    assert [call["model"] for call in embeddings.calls] == ["embedding", "embedding"]
     assert [call["input"] for call in embeddings.calls] == [["first", "second"], ["third"]]
     assert result == [[0.0, 0.5, 0.25], [1.0, 0.5, 0.25], [0.0, 0.5, 0.25]]
 
 
-def test_planner_request_uses_resolved_provider_model() -> None:
+def test_planner_request_uses_course_planning_task() -> None:
     skeleton = CourseSkeleton.model_validate(
         {"course_title": "Authentication", "source_set_hash": "source-hash", "modules": [{"id": "basics", "title": "Basics"}]}
     )
@@ -126,14 +165,14 @@ def test_planner_request_uses_resolved_provider_model() -> None:
     )
     responses = FakeResponses([skeleton, module_concepts])
     worker = IngestionWorker.__new__(IngestionWorker)
-    worker.settings = SimpleNamespace(planner_model="azure-planner")
+    worker.settings = SimpleNamespace(planner_model="course_planning")
     worker.client = FakePlanningClient()
     worker.openai = SimpleNamespace(responses=responses)
     worker._course_context = lambda _course_id: [{"id": "chunk-id", "content": "Source content."}]
 
     worker.plan_course("course-id")
 
-    assert [call["model"] for call in responses.calls] == ["azure-planner", "azure-planner"]
+    assert [call["model"] for call in responses.calls] == ["course_planning", "course_planning"]
     assert [call[0] for call in worker.client.calls] == [
         "claim_course_planning",
         "reset_course_planning",
@@ -163,7 +202,7 @@ def test_goal_only_planner_request_requires_empty_citations() -> None:
     )
     responses = FakeResponses([skeleton, module_concepts])
     worker = IngestionWorker.__new__(IngestionWorker)
-    worker.settings = SimpleNamespace(planner_model="planner")
+    worker.settings = SimpleNamespace(planner_model="course_planning")
     worker.client = FakePlanningClient()
     worker.openai = SimpleNamespace(responses=responses)
     worker._course_context = lambda _course_id: []

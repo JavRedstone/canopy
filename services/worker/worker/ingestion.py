@@ -5,15 +5,15 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from httpx import HTTPError
-from openai import APIConnectionError, InternalServerError, OpenAI, RateLimitError
 from postgrest.exceptions import APIError
 from supabase import Client
 
 from worker.lesson_agent import generate_lesson_bundle, repair_bundle
 from worker.lesson_schema import LessonBundle, WorkspaceFile, reference_workspace, validate_lesson_bundle
+from worker.llm import LLMGatewayClient, LLMGatewayError
 from worker.parsing import ParsedChunk, parse_source_document
 from worker.planner import CourseSkeleton, ModuleConcepts, validate_course_skeleton, validate_module_concepts
-from worker.sandbox import DockerSandbox, SandboxError, SandboxFile
+from worker.sandbox import SandboxError, SandboxFile, SandboxRunnerClient
 from worker.settings import WorkerSettings
 
 
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 # Transient infrastructure failures: the job should stay on the queue and be retried
 # once its visibility timeout expires, rather than being archived and permanently lost.
-RETRYABLE_ERRORS = (HTTPError, APIError, APIConnectionError, RateLimitError, InternalServerError, SandboxError)
+RETRYABLE_ERRORS = (HTTPError, APIError, LLMGatewayError, SandboxError)
 
 
 @dataclass(frozen=True)
@@ -63,7 +63,7 @@ class QueueAdapter:
 
 
 class IngestionWorker:
-    def __init__(self, settings: WorkerSettings, client: Client, openai: OpenAI, sandbox: DockerSandbox) -> None:
+    def __init__(self, settings: WorkerSettings, client: Client, openai: LLMGatewayClient, sandbox: SandboxRunnerClient) -> None:
         self.settings = settings
         self.client = client
         self.openai = openai
@@ -352,7 +352,7 @@ class IngestionWorker:
         chunks = self._citation_chunks(existing["citations_json"])
         context = "\n\n".join(f"[{chunk['id']}]\n{chunk['content']}" for chunk in chunks) or "No source documents were provided."
         response = self.openai.responses.create(
-            model=self.settings.builder_model,
+            model="concept_regeneration",
             input=[
                 {
                     "role": "system",

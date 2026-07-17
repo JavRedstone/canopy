@@ -3,15 +3,14 @@ requires = ["setuptools>=75"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "adaptive-learning-api"
+name = "adaptive-learning-sandbox-runner"
 version = "0.1.0"
-description = "FastAPI command service for Adaptive Source Learning"
+description = "Private execution runner for Adaptive Source Learning"
 requires-python = ">=3.13"
 dependencies = [
+  "docker>=7.1",
   "fastapi>=0.115",
-  "httpx>=0.28",
   "pydantic-settings>=2.6",
-  "supabase>=2.0",
   "uvicorn[standard]>=0.32"
 ]
 
@@ -26,4 +25,4 @@ testpaths = ["tests"]
 line-length = 100
 
 [tool.setuptools]
-packages = ["app", "app.routers"]
+packages = ["sandbox_runner"]

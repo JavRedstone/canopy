@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adaptive-source-learning.local/schemas/llm-gateway.v1.json",
+  "title": "Internal LLM gateway",
+  "description": "Private request and response envelopes for provider-neutral model calls.",
+  "$defs": {
+    "input_item": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "task": {
+      "enum": ["course_planning", "lesson_build", "lesson_repair", "concept_regeneration", "embedding"]
+    }
+  },
+  "type": "object",
+  "oneOf": [
+    {
+      "title": "Structured generation request",
+      "required": ["task", "input", "schema_name", "schema"],
+      "properties": {
+        "task": { "enum": ["course_planning", "lesson_build"] },
+        "input": { "type": "array", "items": { "$ref": "#/$defs/input_item" } },
+        "schema_name": { "type": "string" },
+        "schema": { "type": "object" }
+      }
+    },
+    {
+      "title": "Tool-capable response request",
+      "required": ["task", "input"],
+      "properties": {
+        "task": { "enum": ["lesson_repair", "concept_regeneration"] },
+        "input": { "type": "array", "items": { "$ref": "#/$defs/input_item" } },
+        "tools": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+    {
+      "title": "Embedding request",
+      "required": ["task", "texts"],
+      "properties": {
+        "task": { "const": "embedding" },
+        "texts": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  ]
+}

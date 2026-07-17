@@ -94,26 +94,26 @@ The canonical course is stable and reviewable. Personalization adds or recommend
 | FastAPI API | Verifies Supabase Auth tokens, authorizes commands, validates requests, serves course APIs, and controls WebSocket sessions | Long-running generation or execution |
 | Worker service | Ingestion, retrieval, planning, lesson generation, validation, diagnosis, remediation creation | Browser sessions |
 | Supabase | Postgres + pgvector, Auth, Storage for source/submission artifacts, and PGMQ-backed queues | Sandbox execution and product command logic |
-| Model adapter | Structured generation, streaming generation, embeddings; provider-neutral request/response normalization | Product rules or persistence |
-| Sandbox adapter | Starts a learning runtime and separate evaluation runtime behind one internal interface | Mastery or grading decisions |
+| LLM gateway | Private provider credentials, model aliases, structured generation, tool turns, embeddings, and retry policy | Product prompts, domain validation, or persistence |
+| Sandbox runner | Private execution-backend access, approved environment selection, resource policy, and bounded test output | Mastery or grading decisions |
 
 ### 4.2 Provider and sandbox boundaries
 
-The codebase defines adapters rather than allowing application code to call a model or sandbox SDK directly.
+The API and worker call private clients rather than model-provider or execution SDKs directly. The gateway and runner are independently deployable services; only the LLM gateway receives provider credentials and only the sandbox runner receives Docker/execution-backend access.
 
 ```python
-class LLMAdapter(Protocol):
+class LLMClient(Protocol):
     async def generate_structured(self, request: StructuredGenerationRequest) -> dict: ...
     async def stream(self, request: StreamRequest) -> AsyncIterator[str]: ...
     async def embed(self, texts: list[str]) -> list[list[float]]: ...
 
-class SandboxAdapter(Protocol):
+class SandboxClient(Protocol):
     async def create_learning_session(self, request: LearningSessionRequest) -> SandboxSession: ...
     async def run_visible_tests(self, request: VisibleRunRequest) -> RunResult: ...
     async def evaluate_submission(self, request: EvaluationRequest) -> EvaluationResult: ...
 ```
 
-The first implementation can target the team’s selected model provider and one `python-basic` environment. The adapter contract keeps that choice isolated while preserving a clear interface for later providers and managed sandbox services.
+The first implementation targets OpenAI, Azure OpenAI, or AWS Bedrock (Converse API) behind `services/llm_gateway` and one registered `python-basic` environment behind `services/sandbox_runner`. The client contracts keep those choices isolated while preserving a clear interface for later providers and managed sandbox services. Each sandbox request selects a fixed profile and environment ID; callers cannot choose a Docker image, command, mount, network setting, or resource limit.
 
 ### 4.3 Supabase responsibilities
 
@@ -145,7 +145,7 @@ The worker (`services/worker/worker/`) runs this as a background job per coding-
 
 1. **Trigger.** `apply_course_plan` calls `enqueue_lesson_builds`, which queues a `lesson_build` job on the existing `generation_jobs` queue for every coding-kind `lesson_definitions` row (`supabase/migrations/20260716004000_lesson_build_jobs.sql`). A `lesson_definitions.build_status` column (`pending → building → built | failed`) makes the claim atomic, mirroring the existing `claim_course_planning` pattern.
 2. **Generate (single-shot).** `generate_lesson_bundle` (`worker/lesson_agent.py`) makes one `responses.parse` call — the same structured-output house pattern as course planning — grounded in the concept's own cited source chunks, producing a `LessonBundle` (`worker/lesson_schema.py`): starter files (with the target behavior left unimplemented), test files, a reference solution, an explanation, and hints. `validate_lesson_bundle` checks citation grounding and path consistency before anything touches Docker.
-3. **Execute for real.** `DockerSandbox` (`worker/sandbox.py`) runs the reference solution against the tests inside a disposable, network-isolated container (`services/worker/sandbox_image/`, a minimal `python:3.13-slim` + pytest image, built lazily on first use). This is real execution, not a simulated check.
+3. **Execute for real.** The worker calls the private sandbox runner (`services/sandbox_runner/`), which runs the reference solution against the tests inside a disposable, network-isolated container. This is real execution, not a simulated check; the worker has no Docker access.
 4. **Repair (multi-step, only on failure).** If the reference solution fails its own tests, `repair_bundle` hands the model three tools — `read_file`, `write_file`, `run_tests` — and lets it iterate: inspect, patch, re-run for real inside the sandbox, repeat. The loop is capped (`lesson_build_max_attempts`, `lesson_build_max_tool_calls`); the final pass/fail always comes from the sandbox's own last real run, never from the model's self-report.
 5. **Persist.** `apply_lesson_bundle` writes the resulting `lesson_revisions` row with `validation_status = validated | failed`, whether or not it ultimately passed — a lesson that exhausts its retry budget is recorded, not silently dropped, so it is visible for review and reclaimable later.
 

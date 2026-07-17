@@ -1,13 +1,7 @@
-import io
-import tarfile
 from dataclasses import dataclass
-from pathlib import Path
+from typing import Any
 
-import docker
-import docker.errors
-from requests.exceptions import ReadTimeout
-
-_SANDBOX_IMAGE_DIR = Path(__file__).resolve().parent.parent / "sandbox_image"
+import httpx
 
 
 @dataclass(frozen=True)
@@ -28,74 +22,43 @@ class SandboxRunResult:
 
 
 class SandboxError(Exception):
-    """A Docker/daemon-level failure, distinct from a failing test run inside the sandbox."""
+    """The private sandbox runner could not accept or complete a run."""
 
 
-def _files_to_tar(files: list[SandboxFile]) -> bytes:
-    buffer = io.BytesIO()
-    with tarfile.open(fileobj=buffer, mode="w") as tar:
-        for file in files:
-            data = file.content.encode("utf-8")
-            info = tarfile.TarInfo(name=file.path)
-            info.size = len(data)
-            tar.addfile(info, io.BytesIO(data))
-    return buffer.getvalue()
+class SandboxRunnerClient:
+    """Runs content-validation jobs through the isolated sandbox service."""
 
-
-class DockerSandbox:
-    """Runs generated lesson code inside a disposable, network-isolated container.
-
-    This validates content the worker itself asked an LLM to generate, not
-    arbitrary untrusted student input; containment here is about preventing a
-    runaway process, not defending against an adversarial actor.
-    """
-
-    IMAGE_TAG = "canopy-lesson-sandbox:python-basic"
-
-    def __init__(self, client: docker.DockerClient, timeout_seconds: int = 20) -> None:
-        self.client = client
+    def __init__(
+        self,
+        base_url: str,
+        *,
+        internal_service_token: str | None,
+        timeout_seconds: int,
+        http_client: Any | None = None,
+    ) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.internal_service_token = internal_service_token
         self.timeout_seconds = timeout_seconds
-        self._image_ready = False
-
-    def ensure_image(self) -> None:
-        if self._image_ready:
-            return
-        try:
-            self.client.images.get(self.IMAGE_TAG)
-        except docker.errors.ImageNotFound:
-            self.client.images.build(path=str(_SANDBOX_IMAGE_DIR), tag=self.IMAGE_TAG, rm=True)
-        self._image_ready = True
+        self.http_client = http_client or httpx.Client(timeout=timeout_seconds + 5)
 
     def run_pytest(self, files: list[SandboxFile]) -> SandboxRunResult:
-        self.ensure_image()
+        headers = {"X-Internal-Service-Token": self.internal_service_token} if self.internal_service_token else {}
         try:
-            container = self.client.containers.create(
-                image=self.IMAGE_TAG,
-                command=["pytest", "-q", "."],
-                working_dir="/workspace",
-                network_disabled=True,
-                mem_limit="256m",
-                nano_cpus=1_000_000_000,
-                pids_limit=128,
-                detach=True,
+            response = self.http_client.post(
+                f"{self.base_url}/internal/v1/runs",
+                headers=headers,
+                json={
+                    "profile": "content_validation",
+                    "environment_id": "python-basic",
+                    "files": [{"path": file.path, "content": file.content} for file in files],
+                },
             )
-        except docker.errors.APIError as exc:
-            raise SandboxError(str(exc)) from exc
-
-        try:
-            container.put_archive("/workspace", _files_to_tar(files))
-            container.start()
-            try:
-                result = container.wait(timeout=self.timeout_seconds)
-                exit_code = result["StatusCode"]
-                timed_out = False
-            except ReadTimeout:
-                container.kill()
-                exit_code = -1
-                timed_out = True
-            output = container.logs(stdout=True, stderr=True).decode("utf-8", errors="replace")
-            return SandboxRunResult(exit_code=exit_code, output=output, timed_out=timed_out)
-        except docker.errors.APIError as exc:
-            raise SandboxError(str(exc)) from exc
-        finally:
-            container.remove(force=True)
+            response.raise_for_status()
+            result = response.json()
+            return SandboxRunResult(
+                exit_code=int(result["exit_code"]),
+                output=str(result["output"]),
+                timed_out=bool(result["timed_out"]),
+            )
+        except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
+            raise SandboxError("The sandbox runner request failed.") from exc

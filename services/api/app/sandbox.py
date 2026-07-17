@@ -1,11 +1,7 @@
-import io
-import tarfile
 from dataclasses import dataclass
-from pathlib import PurePosixPath
+from typing import Any
 
-import docker
-import docker.errors
-from requests.exceptions import ReadTimeout
+import httpx
 
 
 @dataclass(frozen=True)
@@ -26,67 +22,43 @@ class SandboxRunResult:
 
 
 class SandboxError(Exception):
-    """A Docker daemon failure while running a learner workspace."""
+    """The private sandbox runner could not accept or complete a run."""
 
 
-def _files_to_tar(files: list[SandboxFile]) -> bytes:
-    buffer = io.BytesIO()
-    with tarfile.open(fileobj=buffer, mode="w") as tar:
-        for file in files:
-            path = PurePosixPath(file.path)
-            if path.is_absolute() or ".." in path.parts or path.suffix != ".py":
-                raise ValueError("Learner workspaces may contain only relative Python files.")
-            data = file.content.encode("utf-8")
-            info = tarfile.TarInfo(name=file.path)
-            info.size = len(data)
-            info.mode = 0o644
-            tar.addfile(info, io.BytesIO(data))
-    return buffer.getvalue()
+class SandboxRunnerClient:
+    """Narrow client for the isolated sandbox service; the API never receives Docker access."""
 
-
-class DockerSandbox:
-    """Run a bounded learner workspace against private generated tests."""
-
-    IMAGE_TAG = "canopy-lesson-sandbox:python-basic"
-
-    def __init__(self, client: docker.DockerClient, timeout_seconds: int = 20) -> None:
-        self.client = client
+    def __init__(
+        self,
+        base_url: str,
+        *,
+        internal_service_token: str | None,
+        timeout_seconds: int,
+        http_client: Any | None = None,
+    ) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.internal_service_token = internal_service_token
         self.timeout_seconds = timeout_seconds
+        self.http_client = http_client or httpx.Client(timeout=timeout_seconds + 5)
 
     def run_pytest(self, files: list[SandboxFile]) -> SandboxRunResult:
-        if sum(len(file.content.encode("utf-8")) for file in files) > 128_000:
-            raise ValueError("The exercise workspace is too large.")
+        headers = {"X-Internal-Service-Token": self.internal_service_token} if self.internal_service_token else {}
         try:
-            container = self.client.containers.create(
-                image=self.IMAGE_TAG,
-                command=["pytest", "-q", "-p", "no:cacheprovider", "."],
-                working_dir="/workspace",
-                environment={"PYTHONDONTWRITEBYTECODE": "1"},
-                network_disabled=True,
-                read_only=True,
-                user="65534:65534",
-                cap_drop=["ALL"],
-                security_opt=["no-new-privileges:true"],
-                tmpfs={"/workspace": "rw,nosuid,nodev,noexec,size=8m"},
-                mem_limit="256m",
-                nano_cpus=1_000_000_000,
-                pids_limit=64,
-                detach=True,
+            response = self.http_client.post(
+                f"{self.base_url}/internal/v1/runs",
+                headers=headers,
+                json={
+                    "profile": "learner_visible",
+                    "environment_id": "python-basic",
+                    "files": [{"path": file.path, "content": file.content} for file in files],
+                },
             )
-            container.put_archive("/workspace", _files_to_tar(files))
-            container.start()
-            try:
-                result = container.wait(timeout=self.timeout_seconds)
-                exit_code = result["StatusCode"]
-                timed_out = False
-            except ReadTimeout:
-                container.kill()
-                exit_code = -1
-                timed_out = True
-            output = container.logs(stdout=True, stderr=True).decode("utf-8", errors="replace")
-            return SandboxRunResult(exit_code=exit_code, output=output[-16_000:], timed_out=timed_out)
-        except docker.errors.APIError as exc:
-            raise SandboxError(str(exc)) from exc
-        finally:
-            if "container" in locals():
-                container.remove(force=True)
+            response.raise_for_status()
+            result = response.json()
+            return SandboxRunResult(
+                exit_code=int(result["exit_code"]),
+                output=str(result["output"]),
+                timed_out=bool(result["timed_out"]),
+            )
+        except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
+            raise SandboxError("The sandbox runner request failed.") from exc
