@@ -155,6 +155,8 @@ a.button.sidebar-new-button {
 .markdown-text p { margin: 0; }
 .markdown-text ul, .markdown-text ol { margin: 0; padding-left: 24px; }
 .markdown-text code { padding: 1px 4px; border-radius: 4px; background: var(--brand-tint); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9em; }
+.markdown-code { margin: 0; padding: 14px; overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--brand-tint); color: var(--ink); white-space: pre; }
+.markdown-code code { padding: 0; background: transparent; font-size: 0.9rem; }
 
 .steps {
   display: grid;
@@ -207,6 +209,52 @@ a.button.sidebar-new-button {
 }
 .progress-step-failed .progress-step-marker { background: var(--danger); border-color: var(--danger); color: white; }
 .progress-step-failed .progress-step-label { color: var(--danger); }
+
+.spinner {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 2px solid var(--brand-tint);
+  border-top-color: var(--ink);
+  animation: spin 0.7s linear infinite;
+}
+.spinner-large { width: 24px; height: 24px; border-width: 3px; }
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.building-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 4px 0 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--brand-tint);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+.building-banner-detail { display: block; margin-top: 2px; font-size: 0.82rem; font-weight: 400; color: var(--muted); }
+
+.stall-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--danger);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  font-size: 0.85rem;
+  color: var(--danger);
+}
+
+.course-status-building { display: inline-flex; align-items: center; gap: 6px; }
 
 .card-grid {
   display: grid;
@@ -296,20 +344,21 @@ a.button.sidebar-new-button {
 
 .lesson-preview { display: grid; gap: 16px; margin-top: 16px; }
 .lesson-preview ul { margin: 8px 0 0; padding-left: 20px; }
-.lesson-checks { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); font-size: 0.9rem; }
-.lesson-checks ul { margin: 0; padding-left: 20px; }
-.lesson-checks span { font-size: 0.82rem; }
+.lesson-content-divider { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 0.78rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.lesson-content-divider::before, .lesson-content-divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.lesson-content { color: var(--ink); font-size: 1rem; line-height: 1.65; }
 .lesson-workspace { overflow: hidden; border: 1px solid #262626; border-radius: 10px; background: #1e1e1e; }
 .lesson-file-tabs { display: flex; overflow-x: auto; background: #181818; }
 .lesson-file-tab { border: 0; border-right: 1px solid #333; padding: 9px 14px; color: #b8b8b8; background: transparent; cursor: pointer; font: 0.78rem ui-monospace, SFMono-Regular, Menlo, monospace; }
 .lesson-file-tab[data-active] { color: #fff; background: #1e1e1e; border-top: 2px solid #4f9cff; padding-top: 7px; }
-.lesson-file-content { margin: 0; padding: 14px; background: var(--surface); font-size: 0.82rem; overflow-x: auto; white-space: pre; }
-.lesson-editor { display: block; width: 100%; min-height: 320px; border: 0; resize: vertical; background: #1e1e1e; color: #d4d4d4; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; line-height: 1.5; }
-.lesson-editor:focus { outline: 2px solid #4f9cff; outline-offset: -2px; }
+.lesson-file-tab-readonly { color: #8f8f8f; font-style: italic; }
 .lesson-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.lesson-run-output { margin: 0; padding: 14px; border-radius: 8px; overflow-x: auto; font-size: 0.82rem; background: var(--brand-tint); }
+.lesson-run-output { margin: 0; padding: 14px; border-radius: 8px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; font-size: 0.82rem; background: var(--brand-tint); }
 .lesson-run-output.passed { border-left: 3px solid #13795b; }
 .lesson-run-output.failed { border-left: 3px solid var(--danger); }
+.lesson-console { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.lesson-console-header { display: grid; gap: 2px; }
+.lesson-console-header span { font-size: 0.82rem; }
 .course-status {
   color: var(--ink);
   background: var(--brand-tint);

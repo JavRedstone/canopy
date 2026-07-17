@@ -132,7 +132,7 @@ export function CourseDetail({ courseId }: { courseId: string }) {
         </Button>
       </header>
 
-      {progress.stage !== "ready" ? <CourseProgressSteps progress={progress} /> : null}
+      {progress.stage !== "ready" ? <CourseProgressSteps progress={progress} onResume={handleRegenerate} /> : null}
       {refreshError ? <p className="error">{refreshError} Retrying automatically…</p> : null}
 
       {map.modules.length === 0 ? (
@@ -149,7 +149,7 @@ export function CourseDetail({ courseId }: { courseId: string }) {
                   <span className="module-trigger-meta">
                     <span className="muted">
                       {module.concepts.length === 0
-                        ? "Generating…"
+                        ? <span className="course-status-building"><span className="spinner" aria-hidden="true" /> Generating…</span>
                         : `${module.concepts.length} concept${module.concepts.length === 1 ? "" : "s"}`}
                     </span>
                     <Icon name="expand_more" className="module-trigger-chevron" />
@@ -158,7 +158,7 @@ export function CourseDetail({ courseId }: { courseId: string }) {
               </Accordion.Header>
               <Accordion.Panel className="module-panel">
                 {module.concepts.length === 0 ? (
-                  <p className="muted">Generating concepts…</p>
+                  <p className="muted course-status-building"><span className="spinner" aria-hidden="true" /> Generating concepts…</p>
                 ) : (
                   <div className="course-list">
                     {module.concepts.map((concept) => (
@@ -172,7 +172,11 @@ export function CourseDetail({ courseId }: { courseId: string }) {
                             <p className="muted">{concept.summary_markdown}</p>
                           </div>
                         </div>
-                        <span className="course-status">{concept.kind}</span>
+                        {progress.current_lesson_title === concept.title ? (
+                          <span className="course-status course-status-building"><span className="spinner" aria-hidden="true" /> Building…</span>
+                        ) : (
+                          <span className="course-status">{concept.kind}</span>
+                        )}
                       </Link>
                     ))}
                   </div>

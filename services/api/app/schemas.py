@@ -97,12 +97,7 @@ class LessonPreview(BaseModel):
     explanation_markdown: str
     starter_files: list[LessonWorkspaceFile]
     hints: list[str]
-    public_test_cases: list["LessonTestCase"] = Field(default_factory=list)
-
-
-class LessonTestCase(BaseModel):
-    name: str
-    description: str
+    public_test_files: list[LessonWorkspaceFile] = Field(default_factory=list)
 
 
 class RunLessonRequest(BaseModel):
@@ -115,10 +110,22 @@ class RunLessonResponse(BaseModel):
     timed_out: bool
 
 
+class RunScriptRequest(BaseModel):
+    files: list[LessonWorkspaceFile] = Field(min_length=1, max_length=10)
+    script: LessonWorkspaceFile
+
+
+class RunScriptResponse(BaseModel):
+    output: str
+    exit_code: int
+    timed_out: bool
+
+
 class ConceptDetailResponse(BaseModel):
     slug: str
     title: str
     kind: Literal["conceptual", "coding"]
     summary_markdown: str
     citations: list[str]
+    generation_status: LessonBuildStatus | None = None
     lesson: LessonPreview | None = None

@@ -101,7 +101,7 @@ export interface LessonPreview {
   explanation_markdown: string;
   starter_files: LessonWorkspaceFile[];
   hints: string[];
-  public_test_cases: { name: string; description: string }[];
+  public_test_files: LessonWorkspaceFile[];
 }
 
 export interface ConceptDetailResponse {
@@ -110,6 +110,7 @@ export interface ConceptDetailResponse {
   kind: "conceptual" | "coding";
   summary_markdown: string;
   citations: string[];
+  generation_status: LessonBuildStatus | null;
   lesson: LessonPreview | null;
 }
 
@@ -135,6 +136,28 @@ export async function runLesson(courseId: string, slug: string, files: LessonWor
     body: JSON.stringify({ files })
   });
   if (!response.ok) throw new Error(`Unable to run exercise tests (HTTP ${response.status}).`);
+  return response.json();
+}
+
+export interface ScriptRunResult {
+  output: string;
+  exit_code: number;
+  timed_out: boolean;
+}
+
+export async function runLessonScript(
+  courseId: string,
+  slug: string,
+  files: LessonWorkspaceFile[],
+  script: LessonWorkspaceFile,
+  accessToken: string
+): Promise<ScriptRunResult> {
+  const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/concepts/${slug}/run-script`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ files, script })
+  });
+  if (!response.ok) throw new Error(`Unable to run your script (HTTP ${response.status}).`);
   return response.json();
 }
 

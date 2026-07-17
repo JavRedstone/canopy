@@ -26,6 +26,8 @@ app = FastAPI(title="Adaptive Source Learning Sandbox Runner", version="0.1.0", 
 class SandboxBackend(Protocol):
     def run_pytest(self, *, environment_id: str, files: list[SandboxFile]) -> SandboxRunResult: ...
 
+    def run_script(self, *, environment_id: str, entry_path: str, files: list[SandboxFile]) -> SandboxRunResult: ...
+
 
 class RunFile(BaseModel):
     path: str = Field(min_length=1, max_length=255)
@@ -40,7 +42,7 @@ class RunFile(BaseModel):
 class RunRequest(BaseModel):
     profile: Literal["content_validation", "learner_visible"]
     environment_id: Literal["python-basic"]
-    files: list[RunFile] = Field(min_length=1, max_length=15)
+    files: list[RunFile] = Field(min_length=1, max_length=20)
 
     @model_validator(mode="after")
     def file_paths_are_unique(self) -> "RunRequest":
@@ -51,6 +53,27 @@ class RunRequest(BaseModel):
 
 class RunResponse(BaseModel):
     passed: bool
+    exit_code: int
+    output: str
+    timed_out: bool
+
+
+class RunScriptRequest(BaseModel):
+    environment_id: Literal["python-basic"]
+    entry_path: str = Field(min_length=1, max_length=255)
+    files: list[RunFile] = Field(min_length=1, max_length=20)
+
+    @model_validator(mode="after")
+    def file_paths_are_unique_and_include_entry(self) -> "RunScriptRequest":
+        paths = {file.path for file in self.files}
+        if len(paths) != len(self.files):
+            raise ValueError("Sandbox file paths must be unique.")
+        if self.entry_path not in paths:
+            raise ValueError("The script entry path must be one of the submitted files.")
+        return self
+
+
+class RunScriptResponse(BaseModel):
     exit_code: int
     output: str
     timed_out: bool
@@ -89,3 +112,19 @@ def run_pytest(request: RunRequest, backend: SandboxBackend = Depends(_backend))
         logger.exception("Sandbox execution failed", extra={"profile": request.profile})
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="The exercise runner is unavailable.") from exc
     return RunResponse(passed=result.passed, exit_code=result.exit_code, output=result.output, timed_out=result.timed_out)
+
+
+@app.post("/internal/v1/scripts", response_model=RunScriptResponse, dependencies=[Depends(_internal_request_allowed)])
+def run_script(request: RunScriptRequest, backend: SandboxBackend = Depends(_backend)) -> RunScriptResponse:
+    try:
+        result = backend.run_script(
+            environment_id=request.environment_id,
+            entry_path=request.entry_path,
+            files=[SandboxFile(path=file.path, content=file.content) for file in request.files],
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+    except SandboxError as exc:
+        logger.exception("Sandbox script execution failed")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="The exercise runner is unavailable.") from exc
+    return RunScriptResponse(exit_code=result.exit_code, output=result.output, timed_out=result.timed_out)

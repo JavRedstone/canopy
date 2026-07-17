@@ -12,19 +12,33 @@ export function CourseDashboard() {
   const [errorMessage, setErrorMessage] = useState<string>();
 
   useEffect(() => {
+    let cancelled = false;
+    let timer: number | undefined;
+
     async function load() {
       const supabase = createClient();
       const { data } = await supabase.auth.getSession();
       if (!data.session) return;
       try {
-        setCourses(await getCourses(data.session.access_token));
+        const nextCourses = await getCourses(data.session.access_token);
+        if (cancelled) return;
+        setCourses(nextCourses);
         setState("ready");
+        if (nextCourses.some((course) => course.status === "draft")) {
+          timer = window.setTimeout(() => void load(), 8000);
+        }
       } catch (caught) {
-        setErrorMessage(caught instanceof Error ? caught.message : "Unknown error.");
-        setState("error");
+        if (!cancelled) {
+          setErrorMessage(caught instanceof Error ? caught.message : "Unknown error.");
+          setState("error");
+        }
       }
     }
     void load();
+    return () => {
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+    };
   }, []);
 
   if (state === "loading") return <p className="muted">Loading your courses…</p>;
@@ -40,7 +54,11 @@ export function CourseDashboard() {
             <CourseCategoryBadge title={course.title} goal={course.goal} />
             <div><h2>{course.title}</h2><p className="muted">{course.goal}</p></div>
           </div>
-          <span className="course-status">{course.status}</span>
+          {course.status === "draft" ? (
+            <span className="course-status course-status-building"><span className="spinner" aria-hidden="true" /> Building…</span>
+          ) : (
+            <span className="course-status">{course.status}</span>
+          )}
         </Link>
       ))}
     </div>

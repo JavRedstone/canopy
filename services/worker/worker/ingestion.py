@@ -111,14 +111,20 @@ class IngestionWorker:
                 self.build_lesson(lesson_definition_id)
             elif job_type == "concept_regeneration":
                 concept_id = str(message.payload.get("concept_id", ""))
+                lesson_definition_id = str(message.payload.get("lesson_definition_id", ""))
                 UUID(concept_id)
-                self.regenerate_concept_lesson(concept_id)
+                UUID(lesson_definition_id)
+                self.regenerate_concept_lesson(concept_id, lesson_definition_id)
             else:
                 raise ValueError("Unsupported generation job.")
         except RETRYABLE_ERRORS:
             logger.exception("Generation job hit a transient error; leaving job queued for retry", extra={"payload": message.payload})
             return
         except Exception:
+            if job_type == "concept_regeneration":
+                lesson_definition_id = message.payload.get("lesson_definition_id")
+                if lesson_definition_id:
+                    self.client.table("lesson_definitions").update({"build_status": "failed"}).eq("id", lesson_definition_id).execute()
             logger.exception("Generation job failed", extra={"payload": message.payload})
         self.queue.archive("generation", message.message_id)
 
@@ -394,8 +400,9 @@ class IngestionWorker:
             self.client.table("lesson_definitions").update({"build_status": "failed"}).eq("id", lesson_definition_id).execute()
             raise
 
-    def regenerate_concept_lesson(self, concept_id: str) -> None:
+    def regenerate_concept_lesson(self, concept_id: str, lesson_definition_id: str) -> None:
         """Regenerate one conceptual lesson without re-planning its course or creating a coding lab."""
+        self.client.table("lesson_definitions").update({"build_status": "building"}).eq("id", lesson_definition_id).execute()
         rows = (
             self.client.table("concepts")
             .select("id,title,concept_summaries(summary_markdown,citations_json)")
@@ -428,6 +435,7 @@ class IngestionWorker:
         if not content:
             raise ValueError("Concept regeneration returned no lesson content.")
         self.client.table("concept_summaries").update({"summary_markdown": content}).eq("concept_id", concept_id).execute()
+        self.client.table("lesson_definitions").update({"build_status": "built"}).eq("id", lesson_definition_id).execute()
 
     def _citation_chunks(self, citation_ids: list[str]) -> list[dict[str, Any]]:
         if not citation_ids:
@@ -543,6 +551,10 @@ def _patch_reference_solution(bundle: LessonBundle, files: dict[str, str]) -> Le
             "reference_solution_files": [
                 WorkspaceFile(path=file.path, content=files.get(file.path, file.content))
                 for file in bundle.reference_solution_files
+            ],
+            "public_test_files": [
+                WorkspaceFile(path=file.path, content=files.get(file.path, file.content))
+                for file in bundle.public_test_files
             ],
             "test_files": [
                 WorkspaceFile(path=file.path, content=files.get(file.path, file.content))
