@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Accordion } from "@base-ui/react/accordion";
 import { Button } from "@base-ui/react/button";
-import { CourseMapResponse, CourseProgressResponse, CourseSummary, getCourse, getCourseMap, getCourseProgress, regenerateCourse } from "@/lib/api";
+import { CourseMapResponse, CourseProgressResponse, CourseSummary, deleteCourse, getCourse, getCourseMap, getCourseProgress, regenerateCourse } from "@/lib/api";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { CourseCategoryBadge } from "@/components/course-category-badge";
 import { CourseProgressSteps } from "@/components/course-progress";
@@ -16,6 +17,7 @@ const pollIntervalMs = 5000;
 const fullRefreshEveryPolls = 3;
 
 export function CourseDetail({ courseId }: { courseId: string }) {
+  const router = useRouter();
   const [course, setCourse] = useState<CourseSummary>();
   const [progress, setProgress] = useState<CourseProgressResponse>();
   const [map, setMap] = useState<CourseMapResponse>();
@@ -23,6 +25,8 @@ export function CourseDetail({ courseId }: { courseId: string }) {
   const [errorMessage, setErrorMessage] = useState<string>();
   const [refreshError, setRefreshError] = useState<string>();
   const [regenerating, setRegenerating] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string>();
   const fullLoadRef = useRef<() => Promise<void>>(async () => {});
   const progressRefreshRef = useRef<() => Promise<void>>(async () => {});
   const pollCountRef = useRef(0);
@@ -111,6 +115,23 @@ export function CourseDetail({ courseId }: { courseId: string }) {
     }
   }
 
+  async function handleDelete() {
+    if (!course) return;
+    if (!window.confirm(`Delete "${course.title}"? This removes the course and all of its lessons and progress. This cannot be undone.`)) return;
+    setDeleting(true);
+    setDeleteError(undefined);
+    try {
+      const supabase = createClient();
+      const { data } = await supabase.auth.getSession();
+      if (!data.session) throw new Error("Your session has expired. Please sign in again.");
+      await deleteCourse(courseId, data.session.access_token);
+      router.push("/courses");
+    } catch (caught) {
+      setDeleteError(caught instanceof Error ? caught.message : "Unable to delete the course.");
+      setDeleting(false);
+    }
+  }
+
   if (state === "loading") return <p className="muted">Loading course…</p>;
   if (state === "error") return <p className="error">{errorMessage ?? "We could not load this course."}</p>;
   if (!course || !progress || !map) return null;
@@ -127,13 +148,19 @@ export function CourseDetail({ courseId }: { courseId: string }) {
             <p className="muted">{course.goal}</p>
           </div>
         </div>
-        <Button className="button button-secondary" onClick={handleRegenerate} disabled={regenerating} focusableWhenDisabled>
-          {regenerating ? "Starting…" : "Regenerate"}
-        </Button>
+        <div className="page-header-actions">
+          <Button className="button button-secondary" onClick={handleRegenerate} disabled={regenerating || deleting} focusableWhenDisabled>
+            {regenerating ? "Starting…" : "Regenerate"}
+          </Button>
+          <Button className="button button-secondary button-danger" onClick={handleDelete} disabled={regenerating || deleting} focusableWhenDisabled>
+            {deleting ? "Deleting…" : "Delete"}
+          </Button>
+        </div>
       </header>
 
       {progress.stage !== "ready" ? <CourseProgressSteps progress={progress} onResume={handleRegenerate} /> : null}
       {refreshError ? <p className="error">{refreshError} Retrying automatically…</p> : null}
+      {deleteError ? <p className="error">{deleteError}</p> : null}
 
       {map.modules.length === 0 ? (
         progress.stage === "ready" ? <p className="muted">This course has no modules yet.</p> : null

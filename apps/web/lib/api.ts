@@ -88,6 +88,14 @@ export async function regenerateCourse(courseId: string, accessToken: string): P
   return response.json();
 }
 
+export async function deleteCourse(courseId: string, accessToken: string): Promise<void> {
+  const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  if (!response.ok) throw new Error(`Unable to delete the course (HTTP ${response.status}).`);
+}
+
 export interface LessonWorkspaceFile {
   path: string;
   content: string;

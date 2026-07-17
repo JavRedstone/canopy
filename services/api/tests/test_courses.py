@@ -65,6 +65,31 @@ def test_course_vertical_slice() -> None:
     assert missing_concept.status_code == 404
 
 
+def test_course_deletion() -> None:
+    client = TestClient(app)
+    owner = {"X-Demo-User-Id": "00000000-0000-0000-0000-000000000004"}
+    other_user = {"X-Demo-User-Id": "00000000-0000-0000-0000-000000000005"}
+    course = client.post(
+        "/api/v1/courses",
+        headers=owner,
+        json={"title": "Disposable course", "goal": "Learn deletion"},
+    )
+    assert course.status_code == 201
+    course_id = course.json()["id"]
+
+    forbidden = client.delete(f"/api/v1/courses/{course_id}", headers=other_user)
+    assert forbidden.status_code == 404
+
+    deleted = client.delete(f"/api/v1/courses/{course_id}", headers=owner)
+    assert deleted.status_code == 204
+
+    missing = client.get(f"/api/v1/courses/{course_id}", headers=owner)
+    assert missing.status_code == 404
+
+    repeat = client.delete(f"/api/v1/courses/{course_id}", headers=owner)
+    assert repeat.status_code == 404
+
+
 def test_goal_only_course_does_not_require_sources() -> None:
     client = TestClient(app)
     response = client.post(

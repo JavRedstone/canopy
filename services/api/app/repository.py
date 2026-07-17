@@ -39,6 +39,8 @@ class CourseRepository(Protocol):
 
     def regenerate_course(self, owner_id: UUID, course_id: UUID) -> CourseSummary: ...
 
+    def delete_course(self, owner_id: UUID, course_id: UUID) -> None: ...
+
     def concept_detail(self, owner_id: UUID, course_id: UUID, slug: str) -> ConceptDetailResponse: ...
 
     def lesson_workspace(
@@ -159,6 +161,10 @@ class MemoryCourseRepository:
 
     def regenerate_course(self, owner_id: UUID, course_id: UUID) -> CourseSummary:
         return self._summary(self._course_for_owner(owner_id, course_id))
+
+    def delete_course(self, owner_id: UUID, course_id: UUID) -> None:
+        self._course_for_owner(owner_id, course_id)
+        del self.courses[course_id]
 
     def concept_detail(self, owner_id: UUID, course_id: UUID, slug: str) -> ConceptDetailResponse:
         self._course_for_owner(owner_id, course_id)
@@ -543,6 +549,31 @@ class SupabaseCourseRepository:
             "regenerate course planning",
         )
         return self.get_course(owner_id, course_id)
+
+    def delete_course(self, owner_id: UUID, course_id: UUID) -> None:
+        self._course_for_owner(owner_id, course_id)
+        try:
+            self.client.rpc(
+                "delete_course",
+                {"p_course_id": str(course_id), "p_owner_id": str(owner_id)},
+            ).execute()
+        except APIError as exc:
+            if exc.code == "PGRST202":
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Course deletion is not deployed yet. Apply migration 20260716010000_course_deletion.sql.",
+                ) from exc
+            logger.exception("Supabase request failed while attempting to delete a course")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="The course service is temporarily unavailable.",
+            ) from exc
+        except HTTPError as exc:
+            logger.exception("Supabase request failed while attempting to delete a course")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="The course service is temporarily unavailable.",
+            ) from exc
 
     def concept_detail(self, owner_id: UUID, course_id: UUID, slug: str) -> ConceptDetailResponse:
         course = self._course_for_owner(owner_id, course_id)

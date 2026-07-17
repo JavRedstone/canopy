@@ -56,6 +56,11 @@ def regenerate_course(course_id: UUID, current_user: CurrentUser, repository: Re
     return repository.regenerate_course(current_user, course_id)
 
 
+@router.delete("/{course_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_course(course_id: UUID, current_user: CurrentUser, repository: Repository) -> None:
+    repository.delete_course(current_user, course_id)
+
+
 @router.get("/{course_id}/concepts/{slug}", response_model=ConceptDetailResponse)
 def get_concept_detail(course_id: UUID, slug: str, current_user: CurrentUser, repository: Repository) -> ConceptDetailResponse:
     return repository.concept_detail(current_user, course_id, slug)

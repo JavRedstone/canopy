@@ -423,6 +423,14 @@ a.button.sidebar-new-button {
 }
 .button-secondary:hover { background: var(--brand-tint); }
 
+.button-danger {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+}
+.button-danger:hover { background: color-mix(in srgb, var(--danger) 8%, transparent); }
+
+.page-header-actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+
 .form { display: grid; gap: 18px; max-width: 480px; margin-top: 24px; }
 .field { display: grid; gap: 6px; font-weight: 600; font-size: 0.9rem; }
 .field textarea { resize: vertical; }
