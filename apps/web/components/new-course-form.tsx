@@ -3,7 +3,8 @@
 import { Button } from "@base-ui/react/button";
 import { Input } from "@base-ui/react/input";
 import { Tabs } from "@base-ui/react/tabs";
-import { CSSProperties, FormEvent, useState } from "react";
+import { FormEvent, useState } from "react";
+import { Slider } from "@base-ui/react/slider";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -123,10 +124,13 @@ export function NewCourseForm() {
       <label className="field" htmlFor="course-goal">What do you want to learn?<textarea className="input" id="course-goal" rows={4} value={goal} onChange={(event) => setGoal(event.target.value)} autoComplete="off" required /></label>
       <div className="field">
         <span>Lesson range <strong>{lessonMin}–{lessonMax} lessons</strong></span>
-        <div className="lesson-range" style={{ "--range-start": `${((lessonMin - 1) / 23) * 100}%`, "--range-end": `${((lessonMax - 1) / 23) * 100}%` } as CSSProperties}>
-          <input className="lesson-range-handle" type="range" min="1" max="24" value={lessonMin} onChange={(event) => setLessonMin(Math.min(Number(event.target.value), lessonMax))} aria-label="Minimum lessons" />
-          <input className="lesson-range-handle" type="range" min="1" max="24" value={lessonMax} onChange={(event) => setLessonMax(Math.max(Number(event.target.value), lessonMin))} aria-label="Maximum lessons" />
-        </div>
+        <Slider.Root className="lesson-range" min={1} max={24} minStepsBetweenValues={1} value={[lessonMin, lessonMax]} onValueChange={(value) => { setLessonMin(value[0]); setLessonMax(value[1]); }}>
+          <Slider.Control className="lesson-range-control">
+            <Slider.Track className="lesson-range-track"><Slider.Indicator className="lesson-range-indicator" /></Slider.Track>
+            <Slider.Thumb className="lesson-range-thumb" index={0} getAriaLabel={() => "Minimum lessons"} />
+            <Slider.Thumb className="lesson-range-thumb" index={1} getAriaLabel={() => "Maximum lessons"} />
+          </Slider.Control>
+        </Slider.Root>
         <div className="lesson-range-labels"><span>Quick<br />1 lesson</span><span>Deep dive<br />24 lessons</span></div>
         <span className="muted">Drag either handle to choose the course depth.</span>
       </div>

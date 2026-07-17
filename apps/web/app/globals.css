@@ -440,13 +440,12 @@ a.button.sidebar-new-button {
   outline: 2px solid var(--ink);
   outline-offset: 1px;
 }
-.lesson-range { --range-start: 8%; --range-end: 25%; position: relative; height: 32px; margin: 2px 8px 0; }
-.lesson-range::before, .lesson-range::after { content: ""; position: absolute; top: 14px; height: 5px; border-radius: 99px; }
-.lesson-range::before { left: 0; right: 0; background: var(--line); }
-.lesson-range::after { left: var(--range-start); right: calc(100% - var(--range-end)); background: var(--ink); }
-.lesson-range-handle { position: absolute; inset: 0; width: 100%; margin: 0; appearance: none; background: transparent; pointer-events: none; }
-.lesson-range-handle::-webkit-slider-thumb { appearance: none; width: 18px; height: 18px; border: 3px solid var(--ink); border-radius: 50%; background: var(--surface); cursor: grab; pointer-events: auto; box-shadow: 0 1px 3px rgb(0 0 0 / 20%); }
-.lesson-range-handle::-moz-range-thumb { width: 13px; height: 13px; border: 3px solid var(--ink); border-radius: 50%; background: var(--surface); cursor: grab; pointer-events: auto; }
+.lesson-range { margin: 2px 8px 0; }
+.lesson-range-control { position: relative; height: 32px; display: flex; align-items: center; }
+.lesson-range-track { width: 100%; height: 5px; border-radius: 99px; background: var(--line); }
+.lesson-range-indicator { height: 100%; border-radius: inherit; background: var(--ink); }
+.lesson-range-thumb { width: 18px; height: 18px; border: 3px solid var(--ink); border-radius: 50%; background: var(--surface); box-shadow: 0 1px 3px rgb(0 0 0 / 20%); cursor: grab; }
+.lesson-range-thumb:focus-visible { outline: 2px solid #4f9cff; outline-offset: 3px; }
 .lesson-range-labels { display: flex; justify-content: space-between; color: var(--muted); font-size: 0.75rem; line-height: 1.25; }
 
 .notice { border-radius: 8px; padding: 10px 12px; background: var(--brand-tint); color: var(--ink); font-size: 0.9rem; }
