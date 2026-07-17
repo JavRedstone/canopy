@@ -21,10 +21,10 @@ class OutlineModule(BaseModel):
     id: str = Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
     title: str = Field(min_length=1, max_length=160)
     focus: str = Field(min_length=1, max_length=400)
-    # A textbook-style topic has at least two lectures, one lab, and one assessment.
+    # A textbook-style topic has several focused activities, never one monolithic lesson.
     # One lesson per concept, so this is also the concept count for the module. Capped at
     # ModuleConcepts' limit so the target is always achievable in a single concepts call.
-    lesson_count: int = Field(ge=4, le=8)
+    lesson_count: int = Field(ge=6, le=10)
 
 
 class CourseOutline(BaseModel):
@@ -56,7 +56,7 @@ class ModuleConcepts(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    concepts: list[PlannerConcept] = Field(min_length=1, max_length=8)
+    concepts: list[PlannerConcept] = Field(min_length=1, max_length=10)
 
     @model_validator(mode="after")
     def unique_concept_ids(self) -> "ModuleConcepts":
@@ -98,13 +98,13 @@ def validate_module_concepts(
         raise ValueError(
             f"This module must contain exactly {expected_count} concept(s), but {len(concepts)} were generated."
         )
-    if len(concepts) < 4:
-        raise ValueError("Each topic needs at least two lectures, a lab, and an assessment.")
+    if len(concepts) < 6:
+        raise ValueError("Each topic needs at least three lectures, two labs, and an assessment.")
     kinds = [concept.kind for concept in concepts]
-    if kinds.count("conceptual") < 2:
-        raise ValueError("Each topic needs at least two lecture concepts before its lab.")
-    if kinds.count("coding") < 1:
-        raise ValueError("Each topic needs at least one coding lab.")
+    if kinds.count("conceptual") < 3:
+        raise ValueError("Each topic needs at least three focused lecture concepts before its labs.")
+    if kinds.count("coding") < 2:
+        raise ValueError("Each topic needs at least two coding labs.")
     if kinds.count("assessment") != 1:
         raise ValueError("Each topic needs exactly one assessment checkpoint.")
     phase = {"conceptual": 0, "coding": 1, "assessment": 2}

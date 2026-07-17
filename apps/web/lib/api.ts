@@ -13,6 +13,7 @@ export interface CourseMapConcept {
   title: string;
   kind: "conceptual" | "coding" | "assessment";
   summary_markdown: string;
+  completed: boolean;
 }
 
 export interface CourseMapModule {

@@ -185,8 +185,6 @@ class LessonBundle(BaseModel):
         if self.workspace is None:
             if self.assessment.visible_tests or self.assessment.hidden_tests or self.assessment.reference_solution_files:
                 raise ValueError("A lesson without a workspace cannot carry tests or a reference solution.")
-            if not self.assessment.quiz_items:
-                raise ValueError("A conceptual lesson must include at least one quiz item.")
             return self
 
         for group, name in ((self.assessment.visible_tests, "Visible test"), (self.assessment.hidden_tests, "Hidden test"), (self.assessment.reference_solution_files, "Reference solution")):

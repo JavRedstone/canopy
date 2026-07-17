@@ -263,10 +263,12 @@ export function CourseDetail({ courseId }: { courseId: string }) {
                             sx={{ border: 1, borderColor: "divider", borderRadius: 1.5 }}
                           >
                             <ListItemIcon sx={{ minWidth: 44 }}>
-                              <Icon name={conceptKindIcon(concept.kind)} />
+                              <Icon name={concept.completed ? "check_circle" : conceptKindIcon(concept.kind)} />
                             </ListItemIcon>
                             <ListItemText primary={concept.title} secondary={concept.summary_markdown} />
-                            {building ? (
+                            {concept.completed ? (
+                              <Chip size="small" icon={<Icon name="check" />} label="Complete" color="success" />
+                            ) : building ? (
                               <Chip size="small" icon={<CircularProgress size={12} sx={{ color: "inherit" }} />} label="Building…" />
                             ) : (
                               <Chip size="small" label={concept.kind} color="success" variant="outlined" sx={{ textTransform: "capitalize" }} />

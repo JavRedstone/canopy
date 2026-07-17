@@ -10,8 +10,8 @@ def _outline(**overrides: object) -> dict:
         "audience": "Backend developers new to authentication.",
         "objectives": ["Understand JWT structure", "Validate tokens safely"],
         "modules": [
-            {"id": "jwt-basics", "title": "JWT basics", "focus": "What a JWT is and its parts.", "lesson_count": 4},
-            {"id": "validation", "title": "Validation", "focus": "Verifying signatures and claims.", "lesson_count": 4},
+            {"id": "jwt-basics", "title": "JWT basics", "focus": "What a JWT is and its parts.", "lesson_count": 6},
+            {"id": "validation", "title": "Validation", "focus": "Verifying signatures and claims.", "lesson_count": 6},
         ],
     }
     base.update(overrides)
@@ -24,19 +24,19 @@ def _concepts(entries: list[dict]) -> list:
 
 def test_course_outline_validation_accepts_matching_hash_and_budget() -> None:
     outline = CourseOutline.model_validate(_outline())
-    validate_course_outline(outline, "source-hash", 8, 10)
+    validate_course_outline(outline, "source-hash", 12, 14)
 
 
 def test_course_outline_validation_rejects_mismatched_source_hash() -> None:
     outline = CourseOutline.model_validate(_outline(source_set_hash="wrong-hash"))
     with pytest.raises(ValueError, match="source set"):
-        validate_course_outline(outline, "source-hash", 8, 10)
+        validate_course_outline(outline, "source-hash", 12, 14)
 
 
 def test_course_outline_validation_rejects_budget_out_of_range() -> None:
-    outline = CourseOutline.model_validate(_outline())  # totals 8 lessons
-    with pytest.raises(ValueError, match="between 9 and 10 lessons"):
-        validate_course_outline(outline, "source-hash", 9, 10)
+    outline = CourseOutline.model_validate(_outline())  # totals 12 lessons
+    with pytest.raises(ValueError, match="between 13 and 14 lessons"):
+        validate_course_outline(outline, "source-hash", 13, 14)
 
 
 def test_course_outline_rejects_duplicate_module_ids() -> None:
@@ -44,8 +44,8 @@ def test_course_outline_rejects_duplicate_module_ids() -> None:
         CourseOutline.model_validate(
             _outline(
                 modules=[
-                    {"id": "dup", "title": "One", "focus": "First.", "lesson_count": 4},
-                    {"id": "dup", "title": "Two", "focus": "Second.", "lesson_count": 4},
+                    {"id": "dup", "title": "One", "focus": "First.", "lesson_count": 6},
+                    {"id": "dup", "title": "Two", "focus": "Second.", "lesson_count": 6},
                 ]
             )
         )
@@ -56,8 +56,10 @@ def test_module_concepts_validation_accepts_grounded_concepts_referencing_known_
         [
             {"id": "token-shape", "title": "Token shape", "kind": "conceptual", "summary_markdown": "Headers carry authentication information.", "prerequisites": ["headers"], "citations": ["chunk-b"]},
             {"id": "expiry", "title": "Token expiry", "kind": "conceptual", "summary_markdown": "Applications reject expired tokens.", "prerequisites": ["token-shape"], "citations": ["chunk-b"]},
+            {"id": "signature", "title": "Signature checks", "kind": "conceptual", "summary_markdown": "Signatures establish authenticity.", "prerequisites": ["expiry"], "citations": ["chunk-b"]},
             {"id": "validate", "title": "Validate tokens", "kind": "coding", "summary_markdown": "Validate token expiry in code.", "prerequisites": ["expiry"], "citations": ["chunk-b"]},
-            {"id": "token-assessment", "title": "Token assessment", "kind": "assessment", "summary_markdown": "Assess token validation.", "prerequisites": ["validate"], "citations": ["chunk-b"]},
+            {"id": "validate-signature", "title": "Validate signatures", "kind": "coding", "summary_markdown": "Validate signatures in code.", "prerequisites": ["validate"], "citations": ["chunk-b"]},
+            {"id": "token-assessment", "title": "Token assessment", "kind": "assessment", "summary_markdown": "Assess token validation.", "prerequisites": ["validate-signature"], "citations": ["chunk-b"]},
         ]
     )
     validate_module_concepts(concepts, ["chunk-a", "chunk-b"], ["headers"])

@@ -505,12 +505,42 @@ class SupabaseCourseRepository:
         summaries = self._summary_lookup([row["id"] for row in concepts])
         lesson_definitions = self._data(
             self.client.table("lesson_definitions")
-            .select("module_id,concept_id")
+            .select("id,module_id,concept_id")
             .eq("course_version_id", version_id)
             .eq("kind", "lesson"),
             "load lesson definitions",
         )
         module_id_by_concept_id = {row["concept_id"]: row["module_id"] for row in lesson_definitions}
+        definition_id_by_concept_id = {row["concept_id"]: row["id"] for row in lesson_definitions}
+        completed_definition_ids: set[str] = set()
+        definition_ids = [row["id"] for row in lesson_definitions]
+        if definition_ids:
+            revisions = self._data(
+                self.client.table("lesson_revisions")
+                .select("id,lesson_definition_id,revision")
+                .in_("lesson_definition_id", definition_ids)
+                .order("revision", desc=True),
+                "load lesson revisions for course map",
+            )
+            latest_revision_by_definition: dict[str, str] = {}
+            for revision in revisions:
+                latest_revision_by_definition.setdefault(revision["lesson_definition_id"], revision["id"])
+            latest_revision_ids = list(latest_revision_by_definition.values())
+            if latest_revision_ids:
+                completed_assignments = self._data(
+                    self.client.table("learner_lesson_assignments")
+                    .select("lesson_revision_id")
+                    .eq("user_id", str(owner_id))
+                    .eq("status", "completed")
+                    .in_("lesson_revision_id", latest_revision_ids),
+                    "load completed lessons for course map",
+                )
+                completed_revisions = {row["lesson_revision_id"] for row in completed_assignments}
+                completed_definition_ids = {
+                    definition_id
+                    for definition_id, revision_id in latest_revision_by_definition.items()
+                    if revision_id in completed_revisions
+                }
 
         concepts_by_module_id: dict[str, list[CourseMapConcept]] = {}
         for row in concepts:
@@ -523,6 +553,7 @@ class SupabaseCourseRepository:
                     title=row["title"],
                     kind=row["kind"],
                     summary_markdown=summaries.get(row["id"], ""),
+                    completed=definition_id_by_concept_id.get(row["id"]) in completed_definition_ids,
                 )
             )
 
@@ -728,6 +759,16 @@ class SupabaseCourseRepository:
             revision_id = revision_rows[0]["id"] if revision_rows else None
             bundle = revision_rows[0]["bundle_json"] if revision_rows else None
             view = bundle_view(bundle) if bundle else None
+            # A reading-only activity without a quiz has no learner action to submit.
+            # Viewing it is therefore its completion event; coding labs remain gated on
+            # a passing submission even when they carry no quiz questions.
+            if view and revision_id and concept["kind"] != "coding" and not view.quiz_items:
+                assignment = self._ensure_assignment(owner_id, course_id, slug)
+                if assignment["status"] != "completed":
+                    self._data(
+                        self.client.table("learner_lesson_assignments").update({"status": "completed"}).eq("id", assignment["id"]),
+                        "complete viewed lesson assignment",
+                    )
             # Conceptual concepts from courses planned before conceptual bundles existed
             # have a definition but no build and no bundle; they keep the summary-only view.
             if concept["kind"] == "coding" or generation_status is not None or view is not None:

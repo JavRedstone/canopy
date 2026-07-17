@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import { ConceptDetailResponse, CourseSummary, LessonRunResult, LessonWorkspaceFile, QuizItemPreview, ScriptRunResult, WorkedExamplePreview, getConceptDetail, getCourse, regenerateLesson, runLesson, runLessonScript } from "@/lib/api";
+import Link from "next/link";
+import { ConceptDetailResponse, CourseMapResponse, CourseSummary, LessonRunResult, LessonWorkspaceFile, QuizItemPreview, ScriptRunResult, WorkedExamplePreview, getConceptDetail, getCourse, getCourseMap, regenerateLesson, runLesson, runLessonScript } from "@/lib/api";
 import { useFullBleed } from "@/components/app-shell";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Icon } from "@/components/icon";
@@ -171,15 +172,72 @@ function TabDot({ ok }: { ok: boolean }) {
   return <Box component="span" sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: ok ? "success.main" : "error.main", display: "inline-block" }} />;
 }
 
+function CourseOutlineSidebar({ courseId, map, activeSlug }: { courseId: string; map?: CourseMapResponse; activeSlug: string }) {
+  if (!map) return null;
+  return (
+    <Box component="aside" sx={{ width: 260, flexShrink: 0, maxHeight: "calc(100vh - 32px)", position: "sticky", top: 16, overflowY: "auto", borderRight: 1, borderColor: "divider", bgcolor: "background.paper", p: 1.25 }}>
+      <Typography variant="overline" color="text.secondary" sx={{ px: 1 }}>Course outline</Typography>
+      <List disablePadding sx={{ display: "grid", gap: 1, mt: 0.75 }}>
+        {map.modules.map((module) => (
+          <Box key={module.position}>
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", px: 1, pb: 0.5 }}>
+              {module.position}. {module.title}
+            </Typography>
+            {module.concepts.map((item) => (
+              <ListItemButton
+                key={item.slug}
+                component={Link}
+                href={`/courses/${courseId}/concepts/${item.slug}`}
+                selected={item.slug === activeSlug}
+                sx={{ borderRadius: 1, py: 0.75, px: 1, alignItems: "flex-start" }}
+              >
+                <ListItemIcon sx={{ minWidth: 28, mt: 0.15 }}><Icon name={conceptKindIcon(item.kind)} /></ListItemIcon>
+                <ListItemText primary={item.title} secondary={conceptKindLabel(item.kind)} slotProps={{ primary: { sx: { fontSize: "0.82rem", lineHeight: 1.25 } }, secondary: { sx: { fontSize: "0.72rem" } } }} />
+              </ListItemButton>
+            ))}
+          </Box>
+        ))}
+      </List>
+    </Box>
+  );
+}
+
+function LessonNavigation({ courseId, map, activeSlug }: { courseId: string; map?: CourseMapResponse; activeSlug: string }) {
+  const lessons = map?.modules.flatMap((module) => module.concepts) ?? [];
+  const index = lessons.findIndex((item) => item.slug === activeSlug);
+  if (index < 0) return null;
+  const previous = lessons[index - 1];
+  const next = lessons[index + 1];
+  return (
+    <Stack direction="row" sx={{ justifyContent: "space-between", gap: 1, pt: 1 }}>
+      {previous ? <Button component={Link} href={`/courses/${courseId}/concepts/${previous.slug}`} variant="outlined" startIcon={<Icon name="arrow_back" />}>Previous</Button> : <Box />}
+      {next ? <Button component={Link} href={`/courses/${courseId}/concepts/${next.slug}`} variant="contained" endIcon={<Icon name="arrow_forward" />}>Next lesson</Button> : <Button component={Link} href={`/courses/${courseId}`} variant="contained" endIcon={<Icon name="school" />}>Back to course</Button>}
+    </Stack>
+  );
+}
+
+function LessonComplete({ courseId, map, slug, title }: { courseId: string; map?: CourseMapResponse; slug: string; title: string }) {
+  return (
+    <Alert severity="success" icon={<Icon name="celebration" />} sx={{ position: "relative", overflow: "hidden" }}>
+      <ConfettiBurst />
+      <Typography sx={{ fontWeight: 700 }}>{title} complete!</Typography>
+      <Typography variant="body2">Nice work — you&apos;re ready for the next activity.</Typography>
+      <LessonNavigation courseId={courseId} map={map} activeSlug={slug} />
+    </Alert>
+  );
+}
+
 export function ConceptDetail({ courseId, slug }: { courseId: string; slug: string }) {
   const [course, setCourse] = useState<CourseSummary>();
   const [concept, setConcept] = useState<ConceptDetailResponse>();
+  const [courseMap, setCourseMap] = useState<CourseMapResponse>();
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState<string>();
   const [files, setFiles] = useState<LessonWorkspaceFile[]>([]);
   const [runResult, setRunResult] = useState<LessonRunResult>();
   const [running, setRunning] = useState(false);
   const [celebrateNonce, setCelebrateNonce] = useState(0);
+  const [assessmentComplete, setAssessmentComplete] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [activeFilePath, setActiveFilePath] = useState<string>();
@@ -203,13 +261,15 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
       if (!data.session) return;
       try {
         const token = data.session.access_token;
-        const [courseSummary, conceptDetail] = await Promise.all([
+        const [courseSummary, conceptDetail, map] = await Promise.all([
           getCourse(courseId, token),
-          getConceptDetail(courseId, slug, token)
+          getConceptDetail(courseId, slug, token),
+          getCourseMap(courseId, token)
         ]);
         if (cancelled) return;
         setCourse(courseSummary);
         setConcept(conceptDetail);
+        setCourseMap(map);
         const starterFiles = conceptDetail.lesson?.starter_files ?? [];
         setFiles(starterFiles);
         setActiveFilePath(starterFiles[0]?.path);
@@ -220,6 +280,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
         setSolutionRevealed(false);
         setSolutionFilePaths(new Set());
         setConsoleTab("testcase");
+        setAssessmentComplete(false);
         setState("ready");
       } catch (caught) {
         if (!cancelled) {
@@ -379,6 +440,9 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
     return (
       <PageShell>
         {breadcrumbs}
+        <Box sx={{ display: "flex", gap: 3, alignItems: "flex-start" }}>
+        <CourseOutlineSidebar courseId={courseId} map={courseMap} activeSlug={slug} />
+        <Box sx={{ flex: 1, minWidth: 0 }}>
         <Stack direction="row" sx={{ alignItems: "flex-start", justifyContent: "space-between", gap: 3, mb: 4 }}>
           <Stack direction="row" sx={{ alignItems: "center", gap: 1.75 }}>
             {conceptHeaderBadge}
@@ -423,10 +487,15 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
                 )}
                 maxAttempts={concept.lesson.quiz_max_attempts}
                 title={concept.kind === "assessment" ? "Topic assessment" : undefined}
+                onComplete={concept.kind === "assessment" ? () => setAssessmentComplete(true) : undefined}
               />
+              {assessmentComplete ? <LessonComplete courseId={courseId} map={courseMap} slug={slug} title="Assessment" /> : null}
             </Stack>
           ) : null}
+          <LessonNavigation courseId={courseId} map={courseMap} activeSlug={slug} />
         </Stack>
+        </Box>
+        </Box>
       </PageShell>
     );
   }
@@ -465,6 +534,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
 
       {concept.lesson && concept.lesson.status === "built" ? (
         <Box sx={{ flex: 1, minHeight: 0, display: "flex" }}>
+          <CourseOutlineSidebar courseId={courseId} map={courseMap} activeSlug={slug} />
           <Box sx={{ width: 420, flexShrink: 0, overflowY: "auto", p: "16px 24px 40px", borderRight: 1, borderColor: "divider", display: "grid", gap: 2, alignContent: "start" }}>
             <Tabs value={instructionsTab} onChange={(_event, value) => setInstructionsTab(value)} sx={{ minHeight: 36, mx: -3, px: 3, borderBottom: 1, borderColor: "divider" }}>
               <Tab value="lesson" label="Lesson" sx={{ minHeight: 36, py: 1, textTransform: "none" }} />
@@ -523,6 +593,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
                   )}
                   maxAttempts={concept.lesson.quiz_max_attempts}
                 />
+                {runResult?.passed ? <LessonComplete courseId={courseId} map={courseMap} slug={slug} title="Lab" /> : null}
               </Stack>
             ) : !solutionRevealed ? (
               <Stack sx={{ gap: 1.5, py: 3, alignItems: "flex-start" }}>

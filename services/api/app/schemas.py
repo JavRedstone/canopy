@@ -40,8 +40,8 @@ class CreateCourseRequest(BaseModel):
     title: str = Field(min_length=1, max_length=120)
     goal: str = Field(min_length=1, max_length=2000)
     source_ids: list[UUID] = Field(default_factory=list)
-    lesson_min: int = Field(default=8, ge=4, le=24)
-    lesson_max: int = Field(default=16, ge=4, le=24)
+    lesson_min: int = Field(default=12, ge=6, le=24)
+    lesson_max: int = Field(default=20, ge=6, le=24)
     quiz_max_attempts: int = Field(default=3, ge=1, le=10)
 
 
@@ -78,6 +78,7 @@ class CourseMapConcept(BaseModel):
     title: str
     kind: Literal["conceptual", "coding", "assessment"]
     summary_markdown: str
+    completed: bool = False
 
 
 class CourseMapModule(BaseModel):

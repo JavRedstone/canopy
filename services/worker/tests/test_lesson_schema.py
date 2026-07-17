@@ -172,9 +172,10 @@ def test_coding_bundle_requires_hidden_tests() -> None:
         LessonBundle.model_validate(_assessment(_coding_bundle(), hidden_tests=[]))
 
 
-def test_conceptual_bundle_requires_a_quiz_item() -> None:
-    with pytest.raises(ValueError, match="at least one quiz item"):
-        LessonBundle.model_validate(_assessment(_conceptual_bundle(), quiz_items=[]))
+def test_conceptual_bundle_can_be_a_reading_only_activity() -> None:
+    bundle = LessonBundle.model_validate(_assessment(_conceptual_bundle(), quiz_items=[]))
+    assert bundle.workspace is None
+    assert bundle.assessment.quiz_items == []
 
 
 def test_conceptual_bundle_rejects_tests_without_workspace() -> None:
