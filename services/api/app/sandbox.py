@@ -62,3 +62,25 @@ class SandboxRunnerClient:
             )
         except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
             raise SandboxError("The sandbox runner request failed.") from exc
+
+    def run_script(self, files: list[SandboxFile], entry_path: str) -> SandboxRunResult:
+        headers = {"X-Internal-Service-Token": self.internal_service_token} if self.internal_service_token else {}
+        try:
+            response = self.http_client.post(
+                f"{self.base_url}/internal/v1/scripts",
+                headers=headers,
+                json={
+                    "environment_id": "python-basic",
+                    "entry_path": entry_path,
+                    "files": [{"path": file.path, "content": file.content} for file in files],
+                },
+            )
+            response.raise_for_status()
+            result = response.json()
+            return SandboxRunResult(
+                exit_code=int(result["exit_code"]),
+                output=str(result["output"]),
+                timed_out=bool(result["timed_out"]),
+            )
+        except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
+            raise SandboxError("The sandbox runner request failed.") from exc

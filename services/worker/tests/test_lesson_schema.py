@@ -10,6 +10,9 @@ def _bundle(**overrides: object) -> dict:
         "explanation_markdown": "Tokens carry an expiry claim that must be checked.",
         "citations": ["chunk-a"],
         "starter_files": [{"path": "solution.py", "content": "def is_expired(token):\n    ...\n"}],
+        "public_test_files": [
+            {"path": "test_basic.py", "content": "from solution import is_expired\n\ndef test_expired_token_is_rejected():\n    assert is_expired({'exp': 0})\n"}
+        ],
         "test_files": [
             {"path": "test_solution.py", "content": "from solution import is_expired\n\ndef test_it():\n    assert is_expired({'exp': 0})\n"}
         ],
@@ -55,7 +58,28 @@ def test_bundle_rejects_test_file_colliding_with_starter_path() -> None:
 
 
 def test_bundle_requires_a_discoverable_test_file() -> None:
-    with pytest.raises(ValueError, match="pytest-discoverable"):
+    with pytest.raises(ValueError, match="hidden test file must be pytest-discoverable"):
         LessonBundle.model_validate(
             _bundle(test_files=[{"path": "checks.py", "content": "assert True\n"}])
+        )
+
+
+def test_bundle_rejects_non_discoverable_public_test_file() -> None:
+    with pytest.raises(ValueError, match="public test file must be pytest-discoverable"):
+        LessonBundle.model_validate(
+            _bundle(public_test_files=[{"path": "checks.py", "content": "assert True\n"}])
+        )
+
+
+def test_bundle_rejects_public_test_file_colliding_with_starter_path() -> None:
+    with pytest.raises(ValueError, match="Public test files must not collide"):
+        LessonBundle.model_validate(
+            _bundle(public_test_files=[{"path": "solution.py", "content": "x = 1\n"}])
+        )
+
+
+def test_bundle_rejects_public_and_hidden_test_file_sharing_a_path() -> None:
+    with pytest.raises(ValueError, match="Public and hidden test files must not share a path"):
+        LessonBundle.model_validate(
+            _bundle(public_test_files=[{"path": "test_solution.py", "content": "def test_a():\n    assert True\n"}])
         )

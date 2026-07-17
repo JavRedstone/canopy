@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.dependencies import CurrentUser
 from app.repository import CourseRepository, get_repository
 from app.sandbox import SandboxError, SandboxFile, SandboxRunnerClient
-from app.schemas import ConceptDetailResponse, CourseMapResponse, CourseProgressResponse, CourseSummary, CreateCourseRequest, RunLessonRequest, RunLessonResponse
+from app.schemas import ConceptDetailResponse, CourseMapResponse, CourseProgressResponse, CourseSummary, CreateCourseRequest, RunLessonRequest, RunLessonResponse, RunScriptRequest, RunScriptResponse
 from app.settings import get_settings
 
 router = APIRouter(prefix="/courses", tags=["courses"])
@@ -70,19 +70,48 @@ def run_lesson(
     repository: Repository,
     sandbox: LessonSandbox,
 ) -> RunLessonResponse:
-    starter_files, test_files = repository.lesson_workspace(current_user, course_id, slug)
+    starter_files, public_test_files, hidden_test_files = repository.lesson_workspace(current_user, course_id, slug)
     expected_paths = {file.path for file in starter_files}
     submitted = {file.path: file.content for file in request.files}
     if len(submitted) != len(request.files) or set(submitted) != expected_paths:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Submit exactly the lesson starter files.")
+
+    test_set = [SandboxFile(file.path, file.content) for file in public_test_files + hidden_test_files]
     try:
         result = sandbox.run_pytest(
-            [SandboxFile(path, submitted[path]) for path in sorted(submitted)]
-            + [SandboxFile(file.path, file.content) for file in test_files]
+            [SandboxFile(path, submitted[path]) for path in sorted(submitted)] + test_set
         )
     except (SandboxError, ValueError) as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="The exercise runner is unavailable.") from exc
     return RunLessonResponse(passed=result.passed, output=result.output, timed_out=result.timed_out)
+
+
+@router.post("/{course_id}/concepts/{slug}/run-script", response_model=RunScriptResponse)
+def run_script(
+    course_id: UUID,
+    slug: str,
+    request: RunScriptRequest,
+    current_user: CurrentUser,
+    repository: Repository,
+    sandbox: LessonSandbox,
+) -> RunScriptResponse:
+    """Run arbitrary learner code as a plain script (not a pytest check) so they can print/debug freely."""
+    starter_files, _public_test_files, _hidden_test_files = repository.lesson_workspace(current_user, course_id, slug)
+    expected_paths = {file.path for file in starter_files}
+    submitted = {file.path: file.content for file in request.files}
+    if len(submitted) != len(request.files) or set(submitted) != expected_paths:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Submit exactly the lesson starter files.")
+    if request.script.path in expected_paths:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Script path collides with a lesson file.")
+
+    try:
+        result = sandbox.run_script(
+            [SandboxFile(path, submitted[path]) for path in sorted(submitted)] + [SandboxFile(request.script.path, request.script.content)],
+            entry_path=request.script.path,
+        )
+    except (SandboxError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="The exercise runner is unavailable.") from exc
+    return RunScriptResponse(output=result.output, exit_code=result.exit_code, timed_out=result.timed_out)
 
 
 @router.post("/{course_id}/concepts/{slug}/regenerate", status_code=status.HTTP_202_ACCEPTED)

@@ -16,6 +16,7 @@ export function MarkdownText({ children, className }: { children: string; classN
   const blocks: ReactNode[] = [];
   let paragraph: string[] = [];
   let list: { ordered: boolean; items: string[] } | undefined;
+  let codeLines: string[] | undefined;
 
   const flushParagraph = () => {
     if (paragraph.length) blocks.push(<p key={`p-${blocks.length}`}>{inline(paragraph.join(" "))}</p>);
@@ -29,6 +30,20 @@ export function MarkdownText({ children, className }: { children: string; classN
   };
 
   for (const line of lines) {
+    if (line.trimStart().startsWith("```")) {
+      flushParagraph(); flushList();
+      if (codeLines) {
+        blocks.push(<pre className="markdown-code" key={`code-${blocks.length}`}><code>{codeLines.join("\n")}</code></pre>);
+        codeLines = undefined;
+      } else {
+        codeLines = [];
+      }
+      continue;
+    }
+    if (codeLines) {
+      codeLines.push(line);
+      continue;
+    }
     const heading = line.match(/^(#{1,3})\s+(.+)$/);
     const unordered = line.match(/^[-*]\s+(.+)$/);
     const ordered = line.match(/^\d+\.\s+(.+)$/);
@@ -50,5 +65,6 @@ export function MarkdownText({ children, className }: { children: string; classN
     }
   }
   flushParagraph(); flushList();
+  if (codeLines) blocks.push(<pre className="markdown-code" key={`code-${blocks.length}`}><code>{codeLines.join("\n")}</code></pre>);
   return <div className={`markdown-text${className ? ` ${className}` : ""}`}>{blocks}</div>;
 }

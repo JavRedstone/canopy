@@ -65,10 +65,18 @@ class DockerSandboxRunner:
         self._ready_environments: set[str] = set()
 
     def run_pytest(self, *, environment_id: str, files: list[SandboxFile]) -> SandboxRunResult:
+        return self._run(environment_id=environment_id, files=files, command=["pytest", "-q", "-p", "no:cacheprovider", "."])
+
+    def run_script(self, *, environment_id: str, entry_path: str, files: list[SandboxFile]) -> SandboxRunResult:
+        if not any(file.path == entry_path for file in files):
+            raise ValueError("The script entry path must be one of the submitted files.")
+        return self._run(environment_id=environment_id, files=files, command=["python", "-u", entry_path])
+
+    def _run(self, *, environment_id: str, files: list[SandboxFile], command: list[str]) -> SandboxRunResult:
         if environment_id not in _ENVIRONMENT_IMAGES:
             raise ValueError("The requested sandbox environment is not registered.")
-        if not files or len(files) > 15:
-            raise ValueError("Sandbox runs must contain between 1 and 15 files.")
+        if not files or len(files) > 20:
+            raise ValueError("Sandbox runs must contain between 1 and 20 files.")
         if sum(len(file.content.encode("utf-8")) for file in files) > 128_000:
             raise ValueError("The sandbox workspace is too large.")
 
@@ -82,10 +90,15 @@ class DockerSandboxRunner:
             # anywhere meaningful on the rootfs, and pytest is configured not to write.
             container = self.client.containers.create(
                 image=image,
-                command=["pytest", "-q", "-p", "no:cacheprovider", "."],
+                command=command,
                 working_dir="/workspace",
                 environment={"PYTHONDONTWRITEBYTECODE": "1"},
                 network_disabled=True,
+                # Not read-only: Docker's put_archive rejects writes outright on a read-only rootfs, and even
+                # when writable, a tmpfs mount at the target path silently shadows archive-extracted files
+                # (verified against the local daemon). The container is single-use and force-removed in
+                # `finally`, and network/capabilities/user/resources are still fully locked down below.
+                read_only=False,
                 user="65534:65534",
                 cap_drop=["ALL"],
                 security_opt=["no-new-privileges:true"],

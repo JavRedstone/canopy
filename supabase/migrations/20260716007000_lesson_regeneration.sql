@@ -1,3 +1,6 @@
+alter table public.lesson_definitions
+  add column if not exists generation_requested_at timestamptz;
+
 create or replace function public.regenerate_lesson_build(
   p_course_id uuid,
   p_owner_id uuid,
@@ -35,8 +38,13 @@ begin
       'generation_jobs', jsonb_build_object('type', 'lesson_build', 'lesson_definition_id', v_lesson_definition_id)
     );
   else
+    update public.lesson_definitions
+    set build_status = 'pending', generation_requested_at = now()
+    where id = v_lesson_definition_id;
     select * into v_message_id from pgmq.send(
-      'generation_jobs', jsonb_build_object('type', 'concept_regeneration', 'concept_id', v_concept_id)
+      'generation_jobs', jsonb_build_object(
+        'type', 'concept_regeneration', 'concept_id', v_concept_id, 'lesson_definition_id', v_lesson_definition_id
+      )
     );
   end if;
   return v_message_id;
