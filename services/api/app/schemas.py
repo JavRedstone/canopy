@@ -256,3 +256,14 @@ class ConceptDetailResponse(BaseModel):
     citations: list[str]
     generation_status: LessonBuildStatus | None = None
     lesson: LessonPreview | None = None
+
+
+class LessonHelperRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=1200)
+    selected_text: str | None = Field(default=None, max_length=6000)
+    request_revision: bool = False
+
+
+class LessonHelperResponse(BaseModel):
+    answer_markdown: str = Field(min_length=1, max_length=4000)
+    replacement_markdown: str | None = Field(default=None, max_length=2400)

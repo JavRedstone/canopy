@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { ConceptDetailResponse, ConceptMastery, CourseMapResponse, CourseMasteryResponse, CourseSummary, LessonRunResult, LessonWorkspaceFile, QuizItemPreview, ScriptRunResult, WorkedExamplePreview, getConceptDetail, getCourse, getCourseMap, getCourseMastery, regenerateLesson, runLesson, runLessonScript, submitLesson } from "@/lib/api";
+import { ConceptDetailResponse, ConceptMastery, CourseMapResponse, CourseMasteryResponse, CourseSummary, LessonRunResult, LessonWorkspaceFile, QuizItemPreview, ScriptRunResult, WorkedExamplePreview, askLessonHelper, getConceptDetail, getCourse, getCourseMap, getCourseMastery, regenerateLesson, runLesson, runLessonScript, submitLesson } from "@/lib/api";
 import { useFullBleed } from "@/components/app-shell";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Icon } from "@/components/icon";
@@ -42,6 +42,7 @@ import List from "@mui/material/List";
 import ListItemButton from "@mui/material/ListItemButton";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
+import TextField from "@mui/material/TextField";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 const stallThresholdMs = 45_000;
@@ -51,6 +52,36 @@ const editorOptionsBase = { minimap: { enabled: false }, fontSize: 12, tabSize: 
 // A line the lesson generator emits to place a worked example or quiz item
 // inside the prose, e.g. "{{example:1}}" or "{{quiz:2}}" (1-based indexes).
 const LESSON_MARKER = /^\s*\{\{\s*(example|quiz)\s*:\s*(\d+)\s*\}\}\s*$/;
+
+/** Map rendered prose back to its Markdown positions so a browser text selection can
+ * replace the right source span even when it crosses whitespace or inline emphasis. */
+function replaceVisiblePassage(markdown: string, selected: string, replacement: string): string | null {
+  if (markdown.includes(selected)) return markdown.replace(selected, replacement);
+  const visible: string[] = [];
+  const sourceIndexes: number[] = [];
+  let previousWasSpace = false;
+  for (let index = 0; index < markdown.length; index += 1) {
+    const character = markdown[index];
+    if (character === "*" || character === "`") continue;
+    if (/\s/.test(character)) {
+      if (!previousWasSpace) {
+        visible.push(" ");
+        sourceIndexes.push(index);
+        previousWasSpace = true;
+      }
+      continue;
+    }
+    visible.push(character);
+    sourceIndexes.push(index);
+    previousWasSpace = false;
+  }
+  const selectedVisible = selected.replace(/[\*`]/g, "").replace(/\s+/g, " ").trim();
+  const sourceVisible = visible.join("");
+  const start = sourceVisible.indexOf(selectedVisible);
+  if (start < 0) return null;
+  const end = start + selectedVisible.length - 1;
+  return markdown.slice(0, sourceIndexes[start]) + replacement + markdown.slice(sourceIndexes[end] + 1);
+}
 
 function markerReferencedQuizIndexes(markdown: string): Set<number> {
   const referenced = new Set<number>();
@@ -95,6 +126,11 @@ function LessonBody({
   quizItems,
   quizMaxAttempts,
   onQuizAnswered,
+  highlightText,
+  highlightParagraphId,
+  highlightOccurrence,
+  highlightFlash,
+  paragraphGroup,
 }: {
   courseId: string;
   slug: string;
@@ -104,6 +140,11 @@ function LessonBody({
   quizItems: QuizItemPreview[];
   quizMaxAttempts: number;
   onQuizAnswered?: () => void;
+  highlightText?: string;
+  highlightParagraphId?: string;
+  highlightOccurrence?: number;
+  highlightFlash?: boolean;
+  paragraphGroup?: string;
 }) {
   const blocks: ReactNode[] = [];
   const placedExamples = new Set<number>();
@@ -112,7 +153,7 @@ function LessonBody({
   let insideCodeFence = false;
   const flush = () => {
     const text = buffer.join("\n");
-    if (text.trim()) blocks.push(<MarkdownText citations={citations} key={`text-${blocks.length}`}>{text}</MarkdownText>);
+    if (text.trim()) blocks.push(<MarkdownText citations={citations} highlightText={highlightText} highlightParagraphId={highlightParagraphId} highlightOccurrence={highlightOccurrence} highlightFlash={highlightFlash} paragraphGroup={`${paragraphGroup ?? "lesson"}-${blocks.length}`} key={`text-${blocks.length}`}>{text}</MarkdownText>);
     buffer = [];
   };
   for (const line of markdown.split("\n")) {
@@ -237,11 +278,132 @@ function LessonComplete({ courseId, map, slug, title }: { courseId: string; map?
   );
 }
 
+function LearningHelperSidebar({
+  courseId,
+  slug,
+  selectedText,
+  selectedParagraph,
+  open,
+  onToggle,
+  onClearSelection,
+  onApplyRevision,
+}: {
+  courseId: string;
+  slug: string;
+  selectedText: string;
+  selectedParagraph?: { id: string; source: string; occurrence: number };
+  open: boolean;
+  onToggle: () => void;
+  onClearSelection: () => void;
+  onApplyRevision: (replacement: string) => boolean;
+}) {
+  const [question, setQuestion] = useState("");
+  const [answer, setAnswer] = useState<string>();
+  const [replacement, setReplacement] = useState<string>();
+  const [applied, setApplied] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const [error, setError] = useState<string>();
+
+  // Reset the previous answer whenever the lesson or focused passage changes, without an
+  // effect: comparing against the previous key during render (React's "adjusting state
+  // during render" pattern) avoids the extra render an effect would cause.
+  const resetKey = `${slug}::${selectedText}`;
+  const [lastResetKey, setLastResetKey] = useState(resetKey);
+  if (resetKey !== lastResetKey) {
+    setLastResetKey(resetKey);
+    setAnswer(undefined);
+    setReplacement(undefined);
+    setApplied(false);
+    setError(undefined);
+  }
+
+  async function ask(questionOverride?: string, requestRevision = false) {
+    const text = (questionOverride ?? question).trim();
+    if (!text) return;
+    setQuestion(text);
+    setAsking(true);
+    setError(undefined);
+    try {
+      const { data } = await createClient().auth.getSession();
+      if (!data.session) throw new Error("Your session has expired. Please sign in again.");
+      const revisionContext = requestRevision && selectedParagraph ? selectedParagraph.source : selectedText;
+      const response = await askLessonHelper(courseId, slug, text, revisionContext || undefined, data.session.access_token, requestRevision);
+      setAnswer(response.answer_markdown);
+      setReplacement(response.replacement_markdown ?? undefined);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to ask the learning helper.");
+    } finally {
+      setAsking(false);
+    }
+  }
+
+  return (
+    <Box component="aside" sx={{ display: { xs: "none", lg: "block" }, position: "fixed", top: 64, right: 0, bottom: 0, zIndex: 2, width: open ? 360 : 56, overflow: "hidden", borderLeft: 1, borderColor: "divider", bgcolor: "background.paper", transition: (theme) => theme.transitions.create("width", { duration: 180 }) }}>
+      <Stack direction="row" sx={{ height: 52, alignItems: "center", justifyContent: open ? "space-between" : "center", px: open ? 1.5 : 0.5, borderBottom: 1, borderColor: "divider" }}>
+        {open ? <Stack direction="row" sx={{ alignItems: "center", gap: 1 }}><Icon name="auto_awesome" /><Typography sx={{ fontWeight: 700 }}>Learning helper</Typography></Stack> : null}
+        <IconButton size="small" onClick={onToggle} aria-label={open ? "Collapse learning helper" : "Open learning helper"}>
+          <Icon name={open ? "chevron_right" : "auto_awesome"} />
+        </IconButton>
+      </Stack>
+      {open ? (
+        <Stack sx={{ height: "calc(100% - 52px)", p: 2, gap: 1.5, overflowY: "auto" }}>
+          <Typography variant="body2" color="text.secondary">Ask about anything on this lesson. The helper uses the whole page, and can focus on an optional passage.</Typography>
+          {selectedText ? (
+            <Box sx={{ p: 1.25, borderRadius: 1.5, bgcolor: "action.hover", borderLeft: 3, borderColor: "primary.main", position: "relative" }}>
+              <IconButton size="small" onClick={onClearSelection} aria-label="Use the full lesson instead" sx={{ position: "absolute", top: 4, right: 4 }}>
+                <Icon name="close" />
+              </IconButton>
+              <Typography variant="caption" color="text.secondary">Focused passage</Typography>
+              <Typography variant="body2" sx={{ mt: 0.4, pr: 3, whiteSpace: "pre-wrap", display: "-webkit-box", WebkitLineClamp: 6, WebkitBoxOrient: "vertical", overflow: "hidden" }}>&ldquo;{selectedText}&rdquo;</Typography>
+            </Box>
+          ) : null}
+          <Stack direction="row" sx={{ flexWrap: "wrap", gap: 0.75 }}>
+            <Button size="small" variant="outlined" onClick={() => void ask("Explain this more simply.")}>Explain simply</Button>
+            <Button size="small" variant="outlined" onClick={() => void ask("Why does this matter in practice?")}>Why it matters</Button>
+          </Stack>
+          <TextField
+            label="Ask about this lesson"
+            value={question}
+            onChange={(event) => setQuestion(event.target.value)}
+            multiline
+            minRows={3}
+            placeholder="What does this mean?"
+            slotProps={{ htmlInput: { maxLength: 1200 } }}
+          />
+          <Button variant="contained" startIcon={<Icon name="send" />} onClick={() => void ask()} disabled={!question.trim()} loading={asking}>Ask helper</Button>
+          {error ? <Alert severity="error">{error}</Alert> : null}
+          {answer ? <Box sx={{ pt: 0.5 }}><Divider sx={{ mb: 1.5 }} /><MarkdownText>{answer}</MarkdownText></Box> : null}
+          {answer && selectedText && !replacement ? (
+            <Button variant="outlined" color="success" startIcon={<Icon name="auto_fix_high" />} onClick={() => void ask(question || "Make this selected passage clearer.", true)} loading={asking}>
+              Rewrite selected paragraph
+            </Button>
+          ) : null}
+          {replacement && selectedText ? (
+            <Stack sx={{ gap: 1 }}>
+              <Divider />
+              <Typography variant="subtitle2">Suggested clearer version</Typography>
+              <Box sx={{ p: 1.25, borderRadius: 1.5, bgcolor: "action.hover" }}><MarkdownText>{replacement}</MarkdownText></Box>
+              <Button variant={applied ? "outlined" : "contained"} color="success" startIcon={<Icon name={applied ? "check" : "auto_fix_high"} />} onClick={() => setApplied(onApplyRevision(replacement))} disabled={applied}>
+                {applied ? "Applied to lesson" : "Apply to lesson"}
+              </Button>
+            </Stack>
+          ) : null}
+        </Stack>
+      ) : null}
+    </Box>
+  );
+}
+
 export function ConceptDetail({ courseId, slug }: { courseId: string; slug: string }) {
   const [course, setCourse] = useState<CourseSummary>();
   const [concept, setConcept] = useState<ConceptDetailResponse>();
   const [courseMap, setCourseMap] = useState<CourseMapResponse>();
   const [outlineCollapsed, setOutlineCollapsed] = useState(false);
+  const [helperOpen, setHelperOpen] = useState(false);
+  const [selectedText, setSelectedText] = useState("");
+  const [selectedRange, setSelectedRange] = useState<Range>();
+  const [selectedParagraph, setSelectedParagraph] = useState<{ id: string; source: string; occurrence: number }>();
+  const [lessonUpdateNotice, setLessonUpdateNotice] = useState(false);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState<string>();
   const [files, setFiles] = useState<LessonWorkspaceFile[]>([]);
@@ -323,8 +485,70 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
     return () => window.clearTimeout(timer);
   }, [isBuildPending]);
 
+  useEffect(() => {
+    const cssWithHighlights = CSS as typeof CSS & { highlights?: { set: (name: string, highlight: unknown) => void; delete: (name: string) => void } };
+    if (!cssWithHighlights.highlights) return;
+    const style = document.createElement("style");
+    style.textContent = "::highlight(canopy-selection) { background-color: rgba(25, 118, 210, 0.18); color: inherit; }";
+    document.head.append(style);
+    cssWithHighlights.highlights.delete("canopy-selection");
+    if (!selectedRange) {
+      return () => style.remove();
+    }
+    const HighlightConstructor = (window as typeof window & { Highlight?: new (range: Range) => unknown }).Highlight;
+    if (!HighlightConstructor) return;
+    cssWithHighlights.highlights.set("canopy-selection", new HighlightConstructor(selectedRange));
+    return () => {
+      cssWithHighlights.highlights?.delete("canopy-selection");
+      style.remove();
+    };
+  }, [selectedRange]);
+
   function updateFile(path: string, content: string) {
     setFiles((current) => current.map((file) => file.path === path ? { ...file, content } : file));
+  }
+
+  function captureSelection(event: React.MouseEvent<HTMLElement>) {
+    const selection = window.getSelection();
+    if (!selection?.rangeCount || !event.currentTarget.contains(selection.getRangeAt(0).commonAncestorContainer)) return;
+    const text = selection.toString().trim();
+    if (!text) return;
+    setSelectedRange(selection.getRangeAt(0).cloneRange());
+    const nodeElement = selection.anchorNode instanceof Element ? selection.anchorNode : selection.anchorNode?.parentElement;
+    const paragraph = nodeElement?.closest<HTMLElement>("[data-lesson-paragraph]");
+    if (paragraph?.dataset.lessonParagraph && paragraph.dataset.lessonSource) {
+      const range = selection.getRangeAt(0);
+      const before = document.createRange();
+      before.selectNodeContents(paragraph);
+      before.setEnd(range.startContainer, range.startOffset);
+      const occurrence = before.toString().split(text).length - 1;
+      setSelectedParagraph({ id: paragraph.dataset.lessonParagraph, source: paragraph.dataset.lessonSource, occurrence });
+    } else {
+      setSelectedParagraph(undefined);
+    }
+    setSelectedText(text.slice(0, 6000));
+    setHelperOpen(true);
+  }
+
+  function applyHelperRevision(replacement: string): boolean {
+    if (!concept || !selectedText) return false;
+    const target = selectedParagraph?.source ?? selectedText;
+    const nextSummary = replaceVisiblePassage(concept.summary_markdown, target, replacement);
+    const nextExplanation = concept.lesson ? replaceVisiblePassage(concept.lesson.explanation_markdown, target, replacement) : null;
+    if (nextSummary === null && nextExplanation === null) {
+      setErrorMessage("That passage no longer matches the lesson text. Select it again and ask the helper to revise it.");
+      return false;
+    }
+    setConcept({
+      ...concept,
+      summary_markdown: nextSummary ?? concept.summary_markdown,
+      lesson: concept.lesson ? { ...concept.lesson, explanation_markdown: nextExplanation ?? concept.lesson.explanation_markdown } : null,
+    });
+    setSelectedText(replacement);
+    setSelectedParagraph((current) => current ? { ...current, source: replacement } : undefined);
+    setLessonUpdateNotice(true);
+    window.setTimeout(() => setLessonUpdateNotice(false), 3500);
+    return true;
   }
 
   // Unlocking the solution adds it to the workspace as new, separately-named files rather
@@ -460,15 +684,16 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
 
   if (state === "loading") {
     return (
-      <PageShell>
+      <PageShell maxWidth={{ xs: 1040, xl: helperOpen ? 1360 : 1040 }}>
         <CourseOutlineSidebar courseId={courseId} map={courseMap} activeSlug={slug} collapsed={outlineCollapsed} onToggle={() => setOutlineCollapsed((current) => !current)} />
-        <Stack direction="row" sx={{ ml: { md: outlineCollapsed ? "56px" : "280px" }, alignItems: "center", gap: 1.5, color: "text.secondary" }}>
+        <LearningHelperSidebar courseId={courseId} slug={slug} selectedText={selectedText} selectedParagraph={selectedParagraph} open={helperOpen} onToggle={() => setHelperOpen((current) => !current)} onClearSelection={() => { setSelectedText(""); setSelectedRange(undefined); setSelectedParagraph(undefined); }} onApplyRevision={applyHelperRevision} />
+        <Stack direction="row" sx={{ ml: { md: outlineCollapsed ? "56px" : "280px" }, mr: { xs: "56px", xl: helperOpen ? "360px" : "56px" }, alignItems: "center", gap: 1.5, color: "text.secondary" }}>
           <CircularProgress size={18} /> <Typography>Loading…</Typography>
         </Stack>
       </PageShell>
     );
   }
-  if (state === "error") return <PageShell><CourseOutlineSidebar courseId={courseId} map={courseMap} activeSlug={slug} collapsed={outlineCollapsed} onToggle={() => setOutlineCollapsed((current) => !current)} /><Box sx={{ ml: { md: outlineCollapsed ? "56px" : "280px" } }}><Alert severity="error">{errorMessage ?? "We could not load this concept."}</Alert></Box></PageShell>;
+  if (state === "error") return <PageShell><CourseOutlineSidebar courseId={courseId} map={courseMap} activeSlug={slug} collapsed={outlineCollapsed} onToggle={() => setOutlineCollapsed((current) => !current)} /><LearningHelperSidebar courseId={courseId} slug={slug} selectedText={selectedText} selectedParagraph={selectedParagraph} open={helperOpen} onToggle={() => setHelperOpen((current) => !current)} onClearSelection={() => { setSelectedText(""); setSelectedRange(undefined); setSelectedParagraph(undefined); }} onApplyRevision={applyHelperRevision} /><Box sx={{ ml: { md: outlineCollapsed ? "56px" : "280px" }, mr: { xs: "56px", xl: helperOpen ? "360px" : "56px" } }}><Alert severity="error">{errorMessage ?? "We could not load this concept."}</Alert></Box></PageShell>;
   if (!course || !concept) return null;
 
   const breadcrumbs = (
@@ -493,8 +718,9 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
 
   if (concept.kind !== "coding") {
     return (
-      <PageShell>
-        <Box sx={{ ml: { md: outlineCollapsed ? "56px" : "280px" } }}>
+      <PageShell maxWidth={{ xs: 1040, xl: helperOpen ? 1360 : 1040 }}>
+        <LearningHelperSidebar courseId={courseId} slug={slug} selectedText={selectedText} selectedParagraph={selectedParagraph} open={helperOpen} onToggle={() => setHelperOpen((current) => !current)} onClearSelection={() => { setSelectedText(""); setSelectedRange(undefined); setSelectedParagraph(undefined); }} onApplyRevision={applyHelperRevision} />
+        <Box sx={{ ml: { md: outlineCollapsed ? "56px" : "280px" }, mr: { xs: "56px", xl: helperOpen ? "360px" : "56px" } }}>
         {breadcrumbs}
         <Box sx={{ display: "flex", gap: 3, alignItems: "flex-start" }}>
         <CourseOutlineSidebar courseId={courseId} map={courseMap} activeSlug={slug} collapsed={outlineCollapsed} onToggle={() => setOutlineCollapsed((current) => !current)} />
@@ -512,7 +738,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
 
         <Stack sx={{ gap: 2 }}>
           <PrerequisiteReview courseId={courseId} slug={slug} />
-          <MarkdownText citations={concept.citations}>{concept.summary_markdown}</MarkdownText>
+          <Box onMouseUp={captureSelection}><MarkdownText citations={concept.citations} paragraphGroup="summary">{concept.summary_markdown}</MarkdownText></Box>
           {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}
 
           {isBuildPending ? (
@@ -527,7 +753,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
           {!isBuildPending && concept.lesson?.status === "built" && concept.lesson.explanation_markdown ? (
             <Stack sx={{ gap: 2 }}>
               <Divider textAlign="left"><Typography variant="overline" color="text.secondary">Lesson</Typography></Divider>
-              <LessonBody
+              <Box onMouseUp={captureSelection}><LessonBody
                 courseId={courseId}
                 slug={slug}
                 markdown={concept.lesson.explanation_markdown}
@@ -536,7 +762,8 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
                 quizItems={concept.lesson.quiz_items ?? []}
                 quizMaxAttempts={concept.lesson.quiz_max_attempts}
                 onQuizAnswered={refreshMastery}
-              />
+                paragraphGroup="lesson"
+              /></Box>
               <QuizSection
                 courseId={courseId}
                 slug={slug}
@@ -564,20 +791,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
       <CourseOutlineSidebar courseId={courseId} map={courseMap} activeSlug={slug} collapsed={outlineCollapsed} onToggle={() => setOutlineCollapsed((current) => !current)} />
-      <Stack direction="row" sx={{ ml: { md: outlineCollapsed ? "56px" : "280px" }, alignItems: "center", justifyContent: "space-between", gap: 2, p: "12px 24px", borderBottom: 1, borderColor: "divider", flexShrink: 0 }}>
-        <Stack sx={{ gap: 0.5, minWidth: 0 }}>
-          {breadcrumbs}
-          <Stack direction="row" sx={{ alignItems: "center", gap: 1.25 }}>
-            {conceptHeaderBadge}
-            <Box sx={{ minWidth: 0 }}>
-              <Typography variant="overline" color="text.secondary">{conceptKindLabel(concept.kind)}</Typography>
-              <Typography variant="h6" sx={{ letterSpacing: "-0.01em", mt: "2px" }} noWrap>{concept.title}</Typography>
-            </Box>
-          </Stack>
-        </Stack>
-        {lessonSettingsMenu}
-      </Stack>
-
+      <LearningHelperSidebar courseId={courseId} slug={slug} selectedText={selectedText} selectedParagraph={selectedParagraph} open={helperOpen} onToggle={() => setHelperOpen((current) => !current)} onClearSelection={() => { setSelectedText(""); setSelectedRange(undefined); setSelectedParagraph(undefined); }} onApplyRevision={applyHelperRevision} />
       <Dialog open={solutionConfirmOpen} onClose={() => setSolutionConfirmOpen(false)}>
         <DialogTitle>Unlock the reference solution?</DialogTitle>
         <DialogContent>
@@ -595,8 +809,15 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
       {errorMessage ? <Alert severity="error" sx={{ mx: 3, mt: 1.5 }}>{errorMessage}</Alert> : null}
 
       {concept.lesson && concept.lesson.status === "built" ? (
-        <Box sx={{ flex: 1, minHeight: 0, display: "flex", pl: { md: outlineCollapsed ? "56px" : "280px" } }}>
-          <Box sx={{ width: 420, flexShrink: 0, overflowY: "auto", p: "16px 24px 40px", borderRight: 1, borderColor: "divider", display: "grid", gap: 2, alignContent: "start" }}>
+        <Box sx={{ flex: 1, minHeight: 0, display: "flex", pl: { md: outlineCollapsed ? "56px" : "280px" }, pr: { xs: "56px", xl: helperOpen ? "360px" : "56px" } }}>
+          <Box sx={{ width: 420, flexShrink: 0, overflowY: "auto", p: "24px 24px 48px", borderRight: 1, borderColor: "divider", display: "grid", gap: 3, alignContent: "start" }}>
+            <Stack direction="row" sx={{ alignItems: "flex-start", justifyContent: "space-between", gap: 1 }}>
+              <Stack sx={{ minWidth: 0, gap: 0.25 }}>
+                <Typography variant="overline" color="text.secondary">{conceptKindLabel(concept.kind)}</Typography>
+                <Typography variant="subtitle1" sx={{ fontWeight: 700 }} noWrap>{concept.title}</Typography>
+              </Stack>
+              {lessonSettingsMenu}
+            </Stack>
             <Tabs value={instructionsTab} onChange={(_event, value) => setInstructionsTab(value)} sx={{ minHeight: 36, mx: -3, px: 3, borderBottom: 1, borderColor: "divider" }}>
               <Tab value="lesson" label="Lesson" sx={{ minHeight: 36, py: 1, textTransform: "none" }} />
               {concept.lesson.solution_files.length > 0 ? (
@@ -617,10 +838,10 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
             {instructionsTab === "lesson" ? (
               <Stack sx={{ gap: 2 }}>
                 <PrerequisiteReview courseId={courseId} slug={slug} />
-                <MarkdownText citations={concept.citations}>{concept.summary_markdown}</MarkdownText>
+                <Box onMouseUp={captureSelection}><MarkdownText citations={concept.citations} paragraphGroup="summary">{concept.summary_markdown}</MarkdownText></Box>
 
                 {concept.lesson.explanation_markdown ? (
-                  <Stack sx={{ gap: 1.5 }}>
+                  <Stack sx={{ gap: 1.5 }} onMouseUp={captureSelection}>
                     <Divider textAlign="left"><Typography variant="overline" color="text.secondary">Lesson</Typography></Divider>
                     <LessonBody
                       courseId={courseId}
@@ -630,6 +851,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
                       examples={concept.lesson.worked_examples ?? []}
                       quizItems={concept.lesson.quiz_items ?? []}
                       quizMaxAttempts={concept.lesson.quiz_max_attempts}
+                      paragraphGroup="lesson"
                     />
                   </Stack>
                 ) : (

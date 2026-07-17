@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 GatewayTask = Literal[
-    "course_outline", "module_concepts", "lesson_build", "lesson_repair", "concept_regeneration", "quiz_grading", "embedding"
+    "course_outline", "module_concepts", "lesson_build", "lesson_repair", "concept_regeneration", "quiz_grading", "lesson_helper", "embedding"
 ]
 
 
@@ -35,6 +35,7 @@ class GatewaySettings(BaseSettings):
     # run, so it can afford the flagship Sol reasoning tier where generation cannot.
     openai_builder_model: str = "gpt-5.6-luna"
     openai_repair_model: str = "gpt-5.6-sol"
+    openai_helper_model: str = "gpt-5.4-mini"
 
     azure_openai_endpoint: str | None = None
     azure_openai_planner_deployment: str | None = None
@@ -42,6 +43,7 @@ class GatewaySettings(BaseSettings):
     azure_openai_builder_deployment: str | None = None
     # Optional; repair reuses the builder deployment when this is unset.
     azure_openai_repair_deployment: str | None = None
+    azure_openai_helper_deployment: str | None = None
 
     # AWS Bedrock (Converse API). Credentials come from the standard boto3
     # chain (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / profile / role).
@@ -50,6 +52,7 @@ class GatewaySettings(BaseSettings):
     aws_bedrock_builder_model: str = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
     # Optional; repair reuses the builder model when unset (Bedrock has no Sol tier).
     aws_bedrock_repair_model: str | None = None
+    aws_bedrock_helper_model: str | None = None
     aws_bedrock_embedding_model: str = "amazon.titan-embed-text-v2:0"
 
     # Only used when llm_provider=aws_openai: a long-term Bedrock API key for
@@ -60,6 +63,7 @@ class GatewaySettings(BaseSettings):
     aws_openai_builder_model: str = "openai.gpt-5.4"
     # Only used when llm_provider=aws_openai: repair reuses the builder model when unset.
     aws_openai_repair_model: str | None = None
+    aws_openai_helper_model: str | None = None
 
     def require_runtime_configuration(self) -> None:
         if self.environment != "development" and not self.internal_service_token:
@@ -119,6 +123,13 @@ class GatewaySettings(BaseSettings):
                 self.azure_openai_repair_deployment or self.azure_openai_builder_deployment,
                 self.aws_bedrock_repair_model or self.aws_bedrock_builder_model,
                 self.aws_openai_repair_model or self.aws_openai_builder_model,
+            )
+        if task == "lesson_helper":
+            return self._provider_model(
+                self.openai_helper_model,
+                self.azure_openai_helper_deployment or self.azure_openai_builder_deployment,
+                self.aws_bedrock_helper_model or self.aws_bedrock_builder_model,
+                self.aws_openai_helper_model or self.aws_openai_builder_model,
             )
         return self._provider_model(
             self.openai_builder_model,

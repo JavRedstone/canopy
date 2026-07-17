@@ -59,6 +59,8 @@ class CourseRepository(Protocol):
 
     def regenerate_course(self, owner_id: UUID, course_id: UUID) -> CourseSummary: ...
 
+    def resume_course_lessons(self, owner_id: UUID, course_id: UUID) -> int: ...
+
     def delete_course(self, owner_id: UUID, course_id: UUID) -> None: ...
 
     def concept_detail(self, owner_id: UUID, course_id: UUID, slug: str) -> ConceptDetailResponse: ...
@@ -228,6 +230,10 @@ class MemoryCourseRepository:
 
     def regenerate_course(self, owner_id: UUID, course_id: UUID) -> CourseSummary:
         return self._summary(self._course_for_owner(owner_id, course_id))
+
+    def resume_course_lessons(self, owner_id: UUID, course_id: UUID) -> int:
+        self._course_for_owner(owner_id, course_id)
+        return 0
 
     def delete_course(self, owner_id: UUID, course_id: UUID) -> None:
         self._course_for_owner(owner_id, course_id)
@@ -700,6 +706,32 @@ class SupabaseCourseRepository:
             "regenerate course planning",
         )
         return self.get_course(owner_id, course_id)
+
+    def resume_course_lessons(self, owner_id: UUID, course_id: UUID) -> int:
+        self._course_for_owner(owner_id, course_id)
+        try:
+            response = self.client.rpc(
+                "resume_course_lesson_builds",
+                {"p_course_id": str(course_id), "p_owner_id": str(owner_id)},
+            ).execute()
+            return int(response.data or 0)
+        except APIError as exc:
+            if exc.code == "PGRST202":
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Resuming remaining lessons is not deployed yet. Apply migration 20260717120000_resume_remaining_lesson_builds.sql.",
+                ) from exc
+            logger.exception("Supabase request failed while resuming remaining lessons")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="The course service is temporarily unavailable.",
+            ) from exc
+        except HTTPError as exc:
+            logger.exception("Supabase request failed while resuming remaining lessons")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="The course service is temporarily unavailable.",
+            ) from exc
 
     def delete_course(self, owner_id: UUID, course_id: UUID) -> None:
         self._course_for_owner(owner_id, course_id)

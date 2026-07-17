@@ -23,7 +23,7 @@ import DialogContent from "@mui/material/DialogContent";
 import DialogContentText from "@mui/material/DialogContentText";
 import DialogActions from "@mui/material/DialogActions";
 import Button from "@mui/material/Button";
-import { CourseMapResponse, CoursePointsResponse, CourseProgressResponse, CourseSummary, deleteCourse, getCourse, getCourseMap, getCoursePoints, getCourseProgress, regenerateCourse } from "@/lib/api";
+import { CourseMapResponse, CoursePointsResponse, CourseProgressResponse, CourseSummary, deleteCourse, getCourse, getCourseMap, getCoursePoints, getCourseProgress, regenerateCourse, resumeCourseLessons } from "@/lib/api";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { CourseCategoryBadge } from "@/components/course-category-badge";
 import { CourseProgressSteps } from "@/components/course-progress";
@@ -141,6 +141,18 @@ export function CourseDetail({ courseId }: { courseId: string }) {
     }
   }
 
+  async function handleResumeRemainingLessons() {
+    try {
+      const supabase = createClient();
+      const { data } = await supabase.auth.getSession();
+      if (!data.session) throw new Error("Your session has expired. Please sign in again.");
+      await resumeCourseLessons(courseId, data.session.access_token);
+      await progressRefreshRef.current();
+    } catch (caught) {
+      setRefreshError(caught instanceof Error ? caught.message : "Unable to resume remaining lessons.");
+    }
+  }
+
   async function handleDelete() {
     if (!course) return;
     setConfirmDeleteOpen(false);
@@ -215,7 +227,7 @@ export function CourseDetail({ courseId }: { courseId: string }) {
         </DialogActions>
       </Dialog>
 
-      {progress.stage !== "ready" ? <CourseProgressSteps progress={progress} onResume={handleRegenerate} /> : null}
+      {progress.stage !== "ready" ? <CourseProgressSteps progress={progress} onResume={handleResumeRemainingLessons} /> : null}
       {refreshError ? <Alert severity="error" sx={{ mb: 2 }}>{refreshError} Retrying automatically…</Alert> : null}
       {deleteError ? <Alert severity="error" sx={{ mb: 2 }}>{deleteError}</Alert> : null}
 

@@ -20,9 +20,37 @@ function formatted(text: string, keyPrefix: string): ReactNode[] {
   });
 }
 
+/** Find learner-selected visible text in Markdown source while ignoring the small set of
+ * formatting markers this renderer supports. This keeps selection highlighting stable
+ * when a selected sentence includes bold or inline-code text. */
+function findVisibleHighlight(text: string, selected: string, occurrence = 0): { start: number; end: number } | undefined {
+  const visible: string[] = [];
+  const sourceOffsets: number[] = [];
+  for (let index = 0; index < text.length; index += 1) {
+    if (text.startsWith("**", index)) {
+      index += 1;
+      continue;
+    }
+    if (text[index] === "`") continue;
+    visible.push(text[index]);
+    sourceOffsets.push(index);
+  }
+  const visibleText = visible.join("");
+  let matchIndex = -1;
+  let searchFrom = 0;
+  for (let index = 0; index <= occurrence; index += 1) {
+    matchIndex = visibleText.indexOf(selected, searchFrom);
+    if (matchIndex < 0) return undefined;
+    searchFrom = matchIndex + selected.length;
+  }
+  if (matchIndex < 0) return undefined;
+  const endIndex = matchIndex + selected.length - 1;
+  return { start: sourceOffsets[matchIndex], end: sourceOffsets[endIndex] + 1 };
+}
+
 /** Inline chunk citations ([uuid]) become numbered superscripts when the citation list is
  *  known, and disappear entirely when it is not; learners never see raw UUIDs. */
-function inline(text: string, citations?: string[]): ReactNode[] {
+function inline(text: string, citations?: string[], highlightText?: string, highlightFlash = false, highlightOccurrence = 0): ReactNode[] {
   const parts = text.split(CITATION_PATTERN);
   const nodes: ReactNode[] = [];
   for (let index = 0; index < parts.length; index += 1) {
@@ -30,7 +58,38 @@ function inline(text: string, citations?: string[]): ReactNode[] {
     if (index % 2 === 0) {
       // Collapse the whitespace left behind when adjacent citations are removed.
       const cleaned = part.replace(/\s{2,}/g, " ");
-      if (cleaned) nodes.push(...formatted(cleaned, `t-${index}`));
+      if (!cleaned) continue;
+      const activeHighlight = highlightText ?? "";
+      const highlightRange = activeHighlight ? findVisibleHighlight(cleaned, activeHighlight, highlightOccurrence) : undefined;
+      if (!highlightRange) {
+        nodes.push(...formatted(cleaned, `t-${index}`));
+      } else {
+        const before = cleaned.slice(0, highlightRange.start);
+        const match = cleaned.slice(highlightRange.start, highlightRange.end);
+        const after = cleaned.slice(highlightRange.end);
+        if (before) nodes.push(...formatted(before, `t-${index}-before`));
+        nodes.push(
+          <Box
+            component="mark"
+            key={`highlight-${index}`}
+            data-testid="lesson-selection-highlight"
+            data-highlight-kind={highlightFlash ? "updated" : "selected"}
+            sx={{
+              px: "2px",
+              borderRadius: 0.5,
+              bgcolor: highlightFlash ? "rgba(46, 125, 50, 0.28)" : "rgba(25, 118, 210, 0.13)",
+              transition: "background-color 1.2s ease-out",
+              color: "inherit",
+              display: "inline",
+              boxDecorationBreak: "clone",
+              WebkitBoxDecorationBreak: "clone"
+            }}
+          >
+            {formatted(match, `t-${index}-highlight`)}
+          </Box>
+        );
+        if (after) nodes.push(...formatted(after, `t-${index}-after`));
+      }
       continue;
     }
     const citationNumber = citations ? citations.findIndex((id) => id.toLowerCase() === part.toLowerCase()) + 1 : 0;
@@ -57,27 +116,36 @@ const HEADING_STYLES = {
 };
 
 /** A deliberately small, safe Markdown renderer for LLM-authored lesson text. */
-export function MarkdownText({ children, citations }: { children: string; citations?: string[] }) {
+export function MarkdownText({ children, citations, highlightText, highlightParagraphId, highlightOccurrence = 0, highlightFlash = false, paragraphGroup = "lesson" }: { children: string; citations?: string[]; highlightText?: string; highlightParagraphId?: string; highlightOccurrence?: number; highlightFlash?: boolean; paragraphGroup?: string }) {
   // Some older generated lessons put list markers directly after a sentence. Make those readable too.
   const lines = children.replace(/(?<=\S)\s+- (?=\*\*|[A-Za-z0-9])/g, "\n- ").split("\n");
   const blocks: ReactNode[] = [];
   let paragraph: string[] = [];
   let list: { ordered: boolean; items: string[] } | undefined;
   let codeLines: string[] | undefined;
+  let paragraphNumber = 0;
 
   const flushParagraph = () => {
-    if (paragraph.length) blocks.push(<Typography key={`p-${blocks.length}`}>{inline(paragraph.join(" "), citations)}</Typography>);
+    if (paragraph.length) {
+      paragraphNumber += 1;
+      const source = paragraph.join("\n");
+      const paragraphId = `${paragraphGroup}-${paragraphNumber}`;
+      blocks.push(<Typography key={`p-${blocks.length}`} data-lesson-paragraph={paragraphId} data-lesson-source={source}>{inline(paragraph.join(" "), citations, paragraphId === highlightParagraphId ? highlightText : undefined, highlightFlash, highlightOccurrence)}</Typography>);
+    }
     paragraph = [];
   };
   const flushList = () => {
     if (!list) return;
     const items = list.items.map((item, index) => (
-      <Typography component="li" key={index}>{inline(item, citations)}</Typography>
+      <Typography component="li" key={index}>{inline(item, citations, highlightText, highlightFlash)}</Typography>
     ));
     const ListTag = list.ordered ? "ol" : "ul";
+    paragraphNumber += 1;
     blocks.push(
-      <Box component={ListTag} key={`l-${blocks.length}`} sx={{ m: 0, pl: 3, display: "grid", gap: 0.5 }}>
-        {items}
+      <Box key={`l-${blocks.length}`} data-lesson-paragraph={`${paragraphGroup}-${paragraphNumber}`} data-lesson-source={list.items.join("\n")}>
+        <Box component={ListTag} sx={{ m: 0, pl: 3, display: "grid", gap: 0.5 }}>
+          {items}
+        </Box>
       </Box>
     );
     list = undefined;
@@ -111,12 +179,16 @@ export function MarkdownText({ children, citations }: { children: string; citati
     const ordered = line.match(/^\d+\.\s+(.+)$/);
     if (heading) {
       flushParagraph(); flushList();
+      paragraphNumber += 1;
+      const headingId = `${paragraphGroup}-${paragraphNumber}`;
       const text = inline(heading[2], citations);
       const style = HEADING_STYLES[heading[1].length as 1 | 2 | 3];
       blocks.push(
         <Typography
           component={style.component}
           key={`h-${blocks.length}`}
+          data-lesson-paragraph={headingId}
+          data-lesson-source={line}
           sx={{ mt: style.mt, fontSize: style.fontSize, fontWeight: style.fontWeight, lineHeight: style.lineHeight, letterSpacing: "-0.01em", "&:first-of-type": { mt: 0 } }}
         >
           {text}

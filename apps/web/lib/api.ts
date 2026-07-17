@@ -260,6 +260,36 @@ export interface ConceptDetailResponse {
   lesson: LessonPreview | null;
 }
 
+export async function resumeCourseLessons(courseId: string, accessToken: string): Promise<void> {
+  const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/resume-lessons`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  if (!response.ok) throw new Error(`Unable to resume remaining lessons (HTTP ${response.status}).`);
+}
+
+export interface LessonHelperResponse {
+  answer_markdown: string;
+  replacement_markdown: string | null;
+}
+
+export async function askLessonHelper(
+  courseId: string,
+  slug: string,
+  question: string,
+  selectedText: string | undefined,
+  accessToken: string,
+  requestRevision = false
+): Promise<LessonHelperResponse> {
+  const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/concepts/${slug}/helper`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ question, selected_text: selectedText, request_revision: requestRevision })
+  });
+  if (!response.ok) throw new Error(`The learning helper is unavailable (HTTP ${response.status}).`);
+  return response.json();
+}
+
 export interface LessonRunResult {
   passed: boolean;
   output: string;

@@ -114,6 +114,8 @@ export function CourseProgressSteps({ progress, onResume }: { progress: CoursePr
               <Typography sx={{ fontWeight: 600 }}>
                 {progress.stage === "building_lessons" && progress.current_lesson_title
                   ? `Building "${progress.current_lesson_title}"…`
+                  : progress.stage === "building_lessons"
+                    ? "Building remaining lessons…"
                   : progress.stage === "planning"
                     ? "Generating course plan…"
                     : "Preparing your sources…"}
@@ -143,8 +145,8 @@ export function CourseProgressSteps({ progress, onResume }: { progress: CoursePr
       ) : null}
 
       {stalled && onResume ? (
-        <Alert severity="warning" action={<Button color="inherit" size="small" onClick={onResume}>Resume generation</Button>}>
-          This is taking longer than expected; generation may have stalled.
+        <Alert severity="warning" action={<Button color="inherit" size="small" onClick={onResume}>Resume remaining lessons</Button>}>
+          This is taking longer than expected. Resuming only requeues incomplete lessons; it keeps every completed lesson.
         </Alert>
       ) : null}
     </Stack>

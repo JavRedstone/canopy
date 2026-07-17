@@ -16,8 +16,27 @@ def _outline_dict(modules: list[dict] | None = None) -> dict:
         "source_set_hash": "source-hash",
         "audience": "Developers new to authentication.",
         "objectives": ["Understand tokens", "Validate requests safely"],
-        "modules": modules or [{"id": "basics", "title": "Basics", "focus": "Token fundamentals.", "lesson_count": 1}],
+        "modules": modules or [{"id": "basics", "title": "Basics", "focus": "Token fundamentals.", "lesson_count": 6}],
     }
+
+
+def _module_concept_entries(citations: list[str] | None = None) -> list[dict]:
+    """Six concepts (3 lectures, 2 labs, 1 assessment, in that order) -- the minimum
+    validate_module_concepts now requires for every module, and matching the default
+    six-lesson module from _outline_dict()."""
+    cites = ["chunk-id"] if citations is None else citations
+    kinds = ["conceptual", "conceptual", "conceptual", "coding", "coding", "assessment"]
+    return [
+        {
+            "id": f"concept-{index}",
+            "title": f"Concept {index}",
+            "kind": kind,
+            "summary_markdown": f"Concept {index} summary.",
+            "prerequisites": [],
+            "citations": list(cites),
+        }
+        for index, kind in enumerate(kinds)
+    ]
 
 
 class FakeResponse:
@@ -223,20 +242,7 @@ def test_embedding_request_uses_gateway_task() -> None:
 
 def test_planner_requests_use_outline_then_concepts_tasks() -> None:
     outline = CourseOutline.model_validate(_outline_dict())
-    module_concepts = ModuleConcepts.model_validate(
-        {
-            "concepts": [
-                {
-                    "id": "tokens",
-                    "title": "Tokens",
-                    "kind": "conceptual",
-                    "summary_markdown": "Tokens identify requests.",
-                    "prerequisites": [],
-                    "citations": ["chunk-id"],
-                }
-            ]
-        }
-    )
+    module_concepts = ModuleConcepts.model_validate({"concepts": _module_concept_entries()})
     responses = FakeResponses([outline, module_concepts])
     worker = _planner_with(responses, [{"id": "chunk-id", "content": "Source content."}])
 
@@ -254,15 +260,8 @@ def test_planner_requests_use_outline_then_concepts_tasks() -> None:
 
 def test_module_concepts_citing_unknown_chunk_are_regenerated_with_feedback() -> None:
     outline = CourseOutline.model_validate(_outline_dict())
-    concept = {
-        "id": "tokens",
-        "title": "Tokens",
-        "kind": "conceptual",
-        "summary_markdown": "Tokens identify requests.",
-        "prerequisites": [],
-    }
-    bad_concepts = ModuleConcepts.model_validate({"concepts": [{**concept, "citations": ["bogus-chunk"]}]})
-    good_concepts = ModuleConcepts.model_validate({"concepts": [{**concept, "citations": ["chunk-id"]}]})
+    bad_concepts = ModuleConcepts.model_validate({"concepts": _module_concept_entries(citations=["bogus-chunk"])})
+    good_concepts = ModuleConcepts.model_validate({"concepts": _module_concept_entries(citations=["chunk-id"])})
     responses = FakeResponses([outline, bad_concepts, good_concepts])
     worker = _planner_with(responses, [{"id": "chunk-id", "content": "Source content."}])
 
@@ -278,20 +277,7 @@ def test_module_concepts_citing_unknown_chunk_are_regenerated_with_feedback() ->
 
 def test_plan_fails_when_concepts_never_pass_validation() -> None:
     outline = CourseOutline.model_validate(_outline_dict())
-    bad_concepts = ModuleConcepts.model_validate(
-        {
-            "concepts": [
-                {
-                    "id": "tokens",
-                    "title": "Tokens",
-                    "kind": "conceptual",
-                    "summary_markdown": "Tokens identify requests.",
-                    "prerequisites": [],
-                    "citations": ["bogus-chunk"],
-                }
-            ]
-        }
-    )
+    bad_concepts = ModuleConcepts.model_validate({"concepts": _module_concept_entries(citations=["bogus-chunk"])})
     responses = FakeResponses([outline] + [bad_concepts] * PLAN_VALIDATION_ATTEMPTS)
     worker = _planner_with(responses, [{"id": "chunk-id", "content": "Source content."}])
 
@@ -303,20 +289,7 @@ def test_plan_fails_when_concepts_never_pass_validation() -> None:
 
 def test_goal_only_planner_request_requires_empty_citations() -> None:
     outline = CourseOutline.model_validate(_outline_dict())
-    module_concepts = ModuleConcepts.model_validate(
-        {
-            "concepts": [
-                {
-                    "id": "variables",
-                    "title": "Variables",
-                    "kind": "coding",
-                    "summary_markdown": "Store and reuse values with variables.",
-                    "prerequisites": [],
-                    "citations": [],
-                }
-            ]
-        }
-    )
+    module_concepts = ModuleConcepts.model_validate({"concepts": _module_concept_entries(citations=[])})
     responses = FakeResponses([outline, module_concepts])
     worker = _planner_with(responses, [])
 

@@ -83,11 +83,15 @@ def test_module_concepts_validation_rejects_wrong_expected_count() -> None:
 
 
 def test_module_concepts_validation_rejects_a_topic_without_the_required_sequence() -> None:
+    # Satisfies the 3-lecture/2-lab/1-assessment counts but puts a lab before the module's
+    # last lecture, which the sequence check must still catch.
     concepts = _concepts(
         [
             {"id": "intro", "title": "Intro", "kind": "conceptual", "summary_markdown": "Intro.", "prerequisites": [], "citations": []},
             {"id": "lab", "title": "Lab", "kind": "coding", "summary_markdown": "Practice.", "prerequisites": [], "citations": []},
             {"id": "more", "title": "More", "kind": "conceptual", "summary_markdown": "More.", "prerequisites": [], "citations": []},
+            {"id": "extra", "title": "Extra", "kind": "conceptual", "summary_markdown": "Extra.", "prerequisites": [], "citations": []},
+            {"id": "lab2", "title": "Lab 2", "kind": "coding", "summary_markdown": "Practice more.", "prerequisites": [], "citations": []},
             {"id": "check", "title": "Check", "kind": "assessment", "summary_markdown": "Check.", "prerequisites": [], "citations": []},
         ]
     )
@@ -100,7 +104,9 @@ def test_module_concepts_validation_rejects_forward_reference() -> None:
         [
             {"id": "one", "title": "One", "kind": "conceptual", "summary_markdown": "One.", "prerequisites": ["two"], "citations": ["chunk-a"]},
             {"id": "two", "title": "Two", "kind": "conceptual", "summary_markdown": "Two.", "prerequisites": [], "citations": ["chunk-a"]},
+            {"id": "three", "title": "Three", "kind": "conceptual", "summary_markdown": "Three.", "prerequisites": [], "citations": ["chunk-a"]},
             {"id": "lab", "title": "Lab", "kind": "coding", "summary_markdown": "Practice.", "prerequisites": [], "citations": ["chunk-a"]},
+            {"id": "lab2", "title": "Lab 2", "kind": "coding", "summary_markdown": "Practice more.", "prerequisites": [], "citations": ["chunk-a"]},
             {"id": "check", "title": "Check", "kind": "assessment", "summary_markdown": "Assess.", "prerequisites": [], "citations": ["chunk-a"]},
         ]
     )
@@ -113,7 +119,9 @@ def test_module_concepts_validation_rejects_self_reference() -> None:
         [
             {"id": "one", "title": "One", "kind": "conceptual", "summary_markdown": "One.", "prerequisites": ["one"], "citations": ["chunk-a"]},
             {"id": "two", "title": "Two", "kind": "conceptual", "summary_markdown": "Two.", "prerequisites": [], "citations": ["chunk-a"]},
+            {"id": "three", "title": "Three", "kind": "conceptual", "summary_markdown": "Three.", "prerequisites": [], "citations": ["chunk-a"]},
             {"id": "lab", "title": "Lab", "kind": "coding", "summary_markdown": "Practice.", "prerequisites": [], "citations": ["chunk-a"]},
+            {"id": "lab2", "title": "Lab 2", "kind": "coding", "summary_markdown": "Practice more.", "prerequisites": [], "citations": ["chunk-a"]},
             {"id": "check", "title": "Check", "kind": "assessment", "summary_markdown": "Assess.", "prerequisites": [], "citations": ["chunk-a"]},
         ]
     )
@@ -125,8 +133,10 @@ def test_module_concepts_validation_accepts_goal_only_concepts_without_citations
     concepts = _concepts(
         [
             {"id": "variables", "title": "Variables", "kind": "conceptual", "summary_markdown": "Store values.", "prerequisites": [], "citations": []},
+            {"id": "values", "title": "Values", "kind": "conceptual", "summary_markdown": "Kinds of values.", "prerequisites": [], "citations": []},
             {"id": "reuse", "title": "Reuse", "kind": "conceptual", "summary_markdown": "Reuse values.", "prerequisites": [], "citations": []},
             {"id": "variables-lab", "title": "Variables lab", "kind": "coding", "summary_markdown": "Practice variables.", "prerequisites": [], "citations": []},
+            {"id": "reuse-lab", "title": "Reuse lab", "kind": "coding", "summary_markdown": "Practice reuse.", "prerequisites": [], "citations": []},
             {"id": "variables-check", "title": "Variables assessment", "kind": "assessment", "summary_markdown": "Assess variables.", "prerequisites": [], "citations": []},
         ]
     )
@@ -138,7 +148,9 @@ def test_module_concepts_validation_rejects_id_reused_across_modules() -> None:
         [
             {"id": "headers", "title": "Duplicate", "kind": "conceptual", "summary_markdown": "Reuses an earlier module's ID.", "prerequisites": [], "citations": []},
             {"id": "second", "title": "Second", "kind": "conceptual", "summary_markdown": "Another lecture.", "prerequisites": [], "citations": []},
+            {"id": "third", "title": "Third", "kind": "conceptual", "summary_markdown": "A third lecture.", "prerequisites": [], "citations": []},
             {"id": "lab", "title": "Lab", "kind": "coding", "summary_markdown": "Practice.", "prerequisites": [], "citations": []},
+            {"id": "lab2", "title": "Lab 2", "kind": "coding", "summary_markdown": "Practice more.", "prerequisites": [], "citations": []},
             {"id": "check", "title": "Check", "kind": "assessment", "summary_markdown": "Assess.", "prerequisites": [], "citations": []},
         ]
     )

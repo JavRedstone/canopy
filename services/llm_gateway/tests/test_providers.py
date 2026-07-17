@@ -64,6 +64,7 @@ def test_settings_model_for_splits_openai_generation_and_repair() -> None:
     assert settings.model_for("quiz_grading") == "gpt-5.6-luna"
     # Repair is the other Sol task: the last line of defense before a lab is declared failed.
     assert settings.model_for("lesson_repair") == "gpt-5.6-sol"
+    assert settings.model_for("lesson_helper") == "gpt-5.4-mini"
 
 
 def test_settings_model_for_uses_bedrock_models_when_aws() -> None:
@@ -78,9 +79,11 @@ def test_settings_model_for_uses_bedrock_models_when_aws() -> None:
     assert settings.model_for("module_concepts") == "builder-bedrock"
     # Bedrock has no dedicated repair tier, so repair falls back to the builder model.
     assert settings.model_for("lesson_repair") == "builder-bedrock"
+    assert settings.model_for("lesson_helper") == "builder-bedrock"
     assert settings.model_for("embedding") == "embed-bedrock"
     # An explicit repair model overrides that fallback.
     assert settings.model_copy(update={"aws_bedrock_repair_model": "repair-bedrock"}).model_for("lesson_repair") == "repair-bedrock"
+    assert settings.model_copy(update={"aws_bedrock_helper_model": "helper-bedrock"}).model_for("lesson_helper") == "helper-bedrock"
 
 
 def test_bedrock_openai_targets_mantle_endpoint_and_uses_titan_for_embeddings() -> None:

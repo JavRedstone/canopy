@@ -17,6 +17,7 @@
 *::-webkit-scrollbar-thumb:hover { background-color: #6b6b6b; }
 *::-webkit-scrollbar-corner { background: transparent; }
 
+
 .material-symbol {
   font-family: var(--font-material-symbols);
   font-weight: normal;

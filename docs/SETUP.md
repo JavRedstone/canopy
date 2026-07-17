@@ -1,0 +1,129 @@
+# Local setup
+
+## Prerequisites
+
+- Node.js 22+
+- Python 3.13+
+- Docker Desktop
+- Supabase CLI (available as a project development dependency)
+
+Python dependencies live in the project-local `.venv`; nothing needs a global Python install.
+
+## 1. Install dependencies
+
+### macOS (zsh)
+
+```zsh
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e 'services/api[dev]' -e 'services/worker' -e 'services/llm_gateway[dev]' -e 'services/sandbox_runner[dev]'
+npm install
+```
+
+### Windows (PowerShell)
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -e .\services\api[dev] -e .\services\worker -e .\services\llm_gateway[dev] -e .\services\sandbox_runner[dev]
+npm install
+```
+
+## 2. Start Supabase and configure `.env`
+
+From the repository root:
+
+```powershell
+npx supabase start
+npx supabase db reset
+Copy-Item .env.example .env
+```
+
+On macOS, use `cp .env.example .env` for the last command.
+
+Replace the Supabase values in `.env` with the local keys printed by `npx supabase start`, then configure one LLM provider. `.env.example` documents the supported OpenAI, Azure, AWS Bedrock, and Bedrock OpenAI configurations.
+
+There is one root `.env`. The web app, API, worker, LLM gateway, and sandbox runner read only the settings relevant to them. `npm run dev:web` synchronizes the root values required by Next.js into `apps/web/.env.local`; do not manually edit that generated file.
+
+## 3. Run the services
+
+Use separate terminals with the virtual environment active. The API is the backend; the LLM gateway is a separate internal dependency used for generation, short-answer grading, and the learning helper.
+
+### API backend — port 8000
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir .\services\api --reload --reload-dir services\api --port 8000
+```
+
+```zsh
+python -m uvicorn app.main:app --app-dir services/api --reload --reload-dir services/api --port 8000
+```
+
+### LLM gateway — port 8010 (not the API backend)
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn llm_gateway.main:app --app-dir .\services\llm_gateway --port 8010
+```
+
+```zsh
+python -m uvicorn llm_gateway.main:app --app-dir services/llm_gateway --port 8010
+```
+
+Restart this service after changing a gateway task or any `APP_*_MODEL` setting. The learning helper specifically depends on the `lesson_helper` task and its helper-model configuration. Starting it does **not** start the API backend; run the port-8000 command above as well.
+
+### Sandbox runner — port 8020
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn sandbox_runner.main:app --app-dir .\services\sandbox_runner --port 8020
+```
+
+```zsh
+python -m uvicorn sandbox_runner.main:app --app-dir services/sandbox_runner --port 8020
+```
+
+### Worker
+
+```powershell
+.\.venv\Scripts\python.exe -m worker.main
+```
+
+```zsh
+python -m worker.main
+```
+
+### Web app
+
+```powershell
+npm run dev:web
+```
+
+```zsh
+npm run dev:web
+```
+
+## Troubleshooting
+
+- A learning-helper 503 usually means the LLM gateway is stopped, still running old code, or lacks a working provider configuration. Restart the gateway after pulling helper changes.
+- Course generation needs the worker, LLM gateway, and sandbox runner running in addition to the API and web app.
+- The current vertical slice uses Supabase Auth and the Supabase-backed repository when `APP_AUTH_MODE=supabase` and `APP_REPOSITORY_BACKEND=supabase` are set.
+
+### Windows: a port is already in use
+
+Local servers keep running until their terminal receives `Ctrl+C` or the process is stopped. If a terminal is no longer visible, an older API, gateway, or sandbox process can still hold its port.
+
+Find the process holding a port (for example, the LLM gateway on 8010):
+
+```powershell
+netstat -ano | Select-String ':8010'
+```
+
+The final column is the process ID (PID). Inspect it, then stop only that PID:
+
+```powershell
+Get-Process -Id <pid>
+Stop-Process -Id <pid>
+```
+
+Start the service again using its command above. Common local ports are API `8000`, LLM gateway `8010`, and sandbox runner `8020`.
