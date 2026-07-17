@@ -76,17 +76,19 @@ class DockerSandboxRunner:
         self._ensure_image(environment_id, image)
         container = None
         try:
+            # No read-only rootfs or workspace tmpfs: the Docker archive API rejects
+            # put_archive outright on read-only-rootfs containers, and a tmpfs would
+            # shadow files copied in before start. The non-root user cannot write
+            # anywhere meaningful on the rootfs, and pytest is configured not to write.
             container = self.client.containers.create(
                 image=image,
                 command=["pytest", "-q", "-p", "no:cacheprovider", "."],
                 working_dir="/workspace",
                 environment={"PYTHONDONTWRITEBYTECODE": "1"},
                 network_disabled=True,
-                read_only=True,
                 user="65534:65534",
                 cap_drop=["ALL"],
                 security_opt=["no-new-privileges:true"],
-                tmpfs={"/workspace": "rw,nosuid,nodev,noexec,size=8m"},
                 mem_limit="256m",
                 nano_cpus=1_000_000_000,
                 pids_limit=64,

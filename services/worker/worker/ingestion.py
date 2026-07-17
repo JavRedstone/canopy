@@ -23,6 +23,10 @@ logger = logging.getLogger(__name__)
 # once its visibility timeout expires, rather than being archived and permanently lost.
 RETRYABLE_ERRORS = (HTTPError, APIError, LLMGatewayError, SandboxError)
 
+# How many times a module's concepts may be regenerated with validation feedback
+# before the whole course plan is declared failed.
+PLAN_VALIDATION_ATTEMPTS = 3
+
 
 @dataclass(frozen=True)
 class QueueMessage:
@@ -198,10 +202,31 @@ class IngestionWorker:
             # concepts, which also makes the whole graph acyclic by construction.
             known_concepts: list[tuple[str, str]] = []
             for position, module in enumerate(skeleton.modules, start=1):
-                module_concepts = self._generate_module_concepts(
-                    goal, module.title, context, source_instruction, known_concepts
-                )
-                validate_module_concepts(module_concepts.concepts, chunk_ids, [concept_id for concept_id, _ in known_concepts])
+                # The model occasionally violates rules the JSON schema cannot express
+                # (citing unknown chunks, forward prerequisites); regenerate with the
+                # validation error as feedback instead of failing the whole plan.
+                feedback: str | None = None
+                for _ in range(PLAN_VALIDATION_ATTEMPTS):
+                    module_concepts = self._generate_module_concepts(
+                        goal, module.title, context, source_instruction, known_concepts, feedback=feedback
+                    )
+                    try:
+                        validate_module_concepts(
+                            module_concepts.concepts, chunk_ids, [concept_id for concept_id, _ in known_concepts]
+                        )
+                        break
+                    except ValueError as exc:
+                        feedback = str(exc)
+                        logger.warning(
+                            "Module concepts failed validation; regenerating with feedback: %s",
+                            feedback,
+                            extra={"module_title": module.title},
+                        )
+                else:
+                    raise ValueError(
+                        f"Concepts for module '{module.title}' failed validation after "
+                        f"{PLAN_VALIDATION_ATTEMPTS} attempts: {feedback}"
+                    )
 
                 self.client.rpc(
                     "apply_module_concepts",
@@ -249,33 +274,50 @@ class IngestionWorker:
         return skeleton
 
     def _generate_module_concepts(
-        self, goal: str, module_title: str, context: str, source_instruction: str, known_concepts: list[tuple[str, str]]
+        self,
+        goal: str,
+        module_title: str,
+        context: str,
+        source_instruction: str,
+        known_concepts: list[tuple[str, str]],
+        feedback: str | None = None,
     ) -> ModuleConcepts:
         known_summary = "\n".join(f"- {concept_id}: {title}" for concept_id, title in known_concepts) or "(none yet)"
-        response = self.openai.responses.parse(
-            model=self.settings.planner_model,
-            input=[
-                {
-                    "role": "system",
-                    "content": (
-                        "Generate the concepts for one module of a technical course. "
-                        f"{source_instruction} Use lowercase hyphenated concept IDs that do not collide with any "
-                        "already-generated concept. A concept's prerequisites may only reference concepts that "
-                        "already exist, listed below, never a concept from a later module or later in this same "
-                        "list. Assign kind 'coding' to concepts that need a hands-on exercise, 'conceptual' "
-                        "otherwise. Keep each summary_markdown to one concise sentence; detailed teaching belongs "
-                        "in the individual lesson, not the course overview."
-                    ),
-                },
+        input_items = [
+            {
+                "role": "system",
+                "content": (
+                    "Generate the concepts for one module of a technical course. "
+                    f"{source_instruction} Use lowercase hyphenated concept IDs that do not collide with any "
+                    "already-generated concept. A concept's prerequisites may only reference concepts that "
+                    "already exist, listed below, never a concept from a later module or later in this same "
+                    "list. Assign kind 'coding' to concepts that need a hands-on exercise, 'conceptual' "
+                    "otherwise. Keep each summary_markdown to one concise sentence; detailed teaching belongs "
+                    "in the individual lesson, not the course overview."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"Learning goal: {goal}\nModule: {module_title}\n\n"
+                    f"Concepts already generated so far:\n{known_summary}\n\n"
+                    f"Optional source excerpts:\n{context}"
+                ),
+            },
+        ]
+        if feedback:
+            input_items.append(
                 {
                     "role": "user",
                     "content": (
-                        f"Learning goal: {goal}\nModule: {module_title}\n\n"
-                        f"Concepts already generated so far:\n{known_summary}\n\n"
-                        f"Optional source excerpts:\n{context}"
+                        f"Your previous concepts for this module were rejected: {feedback} "
+                        "Generate the module's concepts again with that violation corrected."
                     ),
-                },
-            ],
+                }
+            )
+        response = self.openai.responses.parse(
+            model=self.settings.planner_model,
+            input=input_items,
             text_format=ModuleConcepts,
         )
         module_concepts = response.output_parsed
@@ -289,14 +331,30 @@ class IngestionWorker:
             return
         claimed = claim[0]
         try:
-            bundle = generate_lesson_bundle(
-                self.openai,
-                self.settings.builder_model,
-                concept_title=claimed["concept_title"],
-                concept_summary=claimed["summary_markdown"],
-                chunks=self._citation_chunks(claimed["citations_json"]),
-            )
-            validate_lesson_bundle(bundle, claimed["citations_json"])
+            feedback: str | None = None
+            for _ in range(PLAN_VALIDATION_ATTEMPTS):
+                bundle = generate_lesson_bundle(
+                    self.openai,
+                    self.settings.builder_model,
+                    concept_title=claimed["concept_title"],
+                    concept_summary=claimed["summary_markdown"],
+                    chunks=self._citation_chunks(claimed["citations_json"]),
+                    feedback=feedback,
+                )
+                try:
+                    validate_lesson_bundle(bundle, claimed["citations_json"])
+                    break
+                except ValueError as exc:
+                    feedback = str(exc)
+                    logger.warning(
+                        "Lesson bundle failed citation validation; regenerating with feedback: %s",
+                        feedback,
+                        extra={"lesson_definition_id": lesson_definition_id},
+                    )
+            else:
+                raise ValueError(
+                    f"Lesson bundle failed validation after {PLAN_VALIDATION_ATTEMPTS} attempts: {feedback}"
+                )
             files = {file.path: file.content for file in reference_workspace(bundle)}
             result = self.sandbox.run_pytest([SandboxFile(path, content) for path, content in files.items()])
 

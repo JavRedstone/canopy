@@ -1,9 +1,10 @@
 from types import SimpleNamespace
 
+import pytest
 from pydantic import SecretStr
 
-from worker.ingestion import IngestionWorker
-from worker.llm import LLMGatewayClient
+from worker.ingestion import PLAN_VALIDATION_ATTEMPTS, IngestionWorker
+from worker.llm import LLMGatewayClient, LLMValidationError
 from worker.main import _build_llm_client
 from worker.planner import CourseSkeleton, ModuleConcepts
 
@@ -61,9 +62,25 @@ class FakeRequest:
         return SimpleNamespace(data=self.data)
 
 
+class FakeTable:
+    """Accepts the status-update chain plan_course runs when a plan fails."""
+
+    def update(self, *args: object, **kwargs: object) -> "FakeTable":
+        return self
+
+    def eq(self, *args: object, **kwargs: object) -> "FakeTable":
+        return self
+
+    def execute(self) -> SimpleNamespace:
+        return SimpleNamespace(data=[])
+
+
 class FakePlanningClient:
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict[str, object]]] = []
+
+    def table(self, name: str) -> FakeTable:
+        return FakeTable()
 
     def rpc(self, function: str, arguments: dict[str, object]) -> FakeRequest:
         self.calls.append((function, arguments))
@@ -132,6 +149,46 @@ def test_gateway_client_sends_schema_and_validates_structured_output() -> None:
     ]
 
 
+def test_structured_output_failing_validation_is_retried_with_feedback() -> None:
+    invalid = {"course_title": "Authentication", "source_set_hash": "source-hash", "modules": []}
+    valid = {
+        "course_title": "Authentication",
+        "source_set_hash": "source-hash",
+        "modules": [{"id": "basics", "title": "Basics"}],
+    }
+    http = FakeHttpClient([FakeResponse({"output": invalid}), FakeResponse({"output": valid})])
+    client = LLMGatewayClient("http://gateway", internal_service_token=None, http_client=http)
+
+    result = client.responses.parse(
+        model="course_planning",
+        input=[{"role": "user", "content": "Build a course."}],
+        text_format=CourseSkeleton,
+    )
+
+    assert result.output_parsed.modules[0].id == "basics"
+    assert len(http.calls) == 2
+    retry_input = http.calls[1]["json"]["input"]
+    assert retry_input[0] == {"role": "user", "content": "Build a course."}
+    assert retry_input[1]["role"] == "assistant"
+    assert retry_input[2]["role"] == "user"
+    assert "rejected by validation" in retry_input[2]["content"]
+
+
+def test_structured_output_failing_validation_repeatedly_is_not_retryable() -> None:
+    invalid = {"course_title": "Authentication", "source_set_hash": "source-hash", "modules": []}
+    http = FakeHttpClient([FakeResponse({"output": invalid}) for _ in range(3)])
+    client = LLMGatewayClient("http://gateway", internal_service_token=None, http_client=http)
+
+    with pytest.raises(LLMValidationError):
+        client.responses.parse(
+            model="course_planning",
+            input=[{"role": "user", "content": "Build a course."}],
+            text_format=CourseSkeleton,
+        )
+
+    assert len(http.calls) == 3
+
+
 def test_embedding_request_uses_gateway_task() -> None:
     embeddings = FakeEmbeddings()
     worker = IngestionWorker.__new__(IngestionWorker)
@@ -180,6 +237,67 @@ def test_planner_request_uses_course_planning_task() -> None:
         "apply_module_concepts",
         "finalize_course_plan",
     ]
+
+
+def test_module_concepts_citing_unknown_chunk_are_regenerated_with_feedback() -> None:
+    skeleton = CourseSkeleton.model_validate(
+        {"course_title": "Authentication", "source_set_hash": "source-hash", "modules": [{"id": "basics", "title": "Basics"}]}
+    )
+    concept = {
+        "id": "tokens",
+        "title": "Tokens",
+        "kind": "conceptual",
+        "summary_markdown": "Tokens identify requests.",
+        "prerequisites": [],
+    }
+    bad_concepts = ModuleConcepts.model_validate({"concepts": [{**concept, "citations": ["bogus-chunk"]}]})
+    good_concepts = ModuleConcepts.model_validate({"concepts": [{**concept, "citations": ["chunk-id"]}]})
+    responses = FakeResponses([skeleton, bad_concepts, good_concepts])
+    worker = IngestionWorker.__new__(IngestionWorker)
+    worker.settings = SimpleNamespace(planner_model="course_planning")
+    worker.client = FakePlanningClient()
+    worker.openai = SimpleNamespace(responses=responses)
+    worker._course_context = lambda _course_id: [{"id": "chunk-id", "content": "Source content."}]
+
+    worker.plan_course("course-id")
+
+    assert len(responses.calls) == 3
+    feedback_message = responses.calls[2]["input"][-1]
+    assert feedback_message["role"] == "user"
+    assert "rejected" in feedback_message["content"]
+    assert "outside the source context" in feedback_message["content"]
+    assert worker.client.calls[-1][0] == "finalize_course_plan"
+
+
+def test_plan_fails_when_concepts_never_pass_validation() -> None:
+    skeleton = CourseSkeleton.model_validate(
+        {"course_title": "Authentication", "source_set_hash": "source-hash", "modules": [{"id": "basics", "title": "Basics"}]}
+    )
+    bad_concepts = ModuleConcepts.model_validate(
+        {
+            "concepts": [
+                {
+                    "id": "tokens",
+                    "title": "Tokens",
+                    "kind": "conceptual",
+                    "summary_markdown": "Tokens identify requests.",
+                    "prerequisites": [],
+                    "citations": ["bogus-chunk"],
+                }
+            ]
+        }
+    )
+    responses = FakeResponses([skeleton] + [bad_concepts] * PLAN_VALIDATION_ATTEMPTS)
+    worker = IngestionWorker.__new__(IngestionWorker)
+    worker.settings = SimpleNamespace(planner_model="course_planning")
+    worker.client = FakePlanningClient()
+    worker.openai = SimpleNamespace(responses=responses)
+    worker._course_context = lambda _course_id: [{"id": "chunk-id", "content": "Source content."}]
+
+    with pytest.raises(ValueError, match="failed validation after"):
+        worker.plan_course("course-id")
+
+    assert len(responses.calls) == 1 + PLAN_VALIDATION_ATTEMPTS
 
 
 def test_goal_only_planner_request_requires_empty_citations() -> None:

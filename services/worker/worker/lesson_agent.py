@@ -18,7 +18,10 @@ GENERATION_SYSTEM_PROMPT = (
     "and the tests must exercise normal, edge, and failure behavior described in the explanation. Include 2-4 "
     "actionable hints that progressively guide the learner without giving away the final implementation. Provide 2-5 "
     "public_test_cases with a short name and description of each behavior the learner should satisfy; these describe "
-    "the checks but never include the hidden pytest code."
+    "the checks but never include the hidden pytest code. Structural rules that are strictly enforced: "
+    "reference_solution_files must contain exactly the same paths as starter_files (no extras, none missing); "
+    "test_files must not reuse a starter file path; and at least one test file must be named so pytest discovers "
+    "it, i.e. test_*.py or *_test.py."
 )
 
 REPAIR_SYSTEM_PROMPT = (
@@ -67,6 +70,7 @@ def generate_lesson_bundle(
     concept_title: str,
     concept_summary: str,
     chunks: list[dict[str, Any]],
+    feedback: str | None = None,
 ) -> LessonBundle:
     context = "\n\n".join(f"[{chunk['id']}]\n{chunk['content']}" for chunk in chunks) or "No source documents were provided."
     source_instruction = (
@@ -76,17 +80,28 @@ def generate_lesson_bundle(
         if chunks
         else "No source documents were provided, so use an empty citations list."
     )
-    response = openai_client.responses.parse(
-        model=model,
-        input=[
-            {"role": "system", "content": f"{GENERATION_SYSTEM_PROMPT} {source_instruction}"},
+    input_items = [
+        {"role": "system", "content": f"{GENERATION_SYSTEM_PROMPT} {source_instruction}"},
+        {
+            "role": "user",
+            "content": (
+                f"Concept: {concept_title}\nSummary: {concept_summary}\n\nOptional source excerpts:\n{context}"
+            ),
+        },
+    ]
+    if feedback:
+        input_items.append(
             {
                 "role": "user",
                 "content": (
-                    f"Concept: {concept_title}\nSummary: {concept_summary}\n\nOptional source excerpts:\n{context}"
+                    f"Your previous lesson bundle was rejected: {feedback} "
+                    "Generate the lesson bundle again with that violation corrected."
                 ),
-            },
-        ],
+            }
+        )
+    response = openai_client.responses.parse(
+        model=model,
+        input=input_items,
         text_format=LessonBundle,
     )
     bundle = response.output_parsed

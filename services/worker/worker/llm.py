@@ -1,12 +1,25 @@
+import json
 from types import SimpleNamespace
 from typing import Any
 
 import httpx
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 
 class LLMGatewayError(Exception):
     """The private LLM gateway could not accept or complete a model request."""
+
+
+class LLMValidationError(Exception):
+    """The model repeatedly returned output that failed domain validation.
+
+    Deliberately not an LLMGatewayError: transport errors are transient and the
+    job should stay queued, but a model that failed validation even after being
+    shown the errors will not fix itself on a queue retry.
+    """
+
+
+_STRUCTURED_ATTEMPTS = 3
 
 
 class GatewayOutputItem(dict[str, Any]):
@@ -24,19 +37,39 @@ class _ResponsesClient:
         self.gateway = gateway
 
     def parse(self, *, model: str, input: list[dict[str, Any]], text_format: type[BaseModel]) -> SimpleNamespace:
-        result = self.gateway._post(
-            "/internal/v1/structured",
-            {
-                "task": model,
-                "input": input,
-                "schema_name": text_format.__name__,
-                "schema": text_format.model_json_schema(),
-            },
-        )
-        try:
-            return SimpleNamespace(output_parsed=text_format.model_validate(result["output"]))
-        except (KeyError, TypeError, ValueError) as exc:
-            raise LLMGatewayError("The gateway returned an invalid structured response.") from exc
+        items = list(input)
+        last_error: ValidationError | None = None
+        for _ in range(_STRUCTURED_ATTEMPTS):
+            result = self.gateway._post(
+                "/internal/v1/structured",
+                {
+                    "task": model,
+                    "input": items,
+                    "schema_name": text_format.__name__,
+                    "schema": text_format.model_json_schema(),
+                },
+            )
+            if "output" not in result:
+                raise LLMGatewayError("The gateway returned an invalid structured response.")
+            try:
+                return SimpleNamespace(output_parsed=text_format.model_validate(result["output"]))
+            except ValidationError as exc:
+                last_error = exc
+                items = items + [
+                    {"role": "assistant", "content": json.dumps(result["output"])},
+                    {
+                        "role": "user",
+                        "content": (
+                            "Your previous response was rejected by validation:\n"
+                            f"{exc}\n"
+                            "Return a corrected response that fixes every violation and still follows all "
+                            "of the original instructions."
+                        ),
+                    },
+                ]
+        raise LLMValidationError(
+            f"The model output still failed validation after {_STRUCTURED_ATTEMPTS} attempts."
+        ) from last_error
 
     def create(
         self,
