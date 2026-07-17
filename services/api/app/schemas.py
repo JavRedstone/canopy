@@ -40,6 +40,8 @@ class CreateCourseRequest(BaseModel):
     title: str = Field(min_length=1, max_length=120)
     goal: str = Field(min_length=1, max_length=2000)
     source_ids: list[UUID] = Field(default_factory=list)
+    lesson_min: int = Field(default=3, ge=1, le=24)
+    lesson_max: int = Field(default=6, ge=1, le=24)
 
 
 class CourseSummary(BaseModel):

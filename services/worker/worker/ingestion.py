@@ -169,6 +169,8 @@ class IngestionWorker:
         course_version_id = claimed["course_version_id"]
         goal = claimed["goal"]
         source_set_hash = claimed["source_set_hash"]
+        lesson_min = claimed.get("lesson_min", 3)
+        lesson_max = claimed.get("lesson_max", 6)
         try:
             # A previous attempt may have partially written modules/concepts before failing;
             # each attempt regenerates from scratch rather than trying to resume mid-course.
@@ -188,7 +190,7 @@ class IngestionWorker:
                 "citations list for every concept."
             )
 
-            skeleton = self._generate_course_skeleton(goal, source_set_hash, context, source_instruction)
+            skeleton = self._generate_course_skeleton(goal, source_set_hash, context, source_instruction, lesson_min, lesson_max)
             validate_course_skeleton(skeleton, source_set_hash)
 
             module_rows = self.client.rpc(
@@ -254,7 +256,7 @@ class IngestionWorker:
             self.client.table("course_versions").update({"status": "failed"}).eq("id", course_version_id).execute()
             raise
 
-    def _generate_course_skeleton(self, goal: str, source_set_hash: str, context: str, source_instruction: str) -> CourseSkeleton:
+    def _generate_course_skeleton(self, goal: str, source_set_hash: str, context: str, source_instruction: str, lesson_min: int, lesson_max: int) -> CourseSkeleton:
         response = self.openai.responses.parse(
             model=self.settings.planner_model,
             input=[
@@ -264,7 +266,8 @@ class IngestionWorker:
                         "Design the module structure for a technical course centered on the learner's goal. "
                         f"{source_instruction} Produce only an ordered list of module titles; concepts for each "
                         "module are generated separately afterward. Keep modules focused: prefer more, smaller "
-                        "modules over a few broad ones."
+                        f"modules over a few broad ones. The learner requested {lesson_min}-{lesson_max} lessons; "
+                        "choose a module count and scope that keeps the complete course in that range."
                     ),
                 },
                 {

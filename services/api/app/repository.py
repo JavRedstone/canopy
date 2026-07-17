@@ -96,6 +96,8 @@ class MemoryCourseRepository:
         return SourceSummary(id=source.id, filename=source.filename, status="uploaded")
 
     def create_course(self, owner_id: UUID, request: CreateCourseRequest) -> CourseSummary:
+        if request.lesson_min > request.lesson_max:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Minimum lessons cannot exceed maximum lessons.")
         for source_id in request.source_ids:
             source = self._source_for_owner(owner_id, source_id)
             if source.status == "uploading":
@@ -305,6 +307,8 @@ class SupabaseCourseRepository:
                         "title": request.title,
                         "goal": request.goal,
                         "source_set_hash": source_set_hash,
+                        "lesson_min": request.lesson_min,
+                        "lesson_max": request.lesson_max,
                         "status": "draft",
                     }
                 ),

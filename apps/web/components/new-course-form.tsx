@@ -3,7 +3,7 @@
 import { Button } from "@base-ui/react/button";
 import { Input } from "@base-ui/react/input";
 import { Tabs } from "@base-ui/react/tabs";
-import { FormEvent, useState } from "react";
+import { CSSProperties, FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -50,6 +50,8 @@ export function NewCourseForm() {
   const [noteContent, setNoteContent] = useState("");
   const [title, setTitle] = useState("");
   const [goal, setGoal] = useState("");
+  const [lessonMin, setLessonMin] = useState(3);
+  const [lessonMax, setLessonMax] = useState(6);
   const [error, setError] = useState<string>();
   const [progress, setProgress] = useState<string>();
   const [loading, setLoading] = useState(false);
@@ -107,7 +109,7 @@ export function NewCourseForm() {
       }
 
       setProgress("Creating your draft course…");
-      const courseResponse = await fetch(`${apiUrl}/api/v1/courses`, { method: "POST", headers, body: JSON.stringify({ title, goal, source_ids: sourceIds }) });
+      const courseResponse = await fetch(`${apiUrl}/api/v1/courses`, { method: "POST", headers, body: JSON.stringify({ title, goal, source_ids: sourceIds, lesson_min: lessonMin, lesson_max: lessonMax }) });
       if (!courseResponse.ok) throw new Error("Unable to create your course.");
       router.push("/courses"); router.refresh();
     } catch (caught) {
@@ -119,6 +121,15 @@ export function NewCourseForm() {
     <form className="form" onSubmit={handleSubmit}>
       <label className="field" htmlFor="course-title">Course title<Input className="input" id="course-title" value={title} onChange={(event) => setTitle(event.target.value)} autoComplete="off" required /></label>
       <label className="field" htmlFor="course-goal">What do you want to learn?<textarea className="input" id="course-goal" rows={4} value={goal} onChange={(event) => setGoal(event.target.value)} autoComplete="off" required /></label>
+      <div className="field">
+        <span>Lesson range <strong>{lessonMin}–{lessonMax} lessons</strong></span>
+        <div className="lesson-range" style={{ "--range-start": `${((lessonMin - 1) / 23) * 100}%`, "--range-end": `${((lessonMax - 1) / 23) * 100}%` } as CSSProperties}>
+          <input className="lesson-range-handle" type="range" min="1" max="24" value={lessonMin} onChange={(event) => setLessonMin(Math.min(Number(event.target.value), lessonMax))} aria-label="Minimum lessons" />
+          <input className="lesson-range-handle" type="range" min="1" max="24" value={lessonMax} onChange={(event) => setLessonMax(Math.max(Number(event.target.value), lessonMin))} aria-label="Maximum lessons" />
+        </div>
+        <div className="lesson-range-labels"><span>Quick<br />1 lesson</span><span>Deep dive<br />24 lessons</span></div>
+        <span className="muted">Drag either handle to choose the course depth.</span>
+      </div>
 
       {sources.length > 0 ? (
         <div className="field">
