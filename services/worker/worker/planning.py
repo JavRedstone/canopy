@@ -41,7 +41,9 @@ OUTLINE_SYSTEM_PROMPT = (
     "Identify the intended audience and assumed prior knowledge, 3-6 concrete course-level learning "
     "objectives, and an ordered list of modules. For each module write a short focus (1-2 sentences on "
     "what it covers and how it differs from the other modules) and a lesson_count -- the number of "
-    "lessons that module will contain. The lesson_count values across all modules MUST sum to between "
+    "activities that topic will contain. Every module is a textbook-style topic and therefore needs at least "
+    "four activities: two or more lectures, one or more coding labs, and one assessment checkpoint. The "
+    "lesson_count values across all modules MUST sum to between "
     "{lesson_min} and {lesson_max}, the learner's requested course length. Order modules so each builds "
     "on earlier ones, give each a scope proportional to its lesson_count, and avoid overlap between "
     "modules. Concepts for each module are generated separately afterward."
@@ -53,8 +55,9 @@ MODULE_CONCEPTS_SYSTEM_PROMPT = (
     "this module's focus without repeating concepts assigned to other modules in the roadmap. Use "
     "lowercase hyphenated concept IDs that do not collide with any already-generated concept. A concept's "
     "prerequisites may only reference concepts that already exist, listed below, never a concept from a "
-    "later module or later in this same list. Assign kind 'coding' to concepts that need a hands-on "
-    "exercise, 'conceptual' otherwise. Keep each summary_markdown to one concise sentence; detailed "
+    "later module or later in this same list. Each topic must contain at least two 'conceptual' lecture "
+    "concepts first, then one or more 'coding' lab concepts, and exactly one final 'assessment' concept. "
+    "The assessment is a no-workspace, integrative mastery check. Keep each summary_markdown to one concise sentence; detailed "
     "teaching belongs in the individual lesson, not the course overview."
 )
 
@@ -291,7 +294,7 @@ class CoursePlanner:
                     f"Learning goal: {goal}\n\n{outline_summary}\n\n"
                     f"Generate concepts for this module only:\n"
                     f"Module: {module.title}\nModule focus: {module.focus}\n"
-                    f"Generate exactly {module.lesson_count} concept(s) for this module, one per planned lesson.\n\n"
+                    f"Generate exactly {module.lesson_count} activities for this topic: at least two lectures, then one or more labs, then exactly one assessment.\n\n"
                     f"Concepts already generated so far:\n{known_summary}\n\n"
                     f"Optional source excerpts:\n{context}"
                 ),

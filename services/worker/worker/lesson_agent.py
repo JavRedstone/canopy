@@ -69,6 +69,15 @@ CONCEPTUAL_GENERATION_SYSTEM_PROMPT = (
     "multi-line code or equation; never split an inline backtick expression across lines."
 )
 
+ASSESSMENT_GENERATION_SYSTEM_PROMPT = (
+    "Create a self-contained assessment checkpoint for one course topic. This is an integrative mastery check, "
+    "not another lecture and not a coding exercise: set workspace to null and leave visible_tests, hidden_tests, "
+    "reference_solution_files, and hints empty. In lesson_content, write a short Markdown introduction explaining "
+    "what the learner will demonstrate, with no worked examples. Add 4-6 quiz_items that assess the topic as a "
+    f"whole, using application-focused scenarios rather than recall. {QUIZ_KINDS_INSTRUCTION} Do not include "
+    "inline quiz markers: every item belongs in the final assessment."
+)
+
 REPAIR_SYSTEM_PROMPT = (
     "You are debugging a generated Python coding exercise. The reference solution is supposed to "
     "pass its own tests but currently does not. Use read_file to inspect any file, write_file to "
@@ -134,6 +143,21 @@ def generate_conceptual_bundle(
 ) -> LessonBundle:
     return _generate_bundle(
         openai_client, model, CONCEPTUAL_GENERATION_SYSTEM_PROMPT,
+        concept_title=concept_title, concept_summary=concept_summary, chunks=chunks, feedback=feedback,
+    )
+
+
+def generate_assessment_bundle(
+    openai_client: LLMGatewayClient,
+    model: str,
+    *,
+    concept_title: str,
+    concept_summary: str,
+    chunks: list[dict[str, Any]],
+    feedback: str | None = None,
+) -> LessonBundle:
+    return _generate_bundle(
+        openai_client, model, ASSESSMENT_GENERATION_SYSTEM_PROMPT,
         concept_title=concept_title, concept_summary=concept_summary, chunks=chunks, feedback=feedback,
     )
 

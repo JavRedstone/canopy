@@ -11,7 +11,7 @@ export interface CourseSummary {
 export interface CourseMapConcept {
   slug: string;
   title: string;
-  kind: "conceptual" | "coding";
+  kind: "conceptual" | "coding" | "assessment";
   summary_markdown: string;
 }
 
@@ -196,7 +196,7 @@ export interface LessonPreview {
 export interface ConceptDetailResponse {
   slug: string;
   title: string;
-  kind: "conceptual" | "coding";
+  kind: "conceptual" | "coding" | "assessment";
   summary_markdown: string;
   citations: string[];
   generation_status: LessonBuildStatus | null;

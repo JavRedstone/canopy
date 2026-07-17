@@ -9,7 +9,7 @@ class PlannerConcept(BaseModel):
 
     id: str = Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
     title: str = Field(min_length=1, max_length=160)
-    kind: Literal["conceptual", "coding"]
+    kind: Literal["conceptual", "coding", "assessment"]
     summary_markdown: str = Field(min_length=1, max_length=400)
     prerequisites: list[str]
     citations: list[str] = Field(default_factory=list)
@@ -21,9 +21,10 @@ class OutlineModule(BaseModel):
     id: str = Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
     title: str = Field(min_length=1, max_length=160)
     focus: str = Field(min_length=1, max_length=400)
+    # A textbook-style topic has at least two lectures, one lab, and one assessment.
     # One lesson per concept, so this is also the concept count for the module. Capped at
     # ModuleConcepts' limit so the target is always achievable in a single concepts call.
-    lesson_count: int = Field(ge=1, le=8)
+    lesson_count: int = Field(ge=4, le=8)
 
 
 class CourseOutline(BaseModel):
@@ -97,6 +98,18 @@ def validate_module_concepts(
         raise ValueError(
             f"This module must contain exactly {expected_count} concept(s), but {len(concepts)} were generated."
         )
+    if len(concepts) < 4:
+        raise ValueError("Each topic needs at least two lectures, a lab, and an assessment.")
+    kinds = [concept.kind for concept in concepts]
+    if kinds.count("conceptual") < 2:
+        raise ValueError("Each topic needs at least two lecture concepts before its lab.")
+    if kinds.count("coding") < 1:
+        raise ValueError("Each topic needs at least one coding lab.")
+    if kinds.count("assessment") != 1:
+        raise ValueError("Each topic needs exactly one assessment checkpoint.")
+    phase = {"conceptual": 0, "coding": 1, "assessment": 2}
+    if any(phase[left] > phase[right] for left, right in zip(kinds, kinds[1:])):
+        raise ValueError("Topic activities must be ordered as lectures, then labs, then the assessment.")
     available_citations = set(available_citations)
     resolved = set(known_concept_ids)
     for concept in concepts:

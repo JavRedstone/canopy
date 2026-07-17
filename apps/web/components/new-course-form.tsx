@@ -61,8 +61,8 @@ export function NewCourseForm() {
   const [noteContent, setNoteContent] = useState("");
   const [title, setTitle] = useState("");
   const [goal, setGoal] = useState("");
-  const [lessonMin, setLessonMin] = useState(3);
-  const [lessonMax, setLessonMax] = useState(6);
+  const [lessonMin, setLessonMin] = useState(8);
+  const [lessonMax, setLessonMax] = useState(16);
   const [quizMaxAttempts, setQuizMaxAttempts] = useState(3);
   const [sourceTab, setSourceTab] = useState<"file" | "text">("file");
   const [error, setError] = useState<string>();
@@ -161,7 +161,7 @@ export function NewCourseForm() {
         <Slider
           value={[lessonMin, lessonMax]}
           onChange={handleLessonRangeChange}
-          min={1}
+          min={4}
           max={24}
           step={1}
           disableSwap
@@ -169,10 +169,10 @@ export function NewCourseForm() {
           sx={{ mt: 2 }}
         />
         <Stack direction="row" sx={{ justifyContent: "space-between", color: "text.secondary", fontSize: "0.75rem" }}>
-          <span>Quick<br />1 lesson</span>
+          <span>One topic<br />4 activities</span>
           <span>Deep dive<br />24 lessons</span>
         </Stack>
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>Drag either handle to choose the course depth.</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>Each topic includes multiple lectures, then labs, and finishes with an assessment.</Typography>
       </Box>
 
       <TextField

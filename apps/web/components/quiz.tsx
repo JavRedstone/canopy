@@ -226,12 +226,12 @@ export function QuizQuestion({ courseId, slug, item, index, maxAttempts = DEFAUL
   );
 }
 
-export function QuizSection({ courseId, slug, items, maxAttempts = DEFAULT_MAX_ATTEMPTS }: { courseId: string; slug: string; items?: QuizItemPreview[]; maxAttempts?: number }) {
+export function QuizSection({ courseId, slug, items, maxAttempts = DEFAULT_MAX_ATTEMPTS, title = "Mastery check" }: { courseId: string; slug: string; items?: QuizItemPreview[]; maxAttempts?: number; title?: string }) {
   if (!items?.length) return null;
   return (
     <Stack component="section" sx={{ gap: 2 }}>
       <Divider textAlign="left">
-        <Typography variant="overline" color="text.secondary">Mastery check</Typography>
+        <Typography variant="overline" color="text.secondary">{title}</Typography>
       </Divider>
       <Typography variant="body2" color="text.secondary" sx={{ mt: -1 }}>
         Use up to <Box component="strong" sx={{ fontWeight: 700, color: "text.primary" }}>{maxAttempts}</Box>{" "}attempts per question to show what you&apos;ve learned.

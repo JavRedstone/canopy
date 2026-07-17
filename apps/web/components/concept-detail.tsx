@@ -422,6 +422,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
                   (_, index) => !markerReferencedQuizIndexes(concept.lesson?.explanation_markdown ?? "").has(index)
                 )}
                 maxAttempts={concept.lesson.quiz_max_attempts}
+                title={concept.kind === "assessment" ? "Topic assessment" : undefined}
               />
             </Stack>
           ) : null}

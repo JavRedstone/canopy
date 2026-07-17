@@ -13,7 +13,7 @@ from supabase import Client
 
 from worker.context import citation_chunks
 from worker.errors import RETRYABLE_ERRORS
-from worker.lesson_agent import generate_conceptual_bundle, generate_lesson_bundle, repair_bundle
+from worker.lesson_agent import generate_assessment_bundle, generate_conceptual_bundle, generate_lesson_bundle, repair_bundle
 from worker.lesson_schema import LessonBundle, WorkspaceFile, reference_workspace, starter_workspace, validate_lesson_bundle
 from worker.llm import LLMGatewayClient
 from worker.sandbox import SandboxFile, SandboxRunnerClient
@@ -47,7 +47,7 @@ class LessonBuilder:
             return not self._lesson_still_building(lesson_definition_id)
         claimed = claim[0]
         try:
-            if self._concept_kind(claimed) == "conceptual":
+            if self._concept_kind(claimed) != "coding":
                 bundle, status = self._conceptual_bundle(lesson_definition_id, claimed)
             else:
                 bundle, status = self._coding_bundle(lesson_definition_id, claimed)
@@ -137,8 +137,9 @@ class LessonBuilder:
         return bundle, "validated" if result.passed else "failed"
 
     def _conceptual_bundle(self, lesson_definition_id: str, claimed: dict[str, Any]) -> tuple[LessonBundle, str]:
+        generator = generate_assessment_bundle if self._concept_kind(claimed) == "assessment" else generate_conceptual_bundle
         bundle = self._generate_validated(
-            generate_conceptual_bundle,
+            generator,
             self.settings.conceptual_builder_model,
             claimed,
             lesson_definition_id,
