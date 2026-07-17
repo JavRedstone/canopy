@@ -15,3 +15,6 @@ begin
   returning version.id, course.id, course.goal, course.source_set_hash, course.lesson_min, course.lesson_max;
 end;
 $$;
+
+revoke all on function public.claim_course_planning(uuid) from public, anon, authenticated;
+grant execute on function public.claim_course_planning(uuid) to service_role;
