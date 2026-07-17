@@ -1,16 +1,23 @@
-import Link from "next/link";
+import Box from "@mui/material/Box";
+import Typography from "@mui/material/Typography";
 import { LoginForm } from "@/components/login-form";
+import { PageShell } from "@/components/page-shell";
+import { BrandLink } from "@/components/brand-link";
 
 export default function LoginPage() {
   return (
-    <main className="shell">
-      <nav className="nav"><Link className="brand" href="/">Canopy</Link></nav>
-      <section className="hero" style={{ maxWidth: 480 }}>
-        <span className="eyebrow">Welcome</span>
-        <h1>Start with your source material.</h1>
-        <p>Use a passwordless sign-in link to keep your courses and documents private.</p>
+    <PageShell>
+      <BrandLink />
+      <Box sx={{ maxWidth: 480, mt: 7 }}>
+        <Typography variant="overline" color="text.secondary">Welcome</Typography>
+        <Typography variant="h3" sx={{ fontSize: "clamp(2rem, 5vw, 3rem)", letterSpacing: "-0.02em", lineHeight: 1.1, my: "12px" }}>
+          Start with your source material.
+        </Typography>
+        <Typography color="text.secondary" sx={{ fontSize: "1.05rem" }}>
+          Use a passwordless sign-in link to keep your courses and documents private.
+        </Typography>
         <LoginForm />
-      </section>
-    </main>
+      </Box>
+    </PageShell>
   );
 }

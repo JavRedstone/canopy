@@ -1,11 +1,21 @@
-import Link from "next/link";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
 import { CourseDashboard } from "@/components/course-dashboard";
+import { LinkButton } from "@/components/link-button";
+import { PageShell } from "@/components/page-shell";
 
 export default function CoursesPage() {
   return (
-    <div className="shell">
-      <header className="page-header"><div><span className="eyebrow">Learning library</span><h1>My courses</h1><p className="muted">Each course has its own source set, route, and mastery record.</p></div><Link className="button" href="/courses/new">New course</Link></header>
+    <PageShell>
+      <Stack direction="row" sx={{ alignItems: "flex-start", justifyContent: "space-between", gap: 3, mb: 4 }}>
+        <Stack>
+          <Typography variant="overline" color="text.secondary">Learning library</Typography>
+          <Typography variant="h4" sx={{ letterSpacing: "-0.02em", my: 0.25 }}>My courses</Typography>
+          <Typography color="text.secondary">Each course has its own source set, route, and mastery record.</Typography>
+        </Stack>
+        <LinkButton href="/courses/new" variant="contained">New course</LinkButton>
+      </Stack>
       <CourseDashboard />
-    </div>
+    </PageShell>
   );
 }

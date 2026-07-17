@@ -1,6 +1,11 @@
 "use client";
 
-import { Menu } from "@base-ui/react/menu";
+import { useState, MouseEvent } from "react";
+import IconButton from "@mui/material/IconButton";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
+import ListItemIcon from "@mui/material/ListItemIcon";
+import ListItemText from "@mui/material/ListItemText";
 import { Icon } from "@/components/icon";
 
 export interface SettingsMenuAction {
@@ -15,28 +20,40 @@ export interface SettingsMenuAction {
  *  regenerate, delete, ...) so those don't sprawl into a different button layout on
  *  every page that has them. */
 export function SettingsMenu({ actions, label = "Settings" }: { actions: SettingsMenuAction[]; label?: string }) {
+  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
+  const open = Boolean(anchorEl);
+
+  function handleOpen(event: MouseEvent<HTMLElement>) {
+    setAnchorEl(event.currentTarget);
+  }
+
+  function handleClose() {
+    setAnchorEl(null);
+  }
+
   return (
-    <Menu.Root>
-      <Menu.Trigger className="settings-menu-trigger" aria-label={label}>
+    <>
+      <IconButton aria-label={label} onClick={handleOpen} size="medium">
         <Icon name="settings" />
-      </Menu.Trigger>
-      <Menu.Portal>
-        <Menu.Positioner className="settings-menu-positioner" side="bottom" align="end" sideOffset={6}>
-          <Menu.Popup className="settings-menu-popup">
-            {actions.map((action) => (
-              <Menu.Item
-                className={`settings-menu-item${action.danger ? " settings-menu-item-danger" : ""}`}
-                disabled={action.disabled}
-                onClick={action.onClick}
-                key={action.label}
-              >
-                <Icon name={action.icon} />
-                {action.label}
-              </Menu.Item>
-            ))}
-          </Menu.Popup>
-        </Menu.Positioner>
-      </Menu.Portal>
-    </Menu.Root>
+      </IconButton>
+      <Menu anchorEl={anchorEl} open={open} onClose={handleClose} anchorOrigin={{ vertical: "bottom", horizontal: "right" }} transformOrigin={{ vertical: "top", horizontal: "right" }}>
+        {actions.map((action) => (
+          <MenuItem
+            key={action.label}
+            disabled={action.disabled}
+            onClick={() => {
+              handleClose();
+              action.onClick();
+            }}
+            sx={action.danger ? { color: "error.main" } : undefined}
+          >
+            <ListItemIcon sx={action.danger ? { color: "error.main" } : undefined}>
+              <Icon name={action.icon} />
+            </ListItemIcon>
+            <ListItemText>{action.label}</ListItemText>
+          </MenuItem>
+        ))}
+      </Menu>
+    </>
   );
 }

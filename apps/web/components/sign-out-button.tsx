@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@base-ui/react/button";
+import Button from "@mui/material/Button";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -18,7 +18,7 @@ export function SignOutButton() {
   }
 
   return (
-    <Button className="button button-secondary" onClick={handleSignOut} disabled={loading} focusableWhenDisabled>
+    <Button variant="outlined" size="small" onClick={handleSignOut} disabled={loading}>
       {loading ? "Signing out…" : "Sign out"}
     </Button>
   );

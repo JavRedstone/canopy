@@ -1,7 +1,14 @@
 "use client";
 
-import { Dialog } from "@base-ui/react/dialog";
 import { FormEvent, useState } from "react";
+import Dialog from "@mui/material/Dialog";
+import DialogTitle from "@mui/material/DialogTitle";
+import DialogContent from "@mui/material/DialogContent";
+import DialogActions from "@mui/material/DialogActions";
+import TextField from "@mui/material/TextField";
+import Button from "@mui/material/Button";
+import Alert from "@mui/material/Alert";
+import Stack from "@mui/material/Stack";
 import { CourseSummary, updateCourse } from "@/lib/api";
 import { createClient } from "@/lib/supabase/client";
 
@@ -52,36 +59,35 @@ export function CourseSettingsDialog({
   }
 
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Portal>
-        <Dialog.Backdrop className="dialog-backdrop" />
-        <Dialog.Popup className="dialog-popup">
-          <Dialog.Title className="dialog-title">Course settings</Dialog.Title>
-          <form className="form" onSubmit={handleSubmit}>
-            <label className="field" htmlFor="course-settings-title">
-              Course title
-              <input className="input" id="course-settings-title" value={title} onChange={(event) => setTitle(event.target.value)} required />
-            </label>
-            <label className="field" htmlFor="course-settings-attempts">
-              Quiz attempts per question
-              <input
-                className="input"
-                id="course-settings-attempts"
-                type="number"
-                min={1}
-                max={10}
-                value={quizMaxAttempts}
-                onChange={(event) => setQuizMaxAttempts(Math.max(1, Math.min(10, Number(event.target.value) || 1)))}
-              />
-            </label>
-            {error ? <p className="error">{error}</p> : null}
-            <div className="dialog-actions">
-              <button className="button button-secondary" type="button" onClick={() => onOpenChange(false)} disabled={saving}>Cancel</button>
-              <button className="button" type="submit" disabled={saving}>{saving ? "Saving…" : "Save"}</button>
-            </div>
-          </form>
-        </Dialog.Popup>
-      </Dialog.Portal>
-    </Dialog.Root>
+    <Dialog open={open} onClose={() => onOpenChange(false)} fullWidth maxWidth="xs">
+      <DialogTitle>Course settings</DialogTitle>
+      <form onSubmit={handleSubmit}>
+        <DialogContent>
+          <Stack sx={{ gap: 2.5, pt: 0.5 }}>
+            <TextField
+              label="Course title"
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              required
+              autoFocus
+              fullWidth
+            />
+            <TextField
+              label="Quiz attempts per question"
+              type="number"
+              slotProps={{ htmlInput: { min: 1, max: 10 } }}
+              value={quizMaxAttempts}
+              onChange={(event) => setQuizMaxAttempts(Math.max(1, Math.min(10, Number(event.target.value) || 1)))}
+              fullWidth
+            />
+            {error ? <Alert severity="error">{error}</Alert> : null}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button variant="text" onClick={() => onOpenChange(false)} disabled={saving}>Cancel</Button>
+          <Button variant="contained" type="submit" disabled={saving}>{saving ? "Saving…" : "Save"}</Button>
+        </DialogActions>
+      </form>
+    </Dialog>
   );
 }

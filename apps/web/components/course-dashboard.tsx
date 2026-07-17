@@ -2,8 +2,20 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { motion } from "motion/react";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import List from "@mui/material/List";
+import ListItemButton from "@mui/material/ListItemButton";
+import ListItemText from "@mui/material/ListItemText";
+import Chip from "@mui/material/Chip";
+import CircularProgress from "@mui/material/CircularProgress";
+import Alert from "@mui/material/Alert";
 import { CourseSummary, getCourses } from "@/lib/api";
 import { CourseCategoryBadge } from "@/components/course-category-badge";
+import { LinkButton } from "@/components/link-button";
 import { createClient } from "@/lib/supabase/client";
 
 export function CourseDashboard() {
@@ -41,26 +53,45 @@ export function CourseDashboard() {
     };
   }, []);
 
-  if (state === "loading") return <p className="muted">Loading your courses…</p>;
-  if (state === "error") return <p className="error">{errorMessage ?? "We could not load courses."}</p>;
+  if (state === "loading") {
+    return (
+      <Stack direction="row" sx={{ alignItems: "center", gap: 1.5, color: "text.secondary" }}>
+        <CircularProgress size={18} /> <Typography>Loading your courses…</Typography>
+      </Stack>
+    );
+  }
+  if (state === "error") return <Alert severity="error">{errorMessage ?? "We could not load courses."}</Alert>;
   if (courses.length === 0) {
-    return <div className="card"><h2>Your first course starts with a source.</h2><p>Upload a document, choose a goal, and we will create a stable course map.</p><Link className="button" href="/courses/new">Create a course</Link></div>;
+    return (
+      <Card variant="outlined" sx={{ maxWidth: 420 }}>
+        <CardContent component={Stack} sx={{ gap: 1.5, alignItems: "flex-start" }}>
+          <Typography variant="h6">Your first course starts with a source.</Typography>
+          <Typography color="text.secondary">Upload a document, choose a goal, and we will create a stable course map.</Typography>
+          <LinkButton href="/courses/new" variant="contained">Create a course</LinkButton>
+        </CardContent>
+      </Card>
+    );
   }
   return (
-    <div className="course-list">
-      {courses.map((course) => (
-        <Link className="course-row" href={`/courses/${course.id}`} key={course.id}>
-          <div className="course-row-main">
+    <List disablePadding sx={{ display: "grid", gap: 1 }}>
+      {courses.map((course, index) => (
+        <motion.div
+          key={course.id}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25, delay: Math.min(index * 0.04, 0.3) }}
+        >
+          <ListItemButton component={Link} href={`/courses/${course.id}`} sx={{ border: 1, borderColor: "divider", borderRadius: 1.5, gap: 1.75 }}>
             <CourseCategoryBadge title={course.title} goal={course.goal} />
-            <div><h2>{course.title}</h2><p className="muted">{course.goal}</p></div>
-          </div>
-          {course.status === "draft" ? (
-            <span className="course-status course-status-building"><span className="spinner" aria-hidden="true" /> Building…</span>
-          ) : (
-            <span className="course-status">{course.status}</span>
-          )}
-        </Link>
+            <ListItemText primary={course.title} secondary={course.goal} sx={{ minWidth: 0 }} />
+            {course.status === "draft" ? (
+              <Chip size="small" icon={<CircularProgress size={12} sx={{ color: "inherit" }} />} label="Building…" />
+            ) : (
+              <Chip size="small" label={course.status} sx={{ textTransform: "capitalize" }} />
+            )}
+          </ListItemButton>
+        </motion.div>
       ))}
-    </div>
+    </List>
   );
 }

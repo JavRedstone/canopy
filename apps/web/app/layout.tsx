@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
+import { MuiProviders } from "@/components/mui-providers";
 import "./globals.css";
 
 // Self-hosted from apps/web/app/fonts (OFL-licensed) rather than next/font/google so
@@ -25,7 +26,9 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={`${googleSans.variable} ${materialSymbols.variable}`}>
-      <body>{children}</body>
+      <body>
+        <MuiProviders>{children}</MuiProviders>
+      </body>
     </html>
   );
 }

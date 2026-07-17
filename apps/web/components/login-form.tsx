@@ -1,7 +1,9 @@
 "use client";
 
-import { Button } from "@base-ui/react/button";
-import { Input } from "@base-ui/react/input";
+import Button from "@mui/material/Button";
+import TextField from "@mui/material/TextField";
+import Alert from "@mui/material/Alert";
+import Stack from "@mui/material/Stack";
 import { FormEvent, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -32,25 +34,23 @@ export function LoginForm() {
   }
 
   return (
-    <form className="form" onSubmit={handleSubmit}>
-      <label className="field" htmlFor="email">
-        Email address
-        <Input
-          className="input"
-          id="email"
-          name="email"
-          type="email"
-          autoComplete="email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          required
-        />
-      </label>
-      {message ? <p className="notice" role="status">{message}</p> : null}
-      {error ? <p className="error" role="alert">{error}</p> : null}
-      <Button className="button" type="submit" disabled={loading} focusableWhenDisabled>
+    <Stack component="form" sx={{ gap: 2.5, maxWidth: 480, mt: 3 }} onSubmit={handleSubmit}>
+      <TextField
+        label="Email address"
+        id="email"
+        name="email"
+        type="email"
+        autoComplete="email"
+        value={email}
+        onChange={(event) => setEmail(event.target.value)}
+        required
+        fullWidth
+      />
+      {message ? <Alert severity="success" role="status">{message}</Alert> : null}
+      {error ? <Alert severity="error" role="alert">{error}</Alert> : null}
+      <Button variant="contained" type="submit" disabled={loading}>
         {loading ? "Sending link…" : "Email me a sign-in link"}
       </Button>
-    </form>
+    </Stack>
   );
 }

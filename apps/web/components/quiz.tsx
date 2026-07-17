@@ -1,6 +1,19 @@
 "use client";
 
 import { useState } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import Box from "@mui/material/Box";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
+import Paper from "@mui/material/Paper";
+import Radio from "@mui/material/Radio";
+import Checkbox from "@mui/material/Checkbox";
+import TextField from "@mui/material/TextField";
+import Button from "@mui/material/Button";
+import Alert from "@mui/material/Alert";
+import Avatar from "@mui/material/Avatar";
+import Divider from "@mui/material/Divider";
+import { alpha } from "@mui/material/styles";
 import { QuizAnswerRequest, QuizGradeResponse, QuizItemPreview, answerQuizItem } from "@/lib/api";
 import { MarkdownText } from "@/components/markdown-text";
 import { createClient } from "@/lib/supabase/client";
@@ -72,108 +85,150 @@ export function QuizQuestion({ courseId, slug, item, index, maxAttempts = DEFAUL
   }
 
   return (
-    <div className="quiz-question" data-answered={answered || undefined} data-correct={grade?.correct || undefined}>
-      <div className="quiz-question-header">
-        <span className="quiz-question-number">{index + 1}</span>
-        <MarkdownText>{item.prompt_markdown}</MarkdownText>
-      </div>
+    <Paper
+      variant="outlined"
+      sx={{
+        p: 2,
+        display: "grid",
+        gap: 1.5,
+        borderLeft: answered ? 3 : 1,
+        borderLeftColor: answered ? (grade.correct ? "success.main" : "error.main") : "divider"
+      }}
+    >
+      <Stack direction="row" sx={{ gap: 1.25, alignItems: "baseline" }}>
+        <Avatar sx={{ width: 22, height: 22, fontSize: "0.78rem", fontWeight: 700, bgcolor: "action.hover", color: "text.primary" }}>
+          {index + 1}
+        </Avatar>
+        <Box sx={{ flex: 1 }}><MarkdownText>{item.prompt_markdown}</MarkdownText></Box>
+      </Stack>
 
       {isChoice ? (
-        <div className="quiz-options" role="group">
+        <Stack role="group" sx={{ gap: 0.75 }}>
           {item.options.map((option, optionIndex) => {
             const optionGrade = grade?.options[optionIndex];
             const isSelected = selected.includes(optionIndex);
+            const isIncorrect = Boolean(answered && isSelected && optionGrade && !optionGrade.correct);
+            const isCorrect = Boolean(optionGrade?.correct);
             return (
-              <label
-                className="quiz-option"
-                data-selected={isSelected || undefined}
-                data-correct={optionGrade?.correct || undefined}
-                data-incorrect={answered && isSelected && optionGrade && !optionGrade.correct ? true : undefined}
+              <Paper
                 key={optionIndex}
+                variant="outlined"
+                component="label"
+                sx={{
+                  display: "flex",
+                  gap: 1.25,
+                  alignItems: "flex-start",
+                  p: "6px 10px",
+                  cursor: answered || exhausted ? "default" : "pointer",
+                  borderColor: isCorrect ? "success.main" : isIncorrect ? "error.main" : isSelected ? "text.primary" : "divider",
+                  bgcolor: (theme) =>
+                    isCorrect
+                      ? alpha(theme.palette.success.main, 0.08)
+                      : isIncorrect
+                        ? alpha(theme.palette.error.main, 0.08)
+                        : "transparent"
+                }}
               >
-                <input
-                  type={item.kind === "mcq" ? "radio" : "checkbox"}
-                  name={`quiz-${item.id}`}
-                  checked={isSelected}
-                  disabled={answered || exhausted}
-                  onChange={() => toggleOption(optionIndex)}
-                />
-                <span className="quiz-option-body">
-                  <span>{option.text}</span>
+                {item.kind === "mcq" ? (
+                  <Radio
+                    checked={isSelected}
+                    disabled={answered || exhausted}
+                    onChange={() => toggleOption(optionIndex)}
+                    size="small"
+                    sx={{ p: 0, mt: "2px" }}
+                  />
+                ) : (
+                  <Checkbox
+                    checked={isSelected}
+                    disabled={answered || exhausted}
+                    onChange={() => toggleOption(optionIndex)}
+                    size="small"
+                    sx={{ p: 0, mt: "2px" }}
+                  />
+                )}
+                <Box sx={{ display: "grid", gap: 0.5 }}>
+                  <Typography variant="body2">{option.text}</Typography>
                   {answered && optionGrade && (isSelected || optionGrade.correct) ? (
-                    <span className="quiz-option-explanation muted">{optionGrade.explanation_markdown}</span>
+                    <Typography variant="caption" color="text.secondary">{optionGrade.explanation_markdown}</Typography>
                   ) : null}
-                </span>
-              </label>
+                </Box>
+              </Paper>
             );
           })}
-          {item.kind === "multi_select" ? <p className="muted quiz-kind-note">Select every answer that applies.</p> : null}
-        </div>
+          {item.kind === "multi_select" ? <Typography variant="body2" color="text.secondary">Select every answer that applies.</Typography> : null}
+        </Stack>
       ) : item.kind === "fill" ? (
-        <input
-          className="quiz-text-input"
-          type="text"
-          value={text}
+        <TextField
+          size="small"
           placeholder="Your answer"
+          value={text}
           disabled={answered || exhausted}
           onChange={(event) => setText(event.target.value)}
           onKeyDown={(event) => { if (event.key === "Enter") void handleSubmit(); }}
         />
       ) : (
-        <textarea
-          className="quiz-text-input quiz-textarea"
+        <TextField
+          multiline
           rows={4}
-          value={text}
           placeholder="Write a short answer in your own words…"
+          value={text}
           disabled={answered || exhausted}
           onChange={(event) => setText(event.target.value)}
         />
       )}
 
-      {error ? <p className="error">{error}</p> : null}
+      {error ? <Alert severity="error">{error}</Alert> : null}
 
       {exhausted ? (
-        <p className="muted">No attempts remaining.</p>
+        <Typography color="text.secondary">No attempts remaining.</Typography>
       ) : !answered ? (
-        <div className="quiz-actions">
-          <button className="button button-secondary" type="button" onClick={handleSubmit} disabled={!answer || submitting}>
+        <Box>
+          <Button variant="outlined" onClick={handleSubmit} disabled={!answer || submitting}>
             {submitting ? "Checking…" : "Check answer"}
-          </button>
-        </div>
+          </Button>
+        </Box>
       ) : (
-        <div className={`quiz-result ${grade.correct ? "passed" : "failed"}`}>
-          <strong>{grade.correct ? "Correct" : "Not quite"}</strong>
-          {grade.feedback_markdown ? <MarkdownText>{grade.feedback_markdown}</MarkdownText> : null}
-          {!grade.correct && grade.correct_answers.length > 0 ? (
-            <p>Accepted answer{grade.correct_answers.length > 1 ? "s" : ""}: {grade.correct_answers.join(", ")}</p>
-          ) : null}
-          <MarkdownText>{grade.explanation_markdown}</MarkdownText>
-          {!grade.correct ? (
-            canRetry ? (
-              <div className="quiz-actions">
-                <button className="button button-secondary" type="button" onClick={handleRetry}>
-                  Try again ({attemptsRemaining} attempt{attemptsRemaining === 1 ? "" : "s"} left)
-                </button>
-              </div>
-            ) : (
-              <p className="muted">No attempts remaining.</p>
-            )
-          ) : null}
-        </div>
+        <AnimatePresence>
+          <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
+            <Alert severity={grade.correct ? "success" : "error"} sx={{ display: "grid", gap: 1 }}>
+              <Typography sx={{ fontWeight: 700 }}>{grade.correct ? "Correct" : "Not quite"}</Typography>
+              {grade.feedback_markdown ? <MarkdownText>{grade.feedback_markdown}</MarkdownText> : null}
+              {!grade.correct && grade.correct_answers.length > 0 ? (
+                <Typography variant="body2">Accepted answer{grade.correct_answers.length > 1 ? "s" : ""}: {grade.correct_answers.join(", ")}</Typography>
+              ) : null}
+              <MarkdownText>{grade.explanation_markdown}</MarkdownText>
+              {!grade.correct ? (
+                canRetry ? (
+                  <Box>
+                    <Button variant="outlined" size="small" onClick={handleRetry}>
+                      Try again ({attemptsRemaining} attempt{attemptsRemaining === 1 ? "" : "s"} left)
+                    </Button>
+                  </Box>
+                ) : (
+                  <Typography color="text.secondary">No attempts remaining.</Typography>
+                )
+              ) : null}
+            </Alert>
+          </motion.div>
+        </AnimatePresence>
       )}
-    </div>
+    </Paper>
   );
 }
 
 export function QuizSection({ courseId, slug, items, maxAttempts = DEFAULT_MAX_ATTEMPTS }: { courseId: string; slug: string; items?: QuizItemPreview[]; maxAttempts?: number }) {
   if (!items?.length) return null;
   return (
-    <section className="quiz-section">
-      <div className="lesson-content-divider"><span>Mastery check</span></div>
-      <p className="muted quiz-mastery-note">Up to {maxAttempts} attempts per question: show what you&apos;ve learned.</p>
+    <Stack component="section" sx={{ gap: 2 }}>
+      <Divider textAlign="left">
+        <Typography variant="overline" color="text.secondary">Mastery check</Typography>
+      </Divider>
+      <Typography variant="body2" color="text.secondary" sx={{ mt: -1 }}>
+        Up to {maxAttempts} attempts per question: show what you&apos;ve learned.
+      </Typography>
       {items.map((item, index) => (
         <QuizQuestion courseId={courseId} slug={slug} item={item} index={index} maxAttempts={maxAttempts} key={item.id} />
       ))}
-    </section>
+    </Stack>
   );
 }

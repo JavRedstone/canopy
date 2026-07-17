@@ -1,4 +1,6 @@
 import Link from "next/link";
+import MuiBreadcrumbs from "@mui/material/Breadcrumbs";
+import Typography from "@mui/material/Typography";
 
 interface BreadcrumbItem {
   label: string;
@@ -7,13 +9,18 @@ interface BreadcrumbItem {
 
 export function Breadcrumbs({ items }: { items: BreadcrumbItem[] }) {
   return (
-    <nav className="breadcrumbs" aria-label="Breadcrumb">
-      {items.map((item, index) => (
-        <span className="breadcrumb-item" key={index}>
-          {item.href ? <Link href={item.href}>{item.label}</Link> : <span className="breadcrumb-current">{item.label}</span>}
-          {index < items.length - 1 ? <span className="breadcrumb-separator">/</span> : null}
-        </span>
-      ))}
-    </nav>
+    <MuiBreadcrumbs aria-label="Breadcrumb" separator="/" sx={{ mb: 2, fontSize: "0.85rem" }}>
+      {items.map((item, index) =>
+        item.href ? (
+          <Link key={index} href={item.href} style={{ color: "inherit", textDecoration: "none" }}>
+            {item.label}
+          </Link>
+        ) : (
+          <Typography key={index} sx={{ fontWeight: 600, fontSize: "inherit" }} color="text.primary">
+            {item.label}
+          </Typography>
+        )
+      )}
+    </MuiBreadcrumbs>
   );
 }

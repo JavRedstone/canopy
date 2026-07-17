@@ -3,7 +3,26 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Accordion } from "@base-ui/react/accordion";
+import { motion } from "motion/react";
+import Box from "@mui/material/Box";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
+import Accordion from "@mui/material/Accordion";
+import AccordionSummary from "@mui/material/AccordionSummary";
+import AccordionDetails from "@mui/material/AccordionDetails";
+import List from "@mui/material/List";
+import ListItemButton from "@mui/material/ListItemButton";
+import ListItemIcon from "@mui/material/ListItemIcon";
+import ListItemText from "@mui/material/ListItemText";
+import Chip from "@mui/material/Chip";
+import CircularProgress from "@mui/material/CircularProgress";
+import Alert from "@mui/material/Alert";
+import Dialog from "@mui/material/Dialog";
+import DialogTitle from "@mui/material/DialogTitle";
+import DialogContent from "@mui/material/DialogContent";
+import DialogContentText from "@mui/material/DialogContentText";
+import DialogActions from "@mui/material/DialogActions";
+import Button from "@mui/material/Button";
 import { CourseMapResponse, CoursePointsResponse, CourseProgressResponse, CourseSummary, deleteCourse, getCourse, getCourseMap, getCoursePoints, getCourseProgress, regenerateCourse } from "@/lib/api";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { CourseCategoryBadge } from "@/components/course-category-badge";
@@ -30,6 +49,7 @@ export function CourseDetail({ courseId }: { courseId: string }) {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string>();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const fullLoadRef = useRef<() => Promise<void>>(async () => {});
   const progressRefreshRef = useRef<() => Promise<void>>(async () => {});
   const pollCountRef = useRef(0);
@@ -122,7 +142,7 @@ export function CourseDetail({ courseId }: { courseId: string }) {
 
   async function handleDelete() {
     if (!course) return;
-    if (!window.confirm(`Delete "${course.title}"? This removes the course and all of its lessons and progress. This cannot be undone.`)) return;
+    setConfirmDeleteOpen(false);
     setDeleting(true);
     setDeleteError(undefined);
     try {
@@ -137,95 +157,130 @@ export function CourseDetail({ courseId }: { courseId: string }) {
     }
   }
 
-  if (state === "loading") return <p className="muted">Loading course…</p>;
-  if (state === "error") return <p className="error">{errorMessage ?? "We could not load this course."}</p>;
+  if (state === "loading") {
+    return (
+      <Stack direction="row" sx={{ alignItems: "center", gap: 1.5, color: "text.secondary" }}>
+        <CircularProgress size={18} /> <Typography>Loading course…</Typography>
+      </Stack>
+    );
+  }
+  if (state === "error") return <Alert severity="error">{errorMessage ?? "We could not load this course."}</Alert>;
   if (!course || !progress || !map) return null;
 
   const settingsActions: SettingsMenuAction[] = [
     { label: "Modify", icon: "edit", onClick: () => setSettingsOpen(true), disabled: regenerating || deleting },
     { label: regenerating ? "Regenerating…" : "Regenerate", icon: "refresh", onClick: handleRegenerate, disabled: regenerating || deleting },
-    { label: deleting ? "Deleting…" : "Delete", icon: "delete", onClick: handleDelete, disabled: regenerating || deleting, danger: true },
+    { label: deleting ? "Deleting…" : "Delete", icon: "delete", onClick: () => setConfirmDeleteOpen(true), disabled: regenerating || deleting, danger: true },
   ];
 
   return (
-    <div>
+    <Box>
       <Breadcrumbs items={[{ label: "My courses", href: "/courses" }, { label: course.title }]} />
-      <header className="page-header">
-        <div className="course-row-main">
+      <Stack direction="row" sx={{ alignItems: "flex-start", justifyContent: "space-between", gap: 3, mb: 4 }}>
+        <Stack direction="row" sx={{ alignItems: "center", gap: 1.75, minWidth: 0 }}>
           <CourseCategoryBadge title={course.title} goal={course.goal} />
-          <div>
-            <span className="eyebrow">{course.status}</span>
-            <h1>{course.title}</h1>
-            <p className="muted">{course.goal}</p>
-          </div>
-        </div>
-        <div className="page-header-actions">
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="overline" color="text.secondary">{course.status}</Typography>
+            <Typography variant="h4" sx={{ letterSpacing: "-0.02em", my: 0.25 }}>{course.title}</Typography>
+            <Typography color="text.secondary">{course.goal}</Typography>
+          </Box>
+        </Stack>
+        <Stack direction="row" sx={{ alignItems: "center", gap: 1, flexShrink: 0 }}>
           {points && points.points_total > 0 ? (
-            <span className="points-badge" title={`${points.points_per_lesson} points per lesson`}>
-              <Icon name="star" /> {points.points_earned} / {points.points_total} pts
-            </span>
+            <Chip
+              icon={<Icon name="star" />}
+              label={`${points.points_earned} / ${points.points_total} pts`}
+              title={`${points.points_per_lesson} points per lesson`}
+              variant="outlined"
+            />
           ) : null}
           <SettingsMenu actions={settingsActions} label="Course settings" />
-        </div>
-      </header>
+        </Stack>
+      </Stack>
 
       <CourseSettingsDialog course={course} open={settingsOpen} onOpenChange={setSettingsOpen} onSaved={setCourse} />
 
+      <Dialog open={confirmDeleteOpen} onClose={() => setConfirmDeleteOpen(false)}>
+        <DialogTitle>Delete course?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Delete &quot;{course.title}&quot;? This removes the course and all of its lessons and progress. This cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button variant="text" onClick={() => setConfirmDeleteOpen(false)}>Cancel</Button>
+          <Button variant="contained" color="error" onClick={handleDelete}>Delete</Button>
+        </DialogActions>
+      </Dialog>
+
       {progress.stage !== "ready" ? <CourseProgressSteps progress={progress} onResume={handleRegenerate} /> : null}
-      {refreshError ? <p className="error">{refreshError} Retrying automatically…</p> : null}
-      {deleteError ? <p className="error">{deleteError}</p> : null}
+      {refreshError ? <Alert severity="error" sx={{ mb: 2 }}>{refreshError} Retrying automatically…</Alert> : null}
+      {deleteError ? <Alert severity="error" sx={{ mb: 2 }}>{deleteError}</Alert> : null}
 
       {map.modules.length === 0 ? (
-        progress.stage === "ready" ? <p className="muted">This course has no modules yet.</p> : null
+        progress.stage === "ready" ? <Typography color="text.secondary">This course has no modules yet.</Typography> : null
       ) : (
-        <Accordion.Root className="module-list">
-          {map.modules.map((module) => (
-            <Accordion.Item className="module-block" value={module.position} key={module.position}>
-              <Accordion.Header>
-                <Accordion.Trigger className="module-trigger">
-                  <span className="module-title">
-                    {module.position}. {module.title}
-                  </span>
-                  <span className="module-trigger-meta">
-                    <span className="muted">
-                      {module.concepts.length === 0
-                        ? <span className="course-status-building"><span className="spinner" aria-hidden="true" /> Generating…</span>
-                        : `${module.concepts.length} concept${module.concepts.length === 1 ? "" : "s"}`}
-                    </span>
-                    <Icon name="expand_more" className="module-trigger-chevron" />
-                  </span>
-                </Accordion.Trigger>
-              </Accordion.Header>
-              <Accordion.Panel className="module-panel">
-                {module.concepts.length === 0 ? (
-                  <p className="muted course-status-building"><span className="spinner" aria-hidden="true" /> Generating concepts…</p>
-                ) : (
-                  <div className="course-list">
-                    {module.concepts.map((concept) => (
-                      <Link className="course-row" href={`/courses/${courseId}/concepts/${concept.slug}`} key={concept.slug}>
-                        <div className="course-row-main">
-                          <span className="concept-kind-badge">
-                            <Icon name={conceptKindIcon(concept.kind)} />
-                          </span>
-                          <div>
-                            <h3>{concept.title}</h3>
-                            <p className="muted">{concept.summary_markdown}</p>
-                          </div>
-                        </div>
-                        {progress.current_lesson_title === concept.title ? (
-                          <span className="course-status course-status-building"><span className="spinner" aria-hidden="true" /> Building…</span>
-                        ) : (
-                          <span className="course-status">{concept.kind}</span>
-                        )}
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </Accordion.Panel>
-            </Accordion.Item>
+        <Stack sx={{ gap: 1.25 }}>
+          {map.modules.map((module, index) => (
+            <motion.div
+              key={module.position}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25, delay: Math.min(index * 0.04, 0.3) }}
+            >
+              <Accordion disableGutters>
+                <AccordionSummary expandIcon={<Icon name="expand_more" />}>
+                  <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", width: "100%", pr: 1 }}>
+                    <Typography sx={{ fontWeight: 700 }}>
+                      {module.position}. {module.title}
+                    </Typography>
+                    {module.concepts.length === 0 ? (
+                      <Stack direction="row" sx={{ alignItems: "center", gap: 0.75, color: "text.secondary", fontSize: "0.85rem" }}>
+                        <CircularProgress size={14} /> Generating…
+                      </Stack>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        {module.concepts.length} concept{module.concepts.length === 1 ? "" : "s"}
+                      </Typography>
+                    )}
+                  </Stack>
+                </AccordionSummary>
+                <AccordionDetails>
+                  {module.concepts.length === 0 ? (
+                    <Stack direction="row" sx={{ alignItems: "center", gap: 1, color: "text.secondary" }}>
+                      <CircularProgress size={16} /> <Typography>Generating concepts…</Typography>
+                    </Stack>
+                  ) : (
+                    <List disablePadding sx={{ display: "grid", gap: 1 }}>
+                      {module.concepts.map((concept) => {
+                        const building = progress.current_lesson_title === concept.title;
+                        return (
+                          <ListItemButton
+                            key={concept.slug}
+                            component={Link}
+                            href={`/courses/${courseId}/concepts/${concept.slug}`}
+                            sx={{ border: 1, borderColor: "divider", borderRadius: 1.5 }}
+                          >
+                            <ListItemIcon sx={{ minWidth: 44 }}>
+                              <Icon name={conceptKindIcon(concept.kind)} />
+                            </ListItemIcon>
+                            <ListItemText primary={concept.title} secondary={concept.summary_markdown} />
+                            {building ? (
+                              <Chip size="small" icon={<CircularProgress size={12} sx={{ color: "inherit" }} />} label="Building…" />
+                            ) : (
+                              <Chip size="small" label={concept.kind} sx={{ textTransform: "capitalize" }} />
+                            )}
+                          </ListItemButton>
+                        );
+                      })}
+                    </List>
+                  )}
+                </AccordionDetails>
+              </Accordion>
+            </motion.div>
           ))}
-        </Accordion.Root>
+        </Stack>
       )}
-    </div>
+    </Box>
   );
 }

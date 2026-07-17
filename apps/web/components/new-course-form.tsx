@@ -1,11 +1,21 @@
 "use client";
 
-import { Button } from "@base-ui/react/button";
-import { Input } from "@base-ui/react/input";
-import { Tabs } from "@base-ui/react/tabs";
-import { FormEvent, useState } from "react";
-import { Slider } from "@base-ui/react/slider";
+import { FormEvent, SyntheticEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import Stack from "@mui/material/Stack";
+import Box from "@mui/material/Box";
+import TextField from "@mui/material/TextField";
+import Button from "@mui/material/Button";
+import Typography from "@mui/material/Typography";
+import Slider from "@mui/material/Slider";
+import Tabs from "@mui/material/Tabs";
+import Tab from "@mui/material/Tab";
+import Alert from "@mui/material/Alert";
+import List from "@mui/material/List";
+import ListItem from "@mui/material/ListItem";
+import ListItemText from "@mui/material/ListItemText";
+import IconButton from "@mui/material/IconButton";
+import { Icon } from "@/components/icon";
 import { createClient } from "@/lib/supabase/client";
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -54,6 +64,7 @@ export function NewCourseForm() {
   const [lessonMin, setLessonMin] = useState(3);
   const [lessonMax, setLessonMax] = useState(6);
   const [quizMaxAttempts, setQuizMaxAttempts] = useState(3);
+  const [sourceTab, setSourceTab] = useState<"file" | "text">("file");
   const [error, setError] = useState<string>();
   const [progress, setProgress] = useState<string>();
   const [loading, setLoading] = useState(false);
@@ -73,6 +84,15 @@ export function NewCourseForm() {
 
   function removeSource(id: string) {
     setSources((current) => current.filter((source) => source.id !== id));
+  }
+
+  function handleLessonRangeChange(_event: Event, value: number | number[]) {
+    if (!Array.isArray(value)) return;
+    const [min, max] = value;
+    // Base UI's Slider had `minStepsBetweenValues={1}` to keep the two thumbs from
+    // colliding; MUI's Slider has no direct equivalent, so clamp here instead.
+    setLessonMin(Math.min(min, max - 1));
+    setLessonMax(Math.max(max, min + 1));
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -120,80 +140,112 @@ export function NewCourseForm() {
   }
 
   return (
-    <form className="form" onSubmit={handleSubmit}>
-      <label className="field" htmlFor="course-title">Course title<Input className="input" id="course-title" value={title} onChange={(event) => setTitle(event.target.value)} autoComplete="off" required /></label>
-      <label className="field" htmlFor="course-goal">What do you want to learn?<textarea className="input" id="course-goal" rows={4} value={goal} onChange={(event) => setGoal(event.target.value)} autoComplete="off" required /></label>
-      <div className="field">
-        <span>Lesson range <strong>{lessonMin}–{lessonMax} lessons</strong></span>
-        <Slider.Root className="lesson-range" min={1} max={24} minStepsBetweenValues={1} value={[lessonMin, lessonMax]} onValueChange={(value) => { setLessonMin(value[0]); setLessonMax(value[1]); }}>
-          <Slider.Control className="lesson-range-control">
-            <Slider.Track className="lesson-range-track"><Slider.Indicator className="lesson-range-indicator" /></Slider.Track>
-            <Slider.Thumb className="lesson-range-thumb" index={0} getAriaLabel={() => "Minimum lessons"} />
-            <Slider.Thumb className="lesson-range-thumb" index={1} getAriaLabel={() => "Maximum lessons"} />
-          </Slider.Control>
-        </Slider.Root>
-        <div className="lesson-range-labels"><span>Quick<br />1 lesson</span><span>Deep dive<br />24 lessons</span></div>
-        <span className="muted">Drag either handle to choose the course depth.</span>
-      </div>
+    <Stack component="form" sx={{ gap: 3, maxWidth: 560, mt: 3 }} onSubmit={handleSubmit}>
+      <TextField label="Course title" id="course-title" value={title} onChange={(event) => setTitle(event.target.value)} autoComplete="off" required fullWidth />
+      <TextField
+        label="What do you want to learn?"
+        id="course-goal"
+        multiline
+        rows={4}
+        value={goal}
+        onChange={(event) => setGoal(event.target.value)}
+        autoComplete="off"
+        required
+        fullWidth
+      />
 
-      <label className="field" htmlFor="quiz-max-attempts">
-        Quiz attempts per question
-        <Input
-          className="input"
-          id="quiz-max-attempts"
-          type="number"
+      <Box>
+        <Typography gutterBottom>
+          Lesson range <Typography component="span" sx={{ fontWeight: 700 }}>{lessonMin}–{lessonMax} lessons</Typography>
+        </Typography>
+        <Slider
+          value={[lessonMin, lessonMax]}
+          onChange={handleLessonRangeChange}
           min={1}
-          max={10}
-          value={quizMaxAttempts}
-          onChange={(event) => setQuizMaxAttempts(Math.max(1, Math.min(10, Number(event.target.value) || 1)))}
+          max={24}
+          step={1}
+          disableSwap
+          getAriaLabel={(index) => (index === 0 ? "Minimum lessons" : "Maximum lessons")}
+          sx={{ mt: 2 }}
         />
-        <span className="muted">How many tries a learner gets on each mastery-check question before it locks. Default 3.</span>
-      </label>
+        <Stack direction="row" sx={{ justifyContent: "space-between", color: "text.secondary", fontSize: "0.75rem" }}>
+          <span>Quick<br />1 lesson</span>
+          <span>Deep dive<br />24 lessons</span>
+        </Stack>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>Drag either handle to choose the course depth.</Typography>
+      </Box>
+
+      <TextField
+        label="Quiz attempts per question"
+        id="quiz-max-attempts"
+        type="number"
+        slotProps={{ htmlInput: { min: 1, max: 10 } }}
+        value={quizMaxAttempts}
+        onChange={(event) => setQuizMaxAttempts(Math.max(1, Math.min(10, Number(event.target.value) || 1)))}
+        helperText="How many tries a learner gets on each mastery-check question before it locks. Default 3."
+        fullWidth
+      />
 
       {sources.length > 0 ? (
-        <div className="field">
-          <span>Sources added</span>
-          <div className="source-list">
+        <Box>
+          <Typography gutterBottom>Sources added</Typography>
+          <List disablePadding sx={{ display: "grid", gap: 1 }}>
             {sources.map((source) => (
-              <div className="source-row" key={source.id}>
-                <span>{pendingSourceLabel(source)}</span>
-                <Button className="button button-secondary button-small" type="button" onClick={() => removeSource(source.id)}>Remove</Button>
-              </div>
+              <ListItem
+                key={source.id}
+                sx={{ border: 1, borderColor: "divider", borderRadius: 1.5 }}
+                secondaryAction={
+                  <IconButton edge="end" aria-label="Remove source" onClick={() => removeSource(source.id)}>
+                    <Icon name="close" />
+                  </IconButton>
+                }
+              >
+                <ListItemText primary={pendingSourceLabel(source)} />
+              </ListItem>
             ))}
-          </div>
-        </div>
+          </List>
+        </Box>
       ) : null}
 
-      <div className="field">
-        <span>Add sources (optional)</span>
-        <Tabs.Root className="tabs" defaultValue="file">
-          <Tabs.List className="tabs-list">
-            <Tabs.Tab className="tabs-tab" value="file">Upload file</Tabs.Tab>
-            <Tabs.Tab className="tabs-tab" value="text">Paste text</Tabs.Tab>
-          </Tabs.List>
-          <Tabs.Panel className="tabs-panel" value="file">
-            <div className="file-picker">
-              <label className="button button-secondary" htmlFor="source-file">Choose file</label>
-              <span className="file-picker-name">PDF, Markdown, or text, up to 6 MB</span>
-            </div>
-            <input
-              className="visually-hidden"
-              id="source-file"
-              type="file"
-              accept=".pdf,.md,.txt,text/plain,application/pdf,text/markdown"
-              onChange={(event) => { addFileSource(event.target.files?.[0]); event.target.value = ""; }}
+      <Box>
+        <Typography gutterBottom>Add sources (optional)</Typography>
+        <Tabs value={sourceTab} onChange={(_event: SyntheticEvent, value: "file" | "text") => setSourceTab(value)}>
+          <Tab value="file" label="Upload file" />
+          <Tab value="text" label="Paste text" />
+        </Tabs>
+        {sourceTab === "file" ? (
+          <Stack direction="row" sx={{ alignItems: "center", gap: 1.5, mt: 2 }}>
+            <Button variant="outlined" component="label">
+              Choose file
+              <input
+                hidden
+                id="source-file"
+                type="file"
+                accept=".pdf,.md,.txt,text/plain,application/pdf,text/markdown"
+                onChange={(event) => { addFileSource(event.target.files?.[0]); event.target.value = ""; }}
+              />
+            </Button>
+            <Typography variant="body2" color="text.secondary">PDF, Markdown, or text, up to 6 MB</Typography>
+          </Stack>
+        ) : (
+          <Stack sx={{ gap: 1.5, mt: 2 }}>
+            <TextField
+              multiline
+              rows={4}
+              placeholder="Paste notes, documentation, or any technical text here…"
+              value={noteContent}
+              onChange={(event) => setNoteContent(event.target.value)}
+              autoComplete="off"
+              fullWidth
             />
-          </Tabs.Panel>
-          <Tabs.Panel className="tabs-panel" value="text">
-            <textarea className="input" rows={4} placeholder="Paste notes, documentation, or any technical text here…" value={noteContent} onChange={(event) => setNoteContent(event.target.value)} autoComplete="off" />
-            <Button className="button button-secondary" type="button" onClick={addTextSource}>Add as source</Button>
-          </Tabs.Panel>
-        </Tabs.Root>
-      </div>
+            <Button variant="outlined" type="button" onClick={addTextSource} sx={{ alignSelf: "flex-start" }}>Add as source</Button>
+          </Stack>
+        )}
+      </Box>
 
-      {progress ? <p className="notice" role="status">{progress}</p> : null}
-      {error ? <p className="error" role="alert">{error}</p> : null}
-      <Button className="button" type="submit" disabled={loading} focusableWhenDisabled>{loading ? "Creating course…" : "Create course"}</Button>
-    </form>
+      {progress ? <Alert severity="info" role="status">{progress}</Alert> : null}
+      {error ? <Alert severity="error" role="alert">{error}</Alert> : null}
+      <Button variant="contained" type="submit" disabled={loading} size="large">{loading ? "Creating course…" : "Create course"}</Button>
+    </Stack>
   );
 }
