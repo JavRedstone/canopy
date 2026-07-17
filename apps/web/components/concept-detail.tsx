@@ -27,6 +27,7 @@ import Divider from "@mui/material/Divider";
 import Alert from "@mui/material/Alert";
 import CircularProgress from "@mui/material/CircularProgress";
 import Button from "@mui/material/Button";
+import IconButton from "@mui/material/IconButton";
 import Tabs from "@mui/material/Tabs";
 import Tab from "@mui/material/Tab";
 import Collapse from "@mui/material/Collapse";
@@ -172,12 +173,17 @@ function TabDot({ ok }: { ok: boolean }) {
   return <Box component="span" sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: ok ? "success.main" : "error.main", display: "inline-block" }} />;
 }
 
-function CourseOutlineSidebar({ courseId, map, activeSlug }: { courseId: string; map?: CourseMapResponse; activeSlug: string }) {
-  if (!map) return null;
+function CourseOutlineSidebar({ courseId, map, activeSlug, collapsed, onToggle }: { courseId: string; map?: CourseMapResponse; activeSlug: string; collapsed: boolean; onToggle: () => void }) {
   return (
-    <Box component="aside" sx={{ width: 260, flexShrink: 0, maxHeight: "calc(100vh - 32px)", position: "sticky", top: 16, overflowY: "auto", borderRight: 1, borderColor: "divider", bgcolor: "background.paper", p: 1.25 }}>
-      <Typography variant="overline" color="text.secondary" sx={{ px: 1 }}>Course outline</Typography>
-      <List disablePadding sx={{ display: "grid", gap: 1, mt: 0.75 }}>
+    <Box component="aside" sx={{ display: { xs: "none", md: "block" }, position: "fixed", top: 64, bottom: 0, left: 0, zIndex: 2, width: collapsed ? 56 : 280, overflowX: "hidden", overflowY: "auto", borderRight: 1, borderColor: "divider", bgcolor: "background.paper", p: 1.25, transition: (theme) => theme.transitions.create("width", { duration: 180 }) }}>
+      <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", px: collapsed ? 0 : 1, mb: 0.75 }}>
+        {!collapsed ? <Typography variant="overline" color="text.secondary">Course outline</Typography> : null}
+        <IconButton size="small" onClick={onToggle} aria-label={collapsed ? "Expand course outline" : "Collapse course outline"}>
+          <Icon name={collapsed ? "chevron_right" : "chevron_left"} />
+        </IconButton>
+      </Stack>
+      {!collapsed && !map ? <Stack direction="row" sx={{ alignItems: "center", gap: 1, px: 1, color: "text.secondary" }}><CircularProgress size={14} /><Typography variant="body2">Loading outline…</Typography></Stack> : null}
+      {!collapsed && map ? <List disablePadding sx={{ display: "grid", gap: 1 }}>
         {map.modules.map((module) => (
           <Box key={module.position}>
             <Typography variant="caption" color="text.secondary" sx={{ display: "block", px: 1, pb: 0.5 }}>
@@ -197,7 +203,7 @@ function CourseOutlineSidebar({ courseId, map, activeSlug }: { courseId: string;
             ))}
           </Box>
         ))}
-      </List>
+      </List> : null}
     </Box>
   );
 }
@@ -231,6 +237,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
   const [course, setCourse] = useState<CourseSummary>();
   const [concept, setConcept] = useState<ConceptDetailResponse>();
   const [courseMap, setCourseMap] = useState<CourseMapResponse>();
+  const [outlineCollapsed, setOutlineCollapsed] = useState(false);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState<string>();
   const [files, setFiles] = useState<LessonWorkspaceFile[]>([]);
@@ -407,13 +414,14 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
   if (state === "loading") {
     return (
       <PageShell>
-        <Stack direction="row" sx={{ alignItems: "center", gap: 1.5, color: "text.secondary" }}>
+        <CourseOutlineSidebar courseId={courseId} map={courseMap} activeSlug={slug} collapsed={outlineCollapsed} onToggle={() => setOutlineCollapsed((current) => !current)} />
+        <Stack direction="row" sx={{ ml: { md: outlineCollapsed ? "56px" : "280px" }, alignItems: "center", gap: 1.5, color: "text.secondary" }}>
           <CircularProgress size={18} /> <Typography>Loading…</Typography>
         </Stack>
       </PageShell>
     );
   }
-  if (state === "error") return <PageShell><Alert severity="error">{errorMessage ?? "We could not load this concept."}</Alert></PageShell>;
+  if (state === "error") return <PageShell><CourseOutlineSidebar courseId={courseId} map={courseMap} activeSlug={slug} collapsed={outlineCollapsed} onToggle={() => setOutlineCollapsed((current) => !current)} /><Box sx={{ ml: { md: outlineCollapsed ? "56px" : "280px" } }}><Alert severity="error">{errorMessage ?? "We could not load this concept."}</Alert></Box></PageShell>;
   if (!course || !concept) return null;
 
   const breadcrumbs = (
@@ -439,9 +447,10 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
   if (concept.kind !== "coding") {
     return (
       <PageShell>
+        <Box sx={{ ml: { md: outlineCollapsed ? "56px" : "280px" } }}>
         {breadcrumbs}
         <Box sx={{ display: "flex", gap: 3, alignItems: "flex-start" }}>
-        <CourseOutlineSidebar courseId={courseId} map={courseMap} activeSlug={slug} />
+        <CourseOutlineSidebar courseId={courseId} map={courseMap} activeSlug={slug} collapsed={outlineCollapsed} onToggle={() => setOutlineCollapsed((current) => !current)} />
         <Box sx={{ flex: 1, minWidth: 0 }}>
         <Stack direction="row" sx={{ alignItems: "flex-start", justifyContent: "space-between", gap: 3, mb: 4 }}>
           <Stack direction="row" sx={{ alignItems: "center", gap: 1.75 }}>
@@ -496,13 +505,15 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
         </Stack>
         </Box>
         </Box>
+        </Box>
       </PageShell>
     );
   }
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
-      <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", gap: 2, p: "12px 24px", borderBottom: 1, borderColor: "divider", flexShrink: 0 }}>
+      <CourseOutlineSidebar courseId={courseId} map={courseMap} activeSlug={slug} collapsed={outlineCollapsed} onToggle={() => setOutlineCollapsed((current) => !current)} />
+      <Stack direction="row" sx={{ ml: { md: outlineCollapsed ? "56px" : "280px" }, alignItems: "center", justifyContent: "space-between", gap: 2, p: "12px 24px", borderBottom: 1, borderColor: "divider", flexShrink: 0 }}>
         <Stack sx={{ gap: 0.5, minWidth: 0 }}>
           {breadcrumbs}
           <Stack direction="row" sx={{ alignItems: "center", gap: 1.25 }}>
@@ -533,8 +544,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
       {errorMessage ? <Alert severity="error" sx={{ mx: 3, mt: 1.5 }}>{errorMessage}</Alert> : null}
 
       {concept.lesson && concept.lesson.status === "built" ? (
-        <Box sx={{ flex: 1, minHeight: 0, display: "flex" }}>
-          <CourseOutlineSidebar courseId={courseId} map={courseMap} activeSlug={slug} />
+        <Box sx={{ flex: 1, minHeight: 0, display: "flex", pl: { md: outlineCollapsed ? "56px" : "280px" } }}>
           <Box sx={{ width: 420, flexShrink: 0, overflowY: "auto", p: "16px 24px 40px", borderRight: 1, borderColor: "divider", display: "grid", gap: 2, alignContent: "start" }}>
             <Tabs value={instructionsTab} onChange={(_event, value) => setInstructionsTab(value)} sx={{ minHeight: 36, mx: -3, px: 3, borderBottom: 1, borderColor: "divider" }}>
               <Tab value="lesson" label="Lesson" sx={{ minHeight: 36, py: 1, textTransform: "none" }} />
