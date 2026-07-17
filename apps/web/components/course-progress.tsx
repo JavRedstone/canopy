@@ -93,7 +93,7 @@ export function CourseProgressSteps({ progress, onResume }: { progress: CoursePr
       ) : null}
       {stalled && onResume ? (
         <div className="stall-notice">
-          <span>This is taking longer than expected — generation may have stalled.</span>
+          <span>This is taking longer than expected; generation may have stalled.</span>
           <button className="button button-secondary" type="button" onClick={onResume}>Resume generation</button>
         </div>
       ) : null}

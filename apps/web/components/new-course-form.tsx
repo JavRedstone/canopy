@@ -53,6 +53,7 @@ export function NewCourseForm() {
   const [goal, setGoal] = useState("");
   const [lessonMin, setLessonMin] = useState(3);
   const [lessonMax, setLessonMax] = useState(6);
+  const [quizMaxAttempts, setQuizMaxAttempts] = useState(3);
   const [error, setError] = useState<string>();
   const [progress, setProgress] = useState<string>();
   const [loading, setLoading] = useState(false);
@@ -110,7 +111,7 @@ export function NewCourseForm() {
       }
 
       setProgress("Creating your draft course…");
-      const courseResponse = await fetch(`${apiUrl}/api/v1/courses`, { method: "POST", headers, body: JSON.stringify({ title, goal, source_ids: sourceIds, lesson_min: lessonMin, lesson_max: lessonMax }) });
+      const courseResponse = await fetch(`${apiUrl}/api/v1/courses`, { method: "POST", headers, body: JSON.stringify({ title, goal, source_ids: sourceIds, lesson_min: lessonMin, lesson_max: lessonMax, quiz_max_attempts: quizMaxAttempts }) });
       if (!courseResponse.ok) throw new Error("Unable to create your course.");
       router.push("/courses"); router.refresh();
     } catch (caught) {
@@ -134,6 +135,20 @@ export function NewCourseForm() {
         <div className="lesson-range-labels"><span>Quick<br />1 lesson</span><span>Deep dive<br />24 lessons</span></div>
         <span className="muted">Drag either handle to choose the course depth.</span>
       </div>
+
+      <label className="field" htmlFor="quiz-max-attempts">
+        Quiz attempts per question
+        <Input
+          className="input"
+          id="quiz-max-attempts"
+          type="number"
+          min={1}
+          max={10}
+          value={quizMaxAttempts}
+          onChange={(event) => setQuizMaxAttempts(Math.max(1, Math.min(10, Number(event.target.value) || 1)))}
+        />
+        <span className="muted">How many tries a learner gets on each mastery-check question before it locks. Default 3.</span>
+      </label>
 
       {sources.length > 0 ? (
         <div className="field">

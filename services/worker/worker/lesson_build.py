@@ -34,10 +34,17 @@ class LessonBuilder:
         self.openai = openai
         self.sandbox = sandbox
 
-    def build_lesson(self, lesson_definition_id: str) -> None:
-        claim = self.client.rpc("claim_lesson_build", {"p_lesson_definition_id": lesson_definition_id}).execute().data or []
+    def build_lesson(self, lesson_definition_id: str) -> bool:
+        """Returns True once the job is resolved (claimed and finished, or already resolved
+        by someone else) so the caller can archive its queue message. Returns False when
+        another attempt still holds the claim and hasn't gone stale yet -- the message must
+        stay queued so a later redelivery can retry instead of being discarded for good."""
+        claim = self.client.rpc(
+            "claim_lesson_build",
+            {"p_lesson_definition_id": lesson_definition_id, "p_stale_seconds": self.settings.queue_visibility_seconds},
+        ).execute().data or []
         if not claim:
-            return
+            return not self._lesson_still_building(lesson_definition_id)
         claimed = claim[0]
         try:
             if self._concept_kind(claimed) == "conceptual":
@@ -64,6 +71,11 @@ class LessonBuilder:
         except Exception:
             self.client.table("lesson_definitions").update({"build_status": "failed"}).eq("id", lesson_definition_id).execute()
             raise
+        return True
+
+    def _lesson_still_building(self, lesson_definition_id: str) -> bool:
+        rows = self.client.table("lesson_definitions").select("build_status").eq("id", lesson_definition_id).execute().data or []
+        return bool(rows) and rows[0]["build_status"] == "building"
 
     def _concept_kind(self, claimed: dict[str, Any]) -> str:
         kind = claimed.get("concept_kind")

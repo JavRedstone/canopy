@@ -80,10 +80,17 @@ class CoursePlanner:
         self.client = client
         self.openai = openai
 
-    def plan_course(self, course_id: str) -> None:
-        claim = self.client.rpc("claim_course_planning", {"p_course_id": course_id}).execute().data or []
+    def plan_course(self, course_id: str) -> bool:
+        """Returns True once the job is resolved (claimed and finished, or already resolved
+        by someone else) so the caller can archive its queue message. Returns False when
+        another attempt still holds the claim and hasn't gone stale yet -- the message must
+        stay queued so a later redelivery can retry instead of being discarded for good."""
+        claim = self.client.rpc(
+            "claim_course_planning",
+            {"p_course_id": course_id, "p_stale_seconds": self.settings.queue_visibility_seconds},
+        ).execute().data or []
         if not claim:
-            return
+            return not self._course_still_generating(course_id)
         claimed = claim[0]
         course_version_id = claimed["course_version_id"]
         goal = claimed["goal"]
@@ -180,6 +187,15 @@ class CoursePlanner:
         except Exception:
             self.client.table("course_versions").update({"status": "failed"}).eq("id", course_version_id).execute()
             raise
+        return True
+
+    def _course_still_generating(self, course_id: str) -> bool:
+        courses = self.client.table("courses").select("active_version_id").eq("id", course_id).execute().data or []
+        version_id = courses[0]["active_version_id"] if courses else None
+        if not version_id:
+            return False
+        versions = self.client.table("course_versions").select("status").eq("id", version_id).execute().data or []
+        return bool(versions) and versions[0]["status"] == "generating"
 
     def _source_version_ids(self, course_id: str) -> list[str]:
         return course_version_ids(self.client, course_id)

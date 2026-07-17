@@ -21,6 +21,7 @@ class BundleView:
     context_files: list[LessonWorkspaceFile]
     public_test_files: list[LessonWorkspaceFile]
     hidden_test_files: list[LessonWorkspaceFile]
+    solution_files: list[LessonWorkspaceFile]
     hints: list[str]
     worked_examples: list[WorkedExamplePreview]
     quiz_items: list[QuizItemPreview]
@@ -43,6 +44,7 @@ def bundle_view(bundle: dict[str, Any]) -> BundleView:
             context_files=_files([file for file in manifest if file.get("visibility") == "inspectable"]),
             public_test_files=_files(assessment.get("visible_tests")),
             hidden_test_files=_files(assessment.get("hidden_tests")),
+            solution_files=_files(assessment.get("reference_solution_files")),
             hints=assessment.get("hints") or [],
             worked_examples=[
                 WorkedExamplePreview(title=example["title"], body_markdown=example["body_markdown"])
@@ -65,6 +67,7 @@ def bundle_view(bundle: dict[str, Any]) -> BundleView:
         context_files=[],
         public_test_files=_files(bundle.get("public_test_files")),
         hidden_test_files=_files(bundle.get("test_files")),
+        solution_files=[],
         hints=bundle.get("hints") or [],
         worked_examples=[],
         quiz_items=[],

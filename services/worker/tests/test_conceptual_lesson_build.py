@@ -98,7 +98,9 @@ class FakeResponses:
 
 def _builder(responses: FakeResponses) -> LessonBuilder:
     builder = LessonBuilder.__new__(LessonBuilder)
-    builder.settings = SimpleNamespace(builder_model="lesson_build", conceptual_builder_model="concept_regeneration")
+    builder.settings = SimpleNamespace(
+        builder_model="lesson_build", conceptual_builder_model="concept_regeneration", queue_visibility_seconds=300
+    )
     builder.client = FakeClient()
     builder.openai = SimpleNamespace(responses=responses)
     builder.sandbox = ExplodingSandbox()

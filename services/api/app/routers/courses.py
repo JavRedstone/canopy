@@ -8,7 +8,7 @@ from app.llm import LLMGatewayClient
 from app.quiz import grade_quiz_answer
 from app.repository import CourseRepository, get_repository
 from app.sandbox import SandboxError, SandboxFile, SandboxRunnerClient
-from app.schemas import ConceptDetailResponse, CourseMapResponse, CourseProgressResponse, CourseSummary, CreateCourseRequest, QuizAnswerRequest, QuizGradeResponse, RunLessonRequest, RunLessonResponse, RunScriptRequest, RunScriptResponse
+from app.schemas import ConceptDetailResponse, CoursePointsResponse, CourseMapResponse, CourseProgressResponse, CourseSummary, CreateCourseRequest, QuizAnswerRequest, QuizGradeResponse, RunLessonRequest, RunLessonResponse, RunScriptRequest, RunScriptResponse, UpdateCourseRequest
 from app.settings import get_settings
 
 router = APIRouter(prefix="/courses", tags=["courses"])
@@ -56,6 +56,11 @@ def get_course(course_id: UUID, current_user: CurrentUser, repository: Repositor
     return repository.get_course(current_user, course_id)
 
 
+@router.patch("/{course_id}", response_model=CourseSummary)
+def update_course(course_id: UUID, request: UpdateCourseRequest, current_user: CurrentUser, repository: Repository) -> CourseSummary:
+    return repository.update_course(current_user, course_id, request)
+
+
 @router.get("/{course_id}/map", response_model=CourseMapResponse)
 def get_course_map(course_id: UUID, current_user: CurrentUser, repository: Repository) -> CourseMapResponse:
     return repository.course_map(current_user, course_id)
@@ -64,6 +69,11 @@ def get_course_map(course_id: UUID, current_user: CurrentUser, repository: Repos
 @router.get("/{course_id}/progress", response_model=CourseProgressResponse)
 def get_course_progress(course_id: UUID, current_user: CurrentUser, repository: Repository) -> CourseProgressResponse:
     return repository.course_progress(current_user, course_id)
+
+
+@router.get("/{course_id}/points", response_model=CoursePointsResponse)
+def get_course_points(course_id: UUID, current_user: CurrentUser, repository: Repository) -> CoursePointsResponse:
+    return repository.course_points(current_user, course_id)
 
 
 @router.post("/{course_id}/regenerate", response_model=CourseSummary)
@@ -103,6 +113,8 @@ def run_lesson(
         )
     except (SandboxError, ValueError) as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="The exercise runner is unavailable.") from exc
+    if result.passed:
+        repository.complete_coding_lesson(current_user, course_id, slug)
     return RunLessonResponse(passed=result.passed, output=result.output, timed_out=result.timed_out)
 
 
@@ -144,12 +156,19 @@ def answer_quiz_item(
     repository: Repository,
     grader: QuizGrader,
 ) -> QuizGradeResponse:
-    """Grade one quiz response against the bundle's server-side answers and reveal the feedback.
-
-    Stateless for now: responses become durable observations once learner assignments exist.
-    """
+    """Grade one quiz response against the bundle's server-side answers and reveal the
+    feedback, persisting the attempt so it survives a reload and counts against the
+    course's attempt cap."""
     item = repository.quiz_item(current_user, course_id, slug, item_id)
-    return grade_quiz_answer(item, request, grader)
+    max_attempts, attempts_used, already_correct = repository.quiz_progress(current_user, course_id, slug, item_id)
+    if not already_correct and attempts_used >= max_attempts:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No attempts remaining for this question.")
+
+    grade = grade_quiz_answer(item, request, grader)
+    attempts_used = repository.record_quiz_response(current_user, course_id, slug, item_id, request, grade)
+    grade.attempts_used = attempts_used
+    grade.attempts_remaining = max(max_attempts - attempts_used, 0)
+    return grade
 
 
 @router.post("/{course_id}/concepts/{slug}/regenerate", status_code=status.HTTP_202_ACCEPTED)

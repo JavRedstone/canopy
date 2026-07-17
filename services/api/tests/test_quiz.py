@@ -132,13 +132,29 @@ def test_short_answer_gateway_failure_returns_503() -> None:
 
 
 class QuizRepository:
+    """Tracks recorded attempts in memory so tests can assert on the enforcement flow
+    without a real database -- max_attempts is fixed per instance for the test at hand."""
+
+    def __init__(self, max_attempts: int = 3) -> None:
+        self.max_attempts = max_attempts
+        self.responses: list[tuple[str, bool]] = []
+
     def quiz_item(self, owner_id: object, course_id: object, slug: str, item_id: str) -> dict:
         assert item_id == "expiry-check"
         return MCQ_ITEM
 
+    def quiz_progress(self, owner_id: object, course_id: object, slug: str, item_id: str) -> tuple[int, int, bool]:
+        used = [result for recorded_id, result in self.responses if recorded_id == item_id]
+        return self.max_attempts, len(used), any(used)
+
+    def record_quiz_response(self, owner_id: object, course_id: object, slug: str, item_id: str, answer: object, grade: object) -> int:
+        self.responses.append((item_id, grade.correct))
+        return len([recorded_id for recorded_id, _ in self.responses if recorded_id == item_id])
+
 
 def test_answer_endpoint_grades_and_reveals_feedback() -> None:
-    app.dependency_overrides[get_repository] = lambda: QuizRepository()
+    repository = QuizRepository()
+    app.dependency_overrides[get_repository] = lambda: repository
     app.dependency_overrides[get_quiz_grader] = lambda: FakeGrader()
     try:
         response = TestClient(app).post(
@@ -153,3 +169,59 @@ def test_answer_endpoint_grades_and_reveals_feedback() -> None:
     assert body["correct"] is True
     assert body["item_id"] == "expiry-check"
     assert len(body["options"]) == 2
+    assert body["attempts_used"] == 1
+    assert body["attempts_remaining"] == 2
+    assert repository.responses == [("expiry-check", True)]
+
+
+def test_answer_endpoint_reports_attempts_remaining_after_a_wrong_answer() -> None:
+    repository = QuizRepository()
+    app.dependency_overrides[get_repository] = lambda: repository
+    app.dependency_overrides[get_quiz_grader] = lambda: FakeGrader()
+    try:
+        response = TestClient(app).post(
+            f"/api/v1/courses/{uuid4()}/concepts/token-expiry/quiz-items/expiry-check/answer",
+            json={"selected_option_index": 1},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["correct"] is False
+    assert body["attempts_used"] == 1
+    assert body["attempts_remaining"] == 2
+
+
+def test_answer_endpoint_rejects_once_attempts_are_exhausted() -> None:
+    repository = QuizRepository(max_attempts=2)
+    repository.responses = [("expiry-check", False), ("expiry-check", False)]
+    app.dependency_overrides[get_repository] = lambda: repository
+    app.dependency_overrides[get_quiz_grader] = lambda: FakeGrader()
+    try:
+        response = TestClient(app).post(
+            f"/api/v1/courses/{uuid4()}/concepts/token-expiry/quiz-items/expiry-check/answer",
+            json={"selected_option_index": 0},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 403
+    # The rejected attempt must not be recorded as a third attempt.
+    assert repository.responses == [("expiry-check", False), ("expiry-check", False)]
+
+
+def test_answer_endpoint_allows_a_correct_reanswer_even_when_attempts_are_spent() -> None:
+    repository = QuizRepository(max_attempts=1)
+    repository.responses = [("expiry-check", True)]
+    app.dependency_overrides[get_repository] = lambda: repository
+    app.dependency_overrides[get_quiz_grader] = lambda: FakeGrader()
+    try:
+        response = TestClient(app).post(
+            f"/api/v1/courses/{uuid4()}/concepts/token-expiry/quiz-items/expiry-check/answer",
+            json={"selected_option_index": 0},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200

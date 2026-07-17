@@ -42,6 +42,14 @@ class CreateCourseRequest(BaseModel):
     source_ids: list[UUID] = Field(default_factory=list)
     lesson_min: int = Field(default=3, ge=1, le=24)
     lesson_max: int = Field(default=6, ge=1, le=24)
+    quiz_max_attempts: int = Field(default=3, ge=1, le=10)
+
+
+class UpdateCourseRequest(BaseModel):
+    """Fields safe to change without invalidating already-generated content."""
+
+    title: str | None = Field(default=None, min_length=1, max_length=120)
+    quiz_max_attempts: int | None = Field(default=None, ge=1, le=10)
 
 
 class CourseSummary(BaseModel):
@@ -51,6 +59,18 @@ class CourseSummary(BaseModel):
     status: CourseStatus
     active_version: int
     updated_at: datetime
+    quiz_max_attempts: int = 3
+
+
+class CoursePointsResponse(BaseModel):
+    """Mastery points: a fixed award per lesson (coding lab passed, or every quiz item in
+    a mastery check answered correctly) -- a coarse, gamified completion signal, distinct
+    from the continuous BKT mastery estimate in the `mastery` table."""
+
+    course_id: UUID
+    points_earned: int
+    points_total: int
+    points_per_lesson: int
 
 
 class CourseMapConcept(BaseModel):
@@ -105,15 +125,6 @@ class QuizOptionPreview(BaseModel):
 QuizKind = Literal["mcq", "multi_select", "fill", "short_answer"]
 
 
-class QuizItemPreview(BaseModel):
-    """A quiz item with grading fields (correct answers, rubric, explanations) stripped."""
-
-    id: str
-    kind: QuizKind
-    prompt_markdown: str
-    options: list[QuizOptionPreview] = Field(default_factory=list)
-
-
 class QuizAnswerRequest(BaseModel):
     """The learner's response; exactly the field matching the item's kind must be set."""
 
@@ -137,6 +148,24 @@ class QuizGradeResponse(BaseModel):
     options: list[QuizOptionGrade] = Field(default_factory=list)
     correct_answers: list[str] = Field(default_factory=list)
     feedback_markdown: str | None = None
+    attempts_used: int = 0
+    attempts_remaining: int = 0
+
+
+class QuizItemPreview(BaseModel):
+    """A quiz item with grading fields (correct answers, rubric, explanations) stripped,
+    unless the learner already answered it correctly -- previous_answer/previous_grade
+    then replay exactly what they submitted and were shown, so returning to a finished
+    mastery check still reads as the real thing instead of resetting to a blank question."""
+
+    id: str
+    kind: QuizKind
+    prompt_markdown: str
+    options: list[QuizOptionPreview] = Field(default_factory=list)
+    attempts_used: int = 0
+    correct: bool | None = None
+    previous_answer: QuizAnswerRequest | None = None
+    previous_grade: QuizGradeResponse | None = None
 
 
 class LessonPreview(BaseModel):
@@ -146,8 +175,10 @@ class LessonPreview(BaseModel):
     starter_files: list[LessonWorkspaceFile]
     hints: list[str]
     public_test_files: list[LessonWorkspaceFile] = Field(default_factory=list)
+    solution_files: list[LessonWorkspaceFile] = Field(default_factory=list)
     worked_examples: list[WorkedExamplePreview] = Field(default_factory=list)
     quiz_items: list[QuizItemPreview] = Field(default_factory=list)
+    quiz_max_attempts: int = 3
 
 
 class RunLessonRequest(BaseModel):

@@ -191,7 +191,9 @@ def test_solutioned_starter_is_regenerated_until_it_fails_the_tests(monkeypatch:
     monkeypatch.setattr(lesson_build_module, "generate_lesson_bundle", fake_generate)
 
     builder = LessonBuilder.__new__(LessonBuilder)
-    builder.settings = SimpleNamespace(builder_model="test-model", lesson_build_max_attempts=3, lesson_build_max_tool_calls=8)
+    builder.settings = SimpleNamespace(
+        builder_model="test-model", lesson_build_max_attempts=3, lesson_build_max_tool_calls=8, queue_visibility_seconds=300
+    )
     builder.openai = SimpleNamespace()
     # Starter passes on the first bundle (solutioned), fails on the regenerated one,
     # then the reference solution passes its own validation run.
@@ -213,7 +215,7 @@ def test_build_lesson_resets_build_status_to_pending_on_retryable_error(monkeypa
     import worker.lesson_build as lesson_build_module
 
     builder = LessonBuilder.__new__(LessonBuilder)
-    builder.settings = SimpleNamespace(builder_model="test-model")
+    builder.settings = SimpleNamespace(builder_model="test-model", queue_visibility_seconds=300)
     builder.openai = SimpleNamespace()
     builder.sandbox = SimpleNamespace()
     builder.client = ClaimingClient()
@@ -229,3 +231,71 @@ def test_build_lesson_resets_build_status_to_pending_on_retryable_error(monkeypa
         pass
 
     assert builder.client.update_calls == [("lesson_definitions", {"build_status": "pending"})]
+
+
+class StatusQuery:
+    def __init__(self, build_status: str) -> None:
+        self.build_status = build_status
+
+    def select(self, *_args: object, **_kwargs: object) -> "StatusQuery":
+        return self
+
+    def eq(self, *_args: object, **_kwargs: object) -> "StatusQuery":
+        return self
+
+    def execute(self) -> SimpleNamespace:
+        return SimpleNamespace(data=[{"build_status": self.build_status}])
+
+
+class ClaimEmptyClient:
+    """A claim that never matches (the row is already 'building' or 'built'), as happens
+    when a redelivered queue message arrives for a job someone else already claimed."""
+
+    def __init__(self, build_status: str) -> None:
+        self.build_status = build_status
+
+    def rpc(self, function: str, _arguments: dict) -> SimpleNamespace:
+        assert function == "claim_lesson_build"
+        return SimpleNamespace(execute=lambda: SimpleNamespace(data=[]))
+
+    def table(self, name: str) -> StatusQuery:
+        assert name == "lesson_definitions"
+        return StatusQuery(self.build_status)
+
+
+def test_build_lesson_reports_unresolved_when_another_attempt_still_holds_the_claim() -> None:
+    builder = LessonBuilder.__new__(LessonBuilder)
+    builder.settings = SimpleNamespace(queue_visibility_seconds=300)
+    builder.client = ClaimEmptyClient("building")
+
+    assert builder.build_lesson("lesson-id") is False
+
+
+def test_build_lesson_reports_resolved_when_another_attempt_already_finished() -> None:
+    builder = LessonBuilder.__new__(LessonBuilder)
+    builder.settings = SimpleNamespace(queue_visibility_seconds=300)
+    builder.client = ClaimEmptyClient("built")
+
+    assert builder.build_lesson("lesson-id") is True
+
+
+def test_lesson_build_still_in_flight_leaves_job_queued() -> None:
+    worker, _client, queue = _worker()
+    worker.lesson_builder = SimpleNamespace(build_lesson=lambda _id: False)
+
+    worker._handle_generation(
+        QueueMessage(message_id=5, payload={"type": "lesson_build", "lesson_definition_id": "55555555-5555-5555-5555-555555555555"})
+    )
+
+    assert queue.archived == []
+
+
+def test_lesson_build_resolved_elsewhere_archives() -> None:
+    worker, _client, queue = _worker()
+    worker.lesson_builder = SimpleNamespace(build_lesson=lambda _id: True)
+
+    worker._handle_generation(
+        QueueMessage(message_id=6, payload={"type": "lesson_build", "lesson_definition_id": "66666666-6666-6666-6666-666666666666"})
+    )
+
+    assert queue.archived == [("generation", 6)]

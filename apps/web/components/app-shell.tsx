@@ -1,13 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { Icon } from "@/components/icon";
 
 const storageKey = "canopy-sidebar-collapsed";
 
+const SetFullBleedContext = createContext<(fullBleed: boolean) => void>(() => {});
+
+/** Hides the persistent sidebar and lets the page fill the entire viewport while
+ *  `fullBleed` is true (e.g. a coding lab's editor/console workspace) -- reverts
+ *  automatically on unmount or once `fullBleed` goes back to false. */
+export function useFullBleed(fullBleed: boolean) {
+  const setFullBleed = useContext(SetFullBleedContext);
+  useEffect(() => {
+    setFullBleed(fullBleed);
+    return () => setFullBleed(false);
+  }, [fullBleed, setFullBleed]);
+}
+
 export function AppShell({ sidebar, children }: { sidebar: React.ReactNode; children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [fullBleed, setFullBleed] = useState(false);
 
   useEffect(() => {
     // Server always renders expanded (no access to localStorage); flipping this after
@@ -21,19 +35,25 @@ export function AppShell({ sidebar, children }: { sidebar: React.ReactNode; chil
     if (hydrated) localStorage.setItem(storageKey, String(collapsed));
   }, [collapsed, hydrated]);
 
+  const shellClassName = ["app-shell", collapsed && "sidebar-collapsed", fullBleed && "full-bleed"]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <div className={collapsed ? "app-shell sidebar-collapsed" : "app-shell"}>
-      <aside className="sidebar">
-        <button
-          className="sidebar-toggle"
-          onClick={() => setCollapsed((current) => !current)}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        >
-          <Icon name={collapsed ? "chevron_right" : "chevron_left"} />
-        </button>
-        <div className="sidebar-content">{sidebar}</div>
-      </aside>
-      <main className="app-main">{children}</main>
-    </div>
+    <SetFullBleedContext.Provider value={setFullBleed}>
+      <div className={shellClassName}>
+        <aside className="sidebar">
+          <button
+            className="sidebar-toggle"
+            onClick={() => setCollapsed((current) => !current)}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            <Icon name={collapsed ? "chevron_right" : "chevron_left"} />
+          </button>
+          <div className="sidebar-content">{sidebar}</div>
+        </aside>
+        <main className="app-main">{children}</main>
+      </div>
+    </SetFullBleedContext.Provider>
   );
 }

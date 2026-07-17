@@ -5,6 +5,7 @@ export interface CourseSummary {
   status: "draft" | "ready" | "archived";
   active_version: number;
   updated_at: string;
+  quiz_max_attempts: number;
 }
 
 export interface CourseMapConcept {
@@ -79,6 +80,37 @@ export async function getCourseProgress(courseId: string, accessToken: string): 
   return response.json();
 }
 
+export interface CoursePointsResponse {
+  course_id: string;
+  points_earned: number;
+  points_total: number;
+  points_per_lesson: number;
+}
+
+export async function getCoursePoints(courseId: string, accessToken: string): Promise<CoursePointsResponse> {
+  const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/points`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: "no-store"
+  });
+  if (!response.ok) throw new Error(`Unable to load course points (HTTP ${response.status}).`);
+  return response.json();
+}
+
+export interface UpdateCourseRequest {
+  title?: string;
+  quiz_max_attempts?: number;
+}
+
+export async function updateCourse(courseId: string, request: UpdateCourseRequest, accessToken: string): Promise<CourseSummary> {
+  const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(request)
+  });
+  if (!response.ok) throw new Error(`Unable to update the course (HTTP ${response.status}).`);
+  return response.json();
+}
+
 export async function regenerateCourse(courseId: string, accessToken: string): Promise<CourseSummary> {
   const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/regenerate`, {
     method: "POST",
@@ -119,6 +151,10 @@ export interface QuizItemPreview {
   kind: QuizKind;
   prompt_markdown: string;
   options: QuizOptionPreview[];
+  attempts_used: number;
+  correct: boolean | null;
+  previous_answer: QuizAnswerRequest | null;
+  previous_grade: QuizGradeResponse | null;
 }
 
 export interface QuizAnswerRequest {
@@ -140,6 +176,8 @@ export interface QuizGradeResponse {
   options: QuizOptionGrade[];
   correct_answers: string[];
   feedback_markdown: string | null;
+  attempts_used: number;
+  attempts_remaining: number;
 }
 
 export interface LessonPreview {
@@ -149,8 +187,10 @@ export interface LessonPreview {
   starter_files: LessonWorkspaceFile[];
   hints: string[];
   public_test_files: LessonWorkspaceFile[];
+  solution_files: LessonWorkspaceFile[];
   worked_examples: WorkedExamplePreview[];
   quiz_items: QuizItemPreview[];
+  quiz_max_attempts: number;
 }
 
 export interface ConceptDetailResponse {

@@ -125,6 +125,7 @@ def _planner_with(responses: "FakeResponses", chunks: list[dict[str, object]]) -
         embedding_dimensions=3,
         planner_context_chunk_limit=40,
         planner_module_context_chunk_limit=16,
+        queue_visibility_seconds=300,
     )
     worker.client = FakePlanningClient()
     worker.openai = SimpleNamespace(responses=responses)

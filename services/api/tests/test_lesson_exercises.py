@@ -12,6 +12,7 @@ from app.schemas import LessonWorkspaceFile
 class ExerciseRepository:
     def __init__(self) -> None:
         self.regenerated: tuple[object, object, str] | None = None
+        self.completed: tuple[object, object, str] | None = None
 
     def lesson_workspace(
         self, owner_id: object, course_id: object, slug: str
@@ -21,6 +22,9 @@ class ExerciseRepository:
             [LessonWorkspaceFile(path="test_basic.py", content="from solution import add\n\ndef test_add_two_positive_numbers():\n    assert add(1, 2) == 3\n")],
             [LessonWorkspaceFile(path="test_solution.py", content="from solution import add\n\ndef test_add():\n    assert add(1, 2) == 3\n")],
         )
+
+    def complete_coding_lesson(self, owner_id: object, course_id: object, slug: str) -> None:
+        self.completed = (owner_id, course_id, slug)
 
     def regenerate_lesson(self, owner_id: object, course_id: object, slug: str) -> None:
         self.regenerated = (owner_id, course_id, slug)
@@ -62,6 +66,7 @@ def test_run_lesson_uses_private_tests_and_returns_result() -> None:
         ("test_basic.py", "from solution import add\n\ndef test_add_two_positive_numbers():\n    assert add(1, 2) == 3\n"),
         ("test_solution.py", "from solution import add\n\ndef test_add():\n    assert add(1, 2) == 3\n"),
     ]
+    assert repository.completed is not None
 
 
 def test_run_script_executes_arbitrary_code_and_returns_console_output() -> None:

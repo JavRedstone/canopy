@@ -13,12 +13,18 @@ from postgrest.exceptions import APIError
 from supabase import Client
 
 from app.lesson_bundle import bundle_view
-from app.schemas import ConceptDetailResponse, CourseMapConcept, CourseMapModule, CourseMapResponse, CourseProgressResponse, CourseSummary, CreateCourseRequest, CreateSourceRequest, LessonPreview, LessonWorkspaceFile, SourceSummary, SourceUploadTarget
+from app.schemas import ConceptDetailResponse, CoursePointsResponse, CourseMapConcept, CourseMapModule, CourseMapResponse, CourseProgressResponse, CourseSummary, CreateCourseRequest, CreateSourceRequest, LessonPreview, LessonWorkspaceFile, QuizAnswerRequest, QuizGradeResponse, QuizItemPreview, SourceSummary, SourceUploadTarget, UpdateCourseRequest
 from app.settings import get_settings
 from app.supabase import get_service_client
 
 
 logger = logging.getLogger(__name__)
+
+# A fixed award per lesson (a coding lab passed via Submit, or every item in a
+# conceptual lesson's mastery check answered correctly) -- a coarse, gamified
+# completion signal. Not configurable yet; see CourseSummary.quiz_max_attempts for
+# the one course-level knob this pass wires up.
+POINTS_PER_LESSON = 10
 
 
 class CourseRepository(Protocol):
@@ -33,6 +39,8 @@ class CourseRepository(Protocol):
     def list_courses(self, owner_id: UUID) -> list[CourseSummary]: ...
 
     def get_course(self, owner_id: UUID, course_id: UUID) -> CourseSummary: ...
+
+    def update_course(self, owner_id: UUID, course_id: UUID, request: UpdateCourseRequest) -> CourseSummary: ...
 
     def course_map(self, owner_id: UUID, course_id: UUID) -> CourseMapResponse: ...
 
@@ -49,6 +57,25 @@ class CourseRepository(Protocol):
     ) -> tuple[list[LessonWorkspaceFile], list[LessonWorkspaceFile], list[LessonWorkspaceFile]]: ...
 
     def quiz_item(self, owner_id: UUID, course_id: UUID, slug: str, item_id: str) -> dict[str, Any]: ...
+
+    def quiz_progress(self, owner_id: UUID, course_id: UUID, slug: str, item_id: str) -> tuple[int, int, bool]:
+        """Returns (max_attempts, attempts_used, already_correct) for one quiz item,
+        lazily creating the learner's assignment for the lesson's current revision."""
+        ...
+
+    def record_quiz_response(
+        self, owner_id: UUID, course_id: UUID, slug: str, item_id: str, answer: QuizAnswerRequest, grade: QuizGradeResponse
+    ) -> int:
+        """Persists one attempt (answer and full grade reveal) and marks the lesson's
+        assignment completed once every quiz item in it has been answered correctly.
+        Returns the new attempts_used count."""
+        ...
+
+    def complete_coding_lesson(self, owner_id: UUID, course_id: UUID, slug: str) -> None:
+        """Marks a coding lab's assignment completed once its checks pass."""
+        ...
+
+    def course_points(self, owner_id: UUID, course_id: UUID) -> CoursePointsResponse: ...
 
     def regenerate_lesson(self, owner_id: UUID, course_id: UUID, slug: str) -> None: ...
 
@@ -72,6 +99,7 @@ class CourseRecord:
     status: str
     active_version: int
     updated_at: datetime
+    quiz_max_attempts: int = 3
 
 
 class MemoryCourseRepository:
@@ -121,6 +149,7 @@ class MemoryCourseRepository:
             status="draft",
             active_version=1,
             updated_at=now,
+            quiz_max_attempts=request.quiz_max_attempts,
         )
         return self._summary(self.courses[course_id])
 
@@ -130,6 +159,15 @@ class MemoryCourseRepository:
 
     def get_course(self, owner_id: UUID, course_id: UUID) -> CourseSummary:
         return self._summary(self._course_for_owner(owner_id, course_id))
+
+    def update_course(self, owner_id: UUID, course_id: UUID, request: UpdateCourseRequest) -> CourseSummary:
+        course = self._course_for_owner(owner_id, course_id)
+        if request.title is not None:
+            course.title = request.title
+        if request.quiz_max_attempts is not None:
+            course.quiz_max_attempts = request.quiz_max_attempts
+        course.updated_at = datetime.now(UTC)
+        return self._summary(course)
 
     def course_map(self, owner_id: UUID, course_id: UUID) -> CourseMapResponse:
         course = self._course_for_owner(owner_id, course_id)
@@ -191,6 +229,23 @@ class MemoryCourseRepository:
         self._course_for_owner(owner_id, course_id)
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A generated lesson is required before its quiz can be answered.")
 
+    def quiz_progress(self, owner_id: UUID, course_id: UUID, slug: str, item_id: str) -> tuple[int, int, bool]:
+        self._course_for_owner(owner_id, course_id)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A generated lesson is required before its quiz can be answered.")
+
+    def record_quiz_response(
+        self, owner_id: UUID, course_id: UUID, slug: str, item_id: str, answer: QuizAnswerRequest, grade: QuizGradeResponse
+    ) -> int:
+        self._course_for_owner(owner_id, course_id)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A generated lesson is required before its quiz can be answered.")
+
+    def complete_coding_lesson(self, owner_id: UUID, course_id: UUID, slug: str) -> None:
+        self._course_for_owner(owner_id, course_id)
+
+    def course_points(self, owner_id: UUID, course_id: UUID) -> CoursePointsResponse:
+        course = self._course_for_owner(owner_id, course_id)
+        return CoursePointsResponse(course_id=course.id, points_earned=0, points_total=0, points_per_lesson=POINTS_PER_LESSON)
+
     def regenerate_lesson(self, owner_id: UUID, course_id: UUID, slug: str) -> None:
         self._course_for_owner(owner_id, course_id)
         if slug not in {"core-pattern", "robustness"}:
@@ -217,6 +272,7 @@ class MemoryCourseRepository:
             status=course.status,
             active_version=course.active_version,
             updated_at=course.updated_at,
+            quiz_max_attempts=course.quiz_max_attempts,
         )
 
 
@@ -322,6 +378,7 @@ class SupabaseCourseRepository:
                         "source_set_hash": source_set_hash,
                         "lesson_min": request.lesson_min,
                         "lesson_max": request.lesson_max,
+                        "quiz_max_attempts": request.quiz_max_attempts,
                         "status": "draft",
                     }
                 ),
@@ -380,12 +437,13 @@ class SupabaseCourseRepository:
             status="draft",
             active_version=1,
             updated_at=self._timestamp(course_row["updated_at"]),
+            quiz_max_attempts=course_row["quiz_max_attempts"],
         )
 
     def list_courses(self, owner_id: UUID) -> list[CourseSummary]:
         courses = self._data(
             self.client.table("courses")
-            .select("id,title,goal,status,active_version_id,updated_at")
+            .select("id,title,goal,status,active_version_id,updated_at,quiz_max_attempts")
             .eq("owner_id", str(owner_id))
             .order("updated_at", desc=True),
             "list courses",
@@ -397,6 +455,21 @@ class SupabaseCourseRepository:
         course = self._course_for_owner(owner_id, course_id)
         versions = self._versions_for([course["active_version_id"]] if course["active_version_id"] else [])
         return self._summary(course, versions)
+
+    def update_course(self, owner_id: UUID, course_id: UUID, request: UpdateCourseRequest) -> CourseSummary:
+        self._course_for_owner(owner_id, course_id)
+        payload: dict[str, Any] = {}
+        if request.title is not None:
+            payload["title"] = request.title
+        if request.quiz_max_attempts is not None:
+            payload["quiz_max_attempts"] = request.quiz_max_attempts
+        if payload:
+            payload["updated_at"] = datetime.now(UTC).isoformat()
+            self._data(
+                self.client.table("courses").update(payload).eq("id", str(course_id)).eq("owner_id", str(owner_id)),
+                "update course",
+            )
+        return self.get_course(owner_id, course_id)
 
     def course_map(self, owner_id: UUID, course_id: UUID) -> CourseMapResponse:
         course = self._course_for_owner(owner_id, course_id)
@@ -643,18 +716,22 @@ class SupabaseCourseRepository:
         if definition:
             revision_rows = self._data(
                 self.client.table("lesson_revisions")
-                .select("bundle_json")
+                .select("id,bundle_json")
                 .eq("lesson_definition_id", definition["id"])
                 .eq("validation_status", "validated")
                 .order("revision", desc=True)
                 .limit(1),
                 "load lesson revision",
             )
+            revision_id = revision_rows[0]["id"] if revision_rows else None
             bundle = revision_rows[0]["bundle_json"] if revision_rows else None
             view = bundle_view(bundle) if bundle else None
             # Conceptual concepts from courses planned before conceptual bundles existed
             # have a definition but no build and no bundle; they keep the summary-only view.
             if concept["kind"] == "coding" or generation_status is not None or view is not None:
+                quiz_items = view.quiz_items if view else []
+                if quiz_items and revision_id:
+                    quiz_items = self._hydrate_quiz_progress(owner_id, revision_id, quiz_items)
                 lesson = LessonPreview(
                     status=definition["build_status"],
                     title=view.title if view and view.title else concept["title"],
@@ -662,8 +739,10 @@ class SupabaseCourseRepository:
                     starter_files=view.starter_files if view else [],
                     hints=view.hints if view else [],
                     public_test_files=view.public_test_files if view else [],
+                    solution_files=view.solution_files if view else [],
                     worked_examples=view.worked_examples if view else [],
-                    quiz_items=view.quiz_items if view else [],
+                    quiz_items=quiz_items,
+                    quiz_max_attempts=course["quiz_max_attempts"],
                 )
 
         return ConceptDetailResponse(
@@ -685,14 +764,194 @@ class SupabaseCourseRepository:
         return (view.starter_files, view.public_test_files, view.context_files + view.hidden_test_files)
 
     def quiz_item(self, owner_id: UUID, course_id: UUID, slug: str, item_id: str) -> dict[str, Any]:
-        bundle = self._built_lesson_bundle(owner_id, course_id, slug)
+        _definition_id, _revision_id, bundle = self._built_lesson(owner_id, course_id, slug)
         items = (bundle.get("assessment") or {}).get("quiz_items") or []
         item = next((entry for entry in items if entry.get("id") == item_id), None)
         if item is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Quiz item not found.")
         return item
 
-    def _built_lesson_bundle(self, owner_id: UUID, course_id: UUID, slug: str) -> dict[str, Any]:
+    def quiz_progress(self, owner_id: UUID, course_id: UUID, slug: str, item_id: str) -> tuple[int, int, bool]:
+        course = self._course_for_owner(owner_id, course_id)
+        assignment = self._ensure_assignment(owner_id, course_id, slug)
+        responses = self._data(
+            self.client.table("quiz_responses")
+            .select("result")
+            .eq("assignment_id", assignment["id"])
+            .eq("quiz_item_id", item_id),
+            "load quiz responses",
+        )
+        already_correct = any(row["result"] == "correct" for row in responses)
+        return course["quiz_max_attempts"], len(responses), already_correct
+
+    def record_quiz_response(
+        self, owner_id: UUID, course_id: UUID, slug: str, item_id: str, answer: QuizAnswerRequest, grade: QuizGradeResponse
+    ) -> int:
+        assignment = self._ensure_assignment(owner_id, course_id, slug)
+        self._data(
+            self.client.table("quiz_responses").insert(
+                {
+                    "assignment_id": assignment["id"],
+                    "quiz_item_id": item_id,
+                    "idempotency_key": str(uuid4()),
+                    # Both the raw answer and the full grade reveal are stored so a learner
+                    # returning to an already-correct question sees exactly what they
+                    # submitted and were shown, not just a bare pass/fail flag.
+                    "response_json": {"answer": answer.model_dump(mode="json"), "grade": grade.model_dump(mode="json")},
+                    "result": "correct" if grade.correct else "incorrect",
+                }
+            ),
+            "record quiz response",
+        )
+        attempts_used = len(
+            self._data(
+                self.client.table("quiz_responses")
+                .select("result")
+                .eq("assignment_id", assignment["id"])
+                .eq("quiz_item_id", item_id),
+                "load quiz responses",
+            )
+        )
+        if grade.correct and assignment["status"] != "completed":
+            self._maybe_complete_assignment(assignment)
+        return attempts_used
+
+    def complete_coding_lesson(self, owner_id: UUID, course_id: UUID, slug: str) -> None:
+        assignment = self._ensure_assignment(owner_id, course_id, slug)
+        if assignment["status"] != "completed":
+            self._data(
+                self.client.table("learner_lesson_assignments").update({"status": "completed"}).eq("id", assignment["id"]),
+                "complete lesson assignment",
+            )
+
+    def course_points(self, owner_id: UUID, course_id: UUID) -> CoursePointsResponse:
+        course = self._course_for_owner(owner_id, course_id)
+        version_id = course.get("active_version_id")
+        if not version_id:
+            return CoursePointsResponse(course_id=course_id, points_earned=0, points_total=0, points_per_lesson=POINTS_PER_LESSON)
+
+        definitions = self._data(
+            self.client.table("lesson_definitions").select("id").eq("course_version_id", version_id).eq("kind", "lesson"),
+            "load lesson definitions for points",
+        )
+        definition_ids = [row["id"] for row in definitions]
+        points_total = len(definition_ids) * POINTS_PER_LESSON
+
+        earned_definitions: set[str] = set()
+        if definition_ids:
+            revisions = self._data(
+                self.client.table("lesson_revisions").select("id,lesson_definition_id").in_("lesson_definition_id", definition_ids),
+                "load lesson revisions for points",
+            )
+            definition_by_revision = {row["id"]: row["lesson_definition_id"] for row in revisions}
+            if definition_by_revision:
+                completed = self._data(
+                    self.client.table("learner_lesson_assignments")
+                    .select("lesson_revision_id")
+                    .eq("user_id", str(owner_id))
+                    .eq("status", "completed")
+                    .in_("lesson_revision_id", list(definition_by_revision)),
+                    "load completed assignments",
+                )
+                earned_definitions = {
+                    definition_by_revision[row["lesson_revision_id"]]
+                    for row in completed
+                    if row["lesson_revision_id"] in definition_by_revision
+                }
+
+        return CoursePointsResponse(
+            course_id=course_id,
+            points_earned=len(earned_definitions) * POINTS_PER_LESSON,
+            points_total=points_total,
+            points_per_lesson=POINTS_PER_LESSON,
+        )
+
+    def _hydrate_quiz_progress(self, owner_id: UUID, revision_id: str, quiz_items: list[QuizItemPreview]) -> list[QuizItemPreview]:
+        """Read-only: shows prior progress if the learner already has an assignment for this
+        revision, but never creates one just from viewing -- that happens on first answer."""
+        assignment_rows = self._data(
+            self.client.table("learner_lesson_assignments")
+            .select("id")
+            .eq("user_id", str(owner_id))
+            .eq("lesson_revision_id", revision_id),
+            "load lesson assignment",
+        )
+        if not assignment_rows:
+            return quiz_items
+        responses = self._data(
+            self.client.table("quiz_responses")
+            .select("quiz_item_id,result,response_json")
+            .eq("assignment_id", assignment_rows[0]["id"])
+            .order("created_at"),
+            "load quiz responses",
+        )
+        attempts_used: dict[str, int] = {}
+        correct: dict[str, bool] = {}
+        correct_payload: dict[str, dict[str, Any]] = {}
+        for row in responses:
+            attempts_used[row["quiz_item_id"]] = attempts_used.get(row["quiz_item_id"], 0) + 1
+            if row["result"] == "correct":
+                correct[row["quiz_item_id"]] = True
+                correct_payload[row["quiz_item_id"]] = row["response_json"]
+        hydrated: list[QuizItemPreview] = []
+        for item in quiz_items:
+            update: dict[str, Any] = {"attempts_used": attempts_used.get(item.id, 0), "correct": correct.get(item.id)}
+            payload = correct_payload.get(item.id)
+            if payload:
+                update["previous_answer"] = QuizAnswerRequest.model_validate(payload["answer"])
+                update["previous_grade"] = QuizGradeResponse.model_validate(payload["grade"])
+            hydrated.append(item.model_copy(update=update))
+        return hydrated
+
+    def _ensure_assignment(self, owner_id: UUID, course_id: UUID, slug: str) -> dict[str, Any]:
+        """Lazily creates (or reuses) the learner's assignment for this lesson's current
+        revision -- the durable anchor that quiz_responses and completion hang off of."""
+        definition_id, revision_id, bundle = self._built_lesson(owner_id, course_id, slug)
+        existing = self._assignment_rows(owner_id, revision_id)
+        if not existing:
+            try:
+                self.client.table("learner_lesson_assignments").insert(
+                    {"user_id": str(owner_id), "lesson_revision_id": revision_id, "route_kind": "canonical", "status": "assigned"}
+                ).execute()
+            except APIError as exc:
+                if exc.code != "23505":  # another request already created it; safe to re-select
+                    logger.exception("Supabase request failed while attempting to create lesson assignment")
+                    raise HTTPException(
+                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                        detail="The course service is temporarily unavailable.",
+                    ) from exc
+            existing = self._assignment_rows(owner_id, revision_id)
+        assignment = self._one(existing, "Assignment")
+        return {"id": assignment["id"], "status": assignment["status"], "definition_id": definition_id, "bundle": bundle}
+
+    def _assignment_rows(self, owner_id: UUID, revision_id: str) -> list[dict[str, Any]]:
+        return self._data(
+            self.client.table("learner_lesson_assignments")
+            .select("id,status")
+            .eq("user_id", str(owner_id))
+            .eq("lesson_revision_id", revision_id),
+            "load lesson assignment",
+        )
+
+    def _maybe_complete_assignment(self, assignment: dict[str, Any]) -> None:
+        item_ids = {entry["id"] for entry in (assignment["bundle"].get("assessment") or {}).get("quiz_items") or []}
+        if not item_ids:
+            return
+        responses = self._data(
+            self.client.table("quiz_responses")
+            .select("quiz_item_id")
+            .eq("assignment_id", assignment["id"])
+            .eq("result", "correct"),
+            "load correct quiz responses",
+        )
+        correct_item_ids = {row["quiz_item_id"] for row in responses}
+        if item_ids <= correct_item_ids:
+            self._data(
+                self.client.table("learner_lesson_assignments").update({"status": "completed"}).eq("id", assignment["id"]),
+                "complete lesson assignment",
+            )
+
+    def _built_lesson(self, owner_id: UUID, course_id: UUID, slug: str) -> tuple[str, str, dict[str, Any]]:
         course = self._course_for_owner(owner_id, course_id)
         version_id = course.get("active_version_id")
         if not version_id:
@@ -710,14 +969,18 @@ class SupabaseCourseRepository:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This lesson is still being built.")
         revisions = self._data(
             self.client.table("lesson_revisions")
-            .select("bundle_json")
+            .select("id,bundle_json")
             .eq("lesson_definition_id", definition["id"])
             .eq("validation_status", "validated")
             .order("revision", desc=True)
             .limit(1),
             "load lesson revision",
         )
-        return self._one(revisions, "Lesson revision")["bundle_json"]
+        revision = self._one(revisions, "Lesson revision")
+        return definition["id"], revision["id"], revision["bundle_json"]
+
+    def _built_lesson_bundle(self, owner_id: UUID, course_id: UUID, slug: str) -> dict[str, Any]:
+        return self._built_lesson(owner_id, course_id, slug)[2]
 
     def regenerate_lesson(self, owner_id: UUID, course_id: UUID, slug: str) -> None:
         try:
@@ -759,7 +1022,7 @@ class SupabaseCourseRepository:
         return self._one(
             self._data(
                 self.client.table("courses")
-                .select("id,title,goal,status,active_version_id,updated_at")
+                .select("id,title,goal,status,active_version_id,updated_at,quiz_max_attempts")
                 .eq("id", str(course_id))
                 .eq("owner_id", str(owner_id)),
                 "load course",
@@ -870,6 +1133,7 @@ class SupabaseCourseRepository:
             status=row["status"],
             active_version=versions[active_version_id],
             updated_at=SupabaseCourseRepository._timestamp(row["updated_at"]),
+            quiz_max_attempts=row["quiz_max_attempts"],
         )
 
 

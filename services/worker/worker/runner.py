@@ -61,16 +61,21 @@ class Worker:
             if job_type == "course_planning":
                 course_id = str(message.payload.get("course_id", ""))
                 UUID(course_id)
-                self.planner.plan_course(course_id)
+                if not self.planner.plan_course(course_id):
+                    # A prior attempt still holds the claim and hasn't gone stale yet;
+                    # leave the message queued instead of discarding the only retry.
+                    return
             elif job_type == "lesson_build":
                 lesson_definition_id = str(message.payload.get("lesson_definition_id", ""))
                 UUID(lesson_definition_id)
-                self.lesson_builder.build_lesson(lesson_definition_id)
+                if not self.lesson_builder.build_lesson(lesson_definition_id):
+                    return
             elif job_type == "concept_regeneration":
                 # Retired job type; in-flight messages build the same conceptual bundle.
                 lesson_definition_id = str(message.payload.get("lesson_definition_id", ""))
                 UUID(lesson_definition_id)
-                self.lesson_builder.build_lesson(lesson_definition_id)
+                if not self.lesson_builder.build_lesson(lesson_definition_id):
+                    return
             else:
                 raise ValueError("Unsupported generation job.")
         except RETRYABLE_ERRORS:

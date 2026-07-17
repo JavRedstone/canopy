@@ -65,7 +65,9 @@ class DockerSandboxRunner:
         self._ready_environments: set[str] = set()
 
     def run_pytest(self, *, environment_id: str, files: list[SandboxFile]) -> SandboxRunResult:
-        return self._run(environment_id=environment_id, files=files, command=["pytest", "-q", "-p", "no:cacheprovider", "."])
+        # -v (not -q) prints one "path::test_name PASSED/FAILED" line per test, which the
+        # API/frontend parse into a per-test-case list instead of a single pass/fail blob.
+        return self._run(environment_id=environment_id, files=files, command=["pytest", "-v", "-p", "no:cacheprovider", "."])
 
     def run_script(self, *, environment_id: str, entry_path: str, files: list[SandboxFile]) -> SandboxRunResult:
         if not any(file.path == entry_path for file in files):

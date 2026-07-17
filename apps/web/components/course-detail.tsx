@@ -4,12 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Accordion } from "@base-ui/react/accordion";
-import { Button } from "@base-ui/react/button";
-import { CourseMapResponse, CourseProgressResponse, CourseSummary, deleteCourse, getCourse, getCourseMap, getCourseProgress, regenerateCourse } from "@/lib/api";
+import { CourseMapResponse, CoursePointsResponse, CourseProgressResponse, CourseSummary, deleteCourse, getCourse, getCourseMap, getCoursePoints, getCourseProgress, regenerateCourse } from "@/lib/api";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { CourseCategoryBadge } from "@/components/course-category-badge";
 import { CourseProgressSteps } from "@/components/course-progress";
+import { CourseSettingsDialog } from "@/components/course-settings-dialog";
 import { Icon } from "@/components/icon";
+import { SettingsMenu, SettingsMenuAction } from "@/components/settings-menu";
 import { conceptKindIcon } from "@/lib/concept-kind";
 import { createClient } from "@/lib/supabase/client";
 
@@ -21,12 +22,14 @@ export function CourseDetail({ courseId }: { courseId: string }) {
   const [course, setCourse] = useState<CourseSummary>();
   const [progress, setProgress] = useState<CourseProgressResponse>();
   const [map, setMap] = useState<CourseMapResponse>();
+  const [points, setPoints] = useState<CoursePointsResponse>();
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState<string>();
   const [refreshError, setRefreshError] = useState<string>();
   const [regenerating, setRegenerating] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string>();
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const fullLoadRef = useRef<() => Promise<void>>(async () => {});
   const progressRefreshRef = useRef<() => Promise<void>>(async () => {});
   const pollCountRef = useRef(0);
@@ -40,15 +43,17 @@ export function CourseDetail({ courseId }: { courseId: string }) {
       if (!data.session) return;
       try {
         const token = data.session.access_token;
-        const [courseSummary, courseProgress, courseMap] = await Promise.all([
+        const [courseSummary, courseProgress, courseMap, coursePoints] = await Promise.all([
           getCourse(courseId, token),
           getCourseProgress(courseId, token),
-          getCourseMap(courseId, token)
+          getCourseMap(courseId, token),
+          getCoursePoints(courseId, token)
         ]);
         if (cancelled) return;
         setCourse(courseSummary);
         setProgress(courseProgress);
         setMap(courseMap);
+        setPoints(coursePoints);
         setRefreshError(undefined);
         setState("ready");
       } catch (caught) {
@@ -136,6 +141,12 @@ export function CourseDetail({ courseId }: { courseId: string }) {
   if (state === "error") return <p className="error">{errorMessage ?? "We could not load this course."}</p>;
   if (!course || !progress || !map) return null;
 
+  const settingsActions: SettingsMenuAction[] = [
+    { label: "Modify", icon: "edit", onClick: () => setSettingsOpen(true), disabled: regenerating || deleting },
+    { label: regenerating ? "Regenerating…" : "Regenerate", icon: "refresh", onClick: handleRegenerate, disabled: regenerating || deleting },
+    { label: deleting ? "Deleting…" : "Delete", icon: "delete", onClick: handleDelete, disabled: regenerating || deleting, danger: true },
+  ];
+
   return (
     <div>
       <Breadcrumbs items={[{ label: "My courses", href: "/courses" }, { label: course.title }]} />
@@ -149,14 +160,16 @@ export function CourseDetail({ courseId }: { courseId: string }) {
           </div>
         </div>
         <div className="page-header-actions">
-          <Button className="button button-secondary" onClick={handleRegenerate} disabled={regenerating || deleting} focusableWhenDisabled>
-            {regenerating ? "Starting…" : "Regenerate"}
-          </Button>
-          <Button className="button button-secondary button-danger" onClick={handleDelete} disabled={regenerating || deleting} focusableWhenDisabled>
-            {deleting ? "Deleting…" : "Delete"}
-          </Button>
+          {points && points.points_total > 0 ? (
+            <span className="points-badge" title={`${points.points_per_lesson} points per lesson`}>
+              <Icon name="star" /> {points.points_earned} / {points.points_total} pts
+            </span>
+          ) : null}
+          <SettingsMenu actions={settingsActions} label="Course settings" />
         </div>
       </header>
+
+      <CourseSettingsDialog course={course} open={settingsOpen} onOpenChange={setSettingsOpen} onSaved={setCourse} />
 
       {progress.stage !== "ready" ? <CourseProgressSteps progress={progress} onResume={handleRegenerate} /> : null}
       {refreshError ? <p className="error">{refreshError} Retrying automatically…</p> : null}

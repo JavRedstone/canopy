@@ -12,7 +12,7 @@ function formatted(text: string, keyPrefix: string): ReactNode[] {
 }
 
 /** Inline chunk citations ([uuid]) become numbered chips when the citation list is
- *  known, and disappear entirely when it is not — learners never see raw UUIDs. */
+ *  known, and disappear entirely when it is not; learners never see raw UUIDs. */
 function inline(text: string, citations?: string[]): ReactNode[] {
   const parts = text.split(CITATION_PATTERN);
   const nodes: ReactNode[] = [];
