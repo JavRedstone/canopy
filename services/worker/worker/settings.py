@@ -18,7 +18,10 @@ class WorkerSettings(BaseSettings):
     chunk_characters: int = 1600
     chunk_overlap_characters: int = 200
     embedding_batch_size: int = 32
+    # Broad goal-relevant chunks shown to the skeleton call; a tighter, module-focused
+    # set is retrieved per module for its concepts.
     planner_context_chunk_limit: int = 40
+    planner_module_context_chunk_limit: int = 16
 
     # Agentic lesson sandbox builder: generate -> run in Docker -> repair on failure.
     lesson_build_max_attempts: int = 3
@@ -36,6 +39,10 @@ class WorkerSettings(BaseSettings):
     @property
     def builder_model(self) -> str:
         return "lesson_build"
+
+    @property
+    def conceptual_builder_model(self) -> str:
+        return "concept_regeneration"
 
     def require_runtime_configuration(self) -> None:
         if not self.supabase_url or not self.supabase_service_role_key:

@@ -103,6 +103,45 @@ export interface LessonWorkspaceFile {
 
 export type LessonBuildStatus = "pending" | "building" | "built" | "failed";
 
+export interface WorkedExamplePreview {
+  title: string;
+  body_markdown: string;
+}
+
+export interface QuizOptionPreview {
+  text: string;
+}
+
+export type QuizKind = "mcq" | "multi_select" | "fill" | "short_answer";
+
+export interface QuizItemPreview {
+  id: string;
+  kind: QuizKind;
+  prompt_markdown: string;
+  options: QuizOptionPreview[];
+}
+
+export interface QuizAnswerRequest {
+  selected_option_index?: number;
+  selected_option_indices?: number[];
+  answer_text?: string;
+}
+
+export interface QuizOptionGrade {
+  text: string;
+  explanation_markdown: string;
+  correct: boolean;
+}
+
+export interface QuizGradeResponse {
+  item_id: string;
+  correct: boolean;
+  explanation_markdown: string;
+  options: QuizOptionGrade[];
+  correct_answers: string[];
+  feedback_markdown: string | null;
+}
+
 export interface LessonPreview {
   status: LessonBuildStatus;
   title: string;
@@ -110,6 +149,8 @@ export interface LessonPreview {
   starter_files: LessonWorkspaceFile[];
   hints: string[];
   public_test_files: LessonWorkspaceFile[];
+  worked_examples: WorkedExamplePreview[];
+  quiz_items: QuizItemPreview[];
 }
 
 export interface ConceptDetailResponse {
@@ -166,6 +207,22 @@ export async function runLessonScript(
     body: JSON.stringify({ files, script })
   });
   if (!response.ok) throw new Error(`Unable to run your script (HTTP ${response.status}).`);
+  return response.json();
+}
+
+export async function answerQuizItem(
+  courseId: string,
+  slug: string,
+  itemId: string,
+  answer: QuizAnswerRequest,
+  accessToken: string
+): Promise<QuizGradeResponse> {
+  const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/concepts/${slug}/quiz-items/${itemId}/answer`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(answer)
+  });
+  if (!response.ok) throw new Error(`Unable to grade your answer (HTTP ${response.status}).`);
   return response.json();
 }
 

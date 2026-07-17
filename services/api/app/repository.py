@@ -12,6 +12,7 @@ from httpx import HTTPError
 from postgrest.exceptions import APIError
 from supabase import Client
 
+from app.lesson_bundle import bundle_view
 from app.schemas import ConceptDetailResponse, CourseMapConcept, CourseMapModule, CourseMapResponse, CourseProgressResponse, CourseSummary, CreateCourseRequest, CreateSourceRequest, LessonPreview, LessonWorkspaceFile, SourceSummary, SourceUploadTarget
 from app.settings import get_settings
 from app.supabase import get_service_client
@@ -46,6 +47,8 @@ class CourseRepository(Protocol):
     def lesson_workspace(
         self, owner_id: UUID, course_id: UUID, slug: str
     ) -> tuple[list[LessonWorkspaceFile], list[LessonWorkspaceFile], list[LessonWorkspaceFile]]: ...
+
+    def quiz_item(self, owner_id: UUID, course_id: UUID, slug: str, item_id: str) -> dict[str, Any]: ...
 
     def regenerate_lesson(self, owner_id: UUID, course_id: UUID, slug: str) -> None: ...
 
@@ -183,6 +186,10 @@ class MemoryCourseRepository:
     ) -> tuple[list[LessonWorkspaceFile], list[LessonWorkspaceFile], list[LessonWorkspaceFile]]:
         self._course_for_owner(owner_id, course_id)
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A generated lesson is required before it can run.")
+
+    def quiz_item(self, owner_id: UUID, course_id: UUID, slug: str, item_id: str) -> dict[str, Any]:
+        self._course_for_owner(owner_id, course_id)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A generated lesson is required before its quiz can be answered.")
 
     def regenerate_lesson(self, owner_id: UUID, course_id: UUID, slug: str) -> None:
         self._course_for_owner(owner_id, course_id)
@@ -506,18 +513,17 @@ class SupabaseCourseRepository:
                 lessons_built=0, lessons_total=0,
             )
 
-        coding_concepts = self._data(
+        lesson_concepts = self._data(
             self.client.table("concepts")
             .select("id,title")
-            .eq("course_version_id", version_id)
-            .eq("kind", "coding"),
-            "load coding concepts",
+            .eq("course_version_id", version_id),
+            "load lesson concepts",
         )
-        title_by_concept_id = {row["id"]: row["title"] for row in coding_concepts}
+        title_by_concept_id = {row["id"]: row["title"] for row in lesson_concepts}
         lessons_total = 0
         lessons_built = 0
         current_lesson_title: str | None = None
-        if coding_concepts:
+        if lesson_concepts:
             lesson_rows = self._data(
                 self.client.table("lesson_definitions")
                 .select("concept_id,build_status")
@@ -634,7 +640,7 @@ class SupabaseCourseRepository:
         )
 
         lesson: LessonPreview | None = None
-        if concept["kind"] == "coding" and definition:
+        if definition:
             revision_rows = self._data(
                 self.client.table("lesson_revisions")
                 .select("bundle_json")
@@ -645,14 +651,20 @@ class SupabaseCourseRepository:
                 "load lesson revision",
             )
             bundle = revision_rows[0]["bundle_json"] if revision_rows else None
-            lesson = LessonPreview(
-                status=definition["build_status"],
-                title=bundle["title"] if bundle else concept["title"],
-                explanation_markdown=bundle["explanation_markdown"] if bundle else "",
-                starter_files=[LessonWorkspaceFile(**file) for file in bundle["starter_files"]] if bundle else [],
-                hints=bundle["hints"] if bundle else [],
-                public_test_files=[LessonWorkspaceFile(**file) for file in bundle.get("public_test_files", [])] if bundle else [],
-            )
+            view = bundle_view(bundle) if bundle else None
+            # Conceptual concepts from courses planned before conceptual bundles existed
+            # have a definition but no build and no bundle; they keep the summary-only view.
+            if concept["kind"] == "coding" or generation_status is not None or view is not None:
+                lesson = LessonPreview(
+                    status=definition["build_status"],
+                    title=view.title if view and view.title else concept["title"],
+                    explanation_markdown=view.explanation_markdown if view else "",
+                    starter_files=view.starter_files if view else [],
+                    hints=view.hints if view else [],
+                    public_test_files=view.public_test_files if view else [],
+                    worked_examples=view.worked_examples if view else [],
+                    quiz_items=view.quiz_items if view else [],
+                )
 
         return ConceptDetailResponse(
             slug=concept["slug"],
@@ -667,6 +679,20 @@ class SupabaseCourseRepository:
     def lesson_workspace(
         self, owner_id: UUID, course_id: UUID, slug: str
     ) -> tuple[list[LessonWorkspaceFile], list[LessonWorkspaceFile], list[LessonWorkspaceFile]]:
+        view = bundle_view(self._built_lesson_bundle(owner_id, course_id, slug))
+        # Read-only context files ride along with the hidden set so the sandbox has
+        # them without the learner being required to submit them.
+        return (view.starter_files, view.public_test_files, view.context_files + view.hidden_test_files)
+
+    def quiz_item(self, owner_id: UUID, course_id: UUID, slug: str, item_id: str) -> dict[str, Any]:
+        bundle = self._built_lesson_bundle(owner_id, course_id, slug)
+        items = (bundle.get("assessment") or {}).get("quiz_items") or []
+        item = next((entry for entry in items if entry.get("id") == item_id), None)
+        if item is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Quiz item not found.")
+        return item
+
+    def _built_lesson_bundle(self, owner_id: UUID, course_id: UUID, slug: str) -> dict[str, Any]:
         course = self._course_for_owner(owner_id, course_id)
         version_id = course.get("active_version_id")
         if not version_id:
@@ -677,7 +703,7 @@ class SupabaseCourseRepository:
             .eq("course_version_id", version_id)
             .eq("kind", "lesson")
             .eq("concepts.slug", slug),
-            "load lesson workspace",
+            "load lesson definition",
         )
         definition = self._one(rows, "Lesson")
         if definition["build_status"] != "built":
@@ -689,14 +715,9 @@ class SupabaseCourseRepository:
             .eq("validation_status", "validated")
             .order("revision", desc=True)
             .limit(1),
-            "load lesson workspace revision",
+            "load lesson revision",
         )
-        bundle = self._one(revisions, "Lesson revision")["bundle_json"]
-        return (
-            [LessonWorkspaceFile(**file) for file in bundle["starter_files"]],
-            [LessonWorkspaceFile(**file) for file in bundle.get("public_test_files", [])],
-            [LessonWorkspaceFile(**file) for file in bundle["test_files"]],
-        )
+        return self._one(revisions, "Lesson revision")["bundle_json"]
 
     def regenerate_lesson(self, owner_id: UUID, course_id: UUID, slug: str) -> None:
         try:

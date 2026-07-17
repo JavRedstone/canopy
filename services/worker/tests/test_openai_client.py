@@ -3,10 +3,21 @@ from types import SimpleNamespace
 import pytest
 from pydantic import SecretStr
 
-from worker.ingestion import PLAN_VALIDATION_ATTEMPTS, IngestionWorker
+from worker.ingestion import SourceIngestor
 from worker.llm import LLMGatewayClient, LLMValidationError
 from worker.main import _build_llm_client
-from worker.planner import CourseSkeleton, ModuleConcepts
+from worker.planner import CourseOutline, ModuleConcepts
+from worker.planning import PLAN_VALIDATION_ATTEMPTS, CoursePlanner
+
+
+def _outline_dict(modules: list[dict] | None = None) -> dict:
+    return {
+        "course_title": "Authentication",
+        "source_set_hash": "source-hash",
+        "audience": "Developers new to authentication.",
+        "objectives": ["Understand tokens", "Validate requests safely"],
+        "modules": modules or [{"id": "basics", "title": "Basics", "focus": "Token fundamentals.", "lesson_count": 1}],
+    }
 
 
 class FakeResponse:
@@ -91,6 +102,8 @@ class FakePlanningClient:
                         "course_version_id": "version-id",
                         "goal": "Learn authentication",
                         "source_set_hash": "source-hash",
+                        "lesson_min": 1,
+                        "lesson_max": 6,
                     }
                 ]
             )
@@ -98,6 +111,26 @@ class FakePlanningClient:
             modules = arguments["p_modules"]
             return FakeRequest([{"module_id": f"module-{index}", "module_position": index + 1} for index in range(len(modules))])
         return FakeRequest([])
+
+
+def _planner_with(responses: "FakeResponses", chunks: list[dict[str, object]]) -> CoursePlanner:
+    """A CoursePlanner whose retrieval is stubbed to return ``chunks`` for every query.
+
+    An empty ``chunks`` list stands in for a course with no sources (goal-only planning).
+    """
+    worker = CoursePlanner.__new__(CoursePlanner)
+    worker.settings = SimpleNamespace(
+        planner_model="course_planning",
+        embedding_model="embedding",
+        embedding_dimensions=3,
+        planner_context_chunk_limit=40,
+        planner_module_context_chunk_limit=16,
+    )
+    worker.client = FakePlanningClient()
+    worker.openai = SimpleNamespace(responses=responses)
+    worker._source_version_ids = lambda _course_id: (["version-a"] if chunks else [])
+    worker._retrieve = lambda _version_ids, _query, _limit: list(chunks)
+    return worker
 
 
 def test_build_llm_client_uses_internal_gateway_configuration() -> None:
@@ -113,25 +146,13 @@ def test_build_llm_client_uses_internal_gateway_configuration() -> None:
 
 
 def test_gateway_client_sends_schema_and_validates_structured_output() -> None:
-    http = FakeHttpClient(
-        [
-            FakeResponse(
-                {
-                    "output": {
-                        "course_title": "Authentication",
-                        "source_set_hash": "source-hash",
-                        "modules": [{"id": "basics", "title": "Basics"}],
-                    }
-                }
-            )
-        ]
-    )
+    http = FakeHttpClient([FakeResponse({"output": _outline_dict()})])
     client = LLMGatewayClient("http://gateway", internal_service_token="secret", http_client=http)
 
     result = client.responses.parse(
         model="course_planning",
         input=[{"role": "user", "content": "Build a course."}],
-        text_format=CourseSkeleton,
+        text_format=CourseOutline,
     )
 
     assert result.output_parsed.course_title == "Authentication"
@@ -142,27 +163,23 @@ def test_gateway_client_sends_schema_and_validates_structured_output() -> None:
             "json": {
                 "task": "course_planning",
                 "input": [{"role": "user", "content": "Build a course."}],
-                "schema_name": "CourseSkeleton",
-                "schema": CourseSkeleton.model_json_schema(),
+                "schema_name": "CourseOutline",
+                "schema": CourseOutline.model_json_schema(),
             },
         }
     ]
 
 
 def test_structured_output_failing_validation_is_retried_with_feedback() -> None:
-    invalid = {"course_title": "Authentication", "source_set_hash": "source-hash", "modules": []}
-    valid = {
-        "course_title": "Authentication",
-        "source_set_hash": "source-hash",
-        "modules": [{"id": "basics", "title": "Basics"}],
-    }
+    invalid = {**_outline_dict(), "modules": []}
+    valid = _outline_dict()
     http = FakeHttpClient([FakeResponse({"output": invalid}), FakeResponse({"output": valid})])
     client = LLMGatewayClient("http://gateway", internal_service_token=None, http_client=http)
 
     result = client.responses.parse(
         model="course_planning",
         input=[{"role": "user", "content": "Build a course."}],
-        text_format=CourseSkeleton,
+        text_format=CourseOutline,
     )
 
     assert result.output_parsed.modules[0].id == "basics"
@@ -175,7 +192,7 @@ def test_structured_output_failing_validation_is_retried_with_feedback() -> None
 
 
 def test_structured_output_failing_validation_repeatedly_is_not_retryable() -> None:
-    invalid = {"course_title": "Authentication", "source_set_hash": "source-hash", "modules": []}
+    invalid = {**_outline_dict(), "modules": []}
     http = FakeHttpClient([FakeResponse({"output": invalid}) for _ in range(3)])
     client = LLMGatewayClient("http://gateway", internal_service_token=None, http_client=http)
 
@@ -183,7 +200,7 @@ def test_structured_output_failing_validation_repeatedly_is_not_retryable() -> N
         client.responses.parse(
             model="course_planning",
             input=[{"role": "user", "content": "Build a course."}],
-            text_format=CourseSkeleton,
+            text_format=CourseOutline,
         )
 
     assert len(http.calls) == 3
@@ -191,11 +208,11 @@ def test_structured_output_failing_validation_repeatedly_is_not_retryable() -> N
 
 def test_embedding_request_uses_gateway_task() -> None:
     embeddings = FakeEmbeddings()
-    worker = IngestionWorker.__new__(IngestionWorker)
-    worker.settings = SimpleNamespace(embedding_batch_size=2, embedding_model="embedding", embedding_dimensions=3)
-    worker.openai = SimpleNamespace(embeddings=embeddings)
+    ingestor = SourceIngestor.__new__(SourceIngestor)
+    ingestor.settings = SimpleNamespace(embedding_batch_size=2, embedding_model="embedding", embedding_dimensions=3)
+    ingestor.openai = SimpleNamespace(embeddings=embeddings)
 
-    result = worker._embed(["first", "second", "third"])
+    result = ingestor._embed(["first", "second", "third"])
 
     assert [call["model"] for call in embeddings.calls] == ["embedding", "embedding"]
     assert [call["input"] for call in embeddings.calls] == [["first", "second"], ["third"]]
@@ -203,9 +220,7 @@ def test_embedding_request_uses_gateway_task() -> None:
 
 
 def test_planner_request_uses_course_planning_task() -> None:
-    skeleton = CourseSkeleton.model_validate(
-        {"course_title": "Authentication", "source_set_hash": "source-hash", "modules": [{"id": "basics", "title": "Basics"}]}
-    )
+    outline = CourseOutline.model_validate(_outline_dict())
     module_concepts = ModuleConcepts.model_validate(
         {
             "concepts": [
@@ -220,12 +235,8 @@ def test_planner_request_uses_course_planning_task() -> None:
             ]
         }
     )
-    responses = FakeResponses([skeleton, module_concepts])
-    worker = IngestionWorker.__new__(IngestionWorker)
-    worker.settings = SimpleNamespace(planner_model="course_planning")
-    worker.client = FakePlanningClient()
-    worker.openai = SimpleNamespace(responses=responses)
-    worker._course_context = lambda _course_id: [{"id": "chunk-id", "content": "Source content."}]
+    responses = FakeResponses([outline, module_concepts])
+    worker = _planner_with(responses, [{"id": "chunk-id", "content": "Source content."}])
 
     worker.plan_course("course-id")
 
@@ -240,9 +251,7 @@ def test_planner_request_uses_course_planning_task() -> None:
 
 
 def test_module_concepts_citing_unknown_chunk_are_regenerated_with_feedback() -> None:
-    skeleton = CourseSkeleton.model_validate(
-        {"course_title": "Authentication", "source_set_hash": "source-hash", "modules": [{"id": "basics", "title": "Basics"}]}
-    )
+    outline = CourseOutline.model_validate(_outline_dict())
     concept = {
         "id": "tokens",
         "title": "Tokens",
@@ -252,12 +261,8 @@ def test_module_concepts_citing_unknown_chunk_are_regenerated_with_feedback() ->
     }
     bad_concepts = ModuleConcepts.model_validate({"concepts": [{**concept, "citations": ["bogus-chunk"]}]})
     good_concepts = ModuleConcepts.model_validate({"concepts": [{**concept, "citations": ["chunk-id"]}]})
-    responses = FakeResponses([skeleton, bad_concepts, good_concepts])
-    worker = IngestionWorker.__new__(IngestionWorker)
-    worker.settings = SimpleNamespace(planner_model="course_planning")
-    worker.client = FakePlanningClient()
-    worker.openai = SimpleNamespace(responses=responses)
-    worker._course_context = lambda _course_id: [{"id": "chunk-id", "content": "Source content."}]
+    responses = FakeResponses([outline, bad_concepts, good_concepts])
+    worker = _planner_with(responses, [{"id": "chunk-id", "content": "Source content."}])
 
     worker.plan_course("course-id")
 
@@ -270,9 +275,7 @@ def test_module_concepts_citing_unknown_chunk_are_regenerated_with_feedback() ->
 
 
 def test_plan_fails_when_concepts_never_pass_validation() -> None:
-    skeleton = CourseSkeleton.model_validate(
-        {"course_title": "Authentication", "source_set_hash": "source-hash", "modules": [{"id": "basics", "title": "Basics"}]}
-    )
+    outline = CourseOutline.model_validate(_outline_dict())
     bad_concepts = ModuleConcepts.model_validate(
         {
             "concepts": [
@@ -287,12 +290,8 @@ def test_plan_fails_when_concepts_never_pass_validation() -> None:
             ]
         }
     )
-    responses = FakeResponses([skeleton] + [bad_concepts] * PLAN_VALIDATION_ATTEMPTS)
-    worker = IngestionWorker.__new__(IngestionWorker)
-    worker.settings = SimpleNamespace(planner_model="course_planning")
-    worker.client = FakePlanningClient()
-    worker.openai = SimpleNamespace(responses=responses)
-    worker._course_context = lambda _course_id: [{"id": "chunk-id", "content": "Source content."}]
+    responses = FakeResponses([outline] + [bad_concepts] * PLAN_VALIDATION_ATTEMPTS)
+    worker = _planner_with(responses, [{"id": "chunk-id", "content": "Source content."}])
 
     with pytest.raises(ValueError, match="failed validation after"):
         worker.plan_course("course-id")
@@ -301,9 +300,7 @@ def test_plan_fails_when_concepts_never_pass_validation() -> None:
 
 
 def test_goal_only_planner_request_requires_empty_citations() -> None:
-    skeleton = CourseSkeleton.model_validate(
-        {"course_title": "Python foundations", "source_set_hash": "source-hash", "modules": [{"id": "basics", "title": "Basics"}]}
-    )
+    outline = CourseOutline.model_validate(_outline_dict())
     module_concepts = ModuleConcepts.model_validate(
         {
             "concepts": [
@@ -318,12 +315,8 @@ def test_goal_only_planner_request_requires_empty_citations() -> None:
             ]
         }
     )
-    responses = FakeResponses([skeleton, module_concepts])
-    worker = IngestionWorker.__new__(IngestionWorker)
-    worker.settings = SimpleNamespace(planner_model="course_planning")
-    worker.client = FakePlanningClient()
-    worker.openai = SimpleNamespace(responses=responses)
-    worker._course_context = lambda _course_id: []
+    responses = FakeResponses([outline, module_concepts])
+    worker = _planner_with(responses, [])
 
     worker.plan_course("course-id")
 

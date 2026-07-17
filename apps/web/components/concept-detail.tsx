@@ -2,16 +2,115 @@
 
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import { ConceptDetailResponse, CourseSummary, LessonRunResult, LessonWorkspaceFile, ScriptRunResult, getConceptDetail, getCourse, regenerateLesson, runLesson, runLessonScript } from "@/lib/api";
+import { ConceptDetailResponse, CourseSummary, LessonRunResult, LessonWorkspaceFile, QuizItemPreview, ScriptRunResult, WorkedExamplePreview, getConceptDetail, getCourse, regenerateLesson, runLesson, runLessonScript } from "@/lib/api";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Icon } from "@/components/icon";
 import { MarkdownText } from "@/components/markdown-text";
+import { QuizQuestion, QuizSection } from "@/components/quiz";
 import { conceptKindIcon, conceptKindLabel } from "@/lib/concept-kind";
 import { createClient } from "@/lib/supabase/client";
 import { useStallDetector } from "@/lib/use-stall-detector";
+import type { ReactNode } from "react";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 const stallThresholdMs = 45_000;
+
+// A line the lesson generator emits to place a worked example or quiz item
+// inside the prose, e.g. "{{example:1}}" or "{{quiz:2}}" (1-based indexes).
+const LESSON_MARKER = /^\s*\{\{\s*(example|quiz)\s*:\s*(\d+)\s*\}\}\s*$/;
+
+function markerReferencedQuizIndexes(markdown: string): Set<number> {
+  const referenced = new Set<number>();
+  for (const line of markdown.split("\n")) {
+    const match = line.match(LESSON_MARKER);
+    if (match && match[1] === "quiz") referenced.add(Number(match[2]) - 1);
+  }
+  return referenced;
+}
+
+function WorkedExampleCard({ example, citations }: { example: WorkedExamplePreview; citations?: string[] }) {
+  return (
+    <div className="notice">
+      <strong>{example.title}</strong>
+      <MarkdownText citations={citations}>{example.body_markdown}</MarkdownText>
+    </div>
+  );
+}
+
+function WorkedExamples({ examples, citations }: { examples?: WorkedExamplePreview[]; citations?: string[] }) {
+  if (!examples?.length) return null;
+  return (
+    <>
+      <div className="lesson-content-divider"><span>Worked examples</span></div>
+      {examples.map((example) => (
+        <WorkedExampleCard example={example} citations={citations} key={example.title} />
+      ))}
+    </>
+  );
+}
+
+/** Lesson prose with worked examples and quiz items rendered at their marker
+ *  positions. Unreferenced examples still appear as a trailing section, and
+ *  unreferenced quiz items are left for the caller's QuizSection, so lessons
+ *  generated before markers existed render exactly as before. */
+function LessonBody({
+  courseId,
+  slug,
+  markdown,
+  citations,
+  examples,
+  quizItems,
+}: {
+  courseId: string;
+  slug: string;
+  markdown: string;
+  citations?: string[];
+  examples: WorkedExamplePreview[];
+  quizItems: QuizItemPreview[];
+}) {
+  const blocks: ReactNode[] = [];
+  const placedExamples = new Set<number>();
+  const placedQuiz = new Set<number>();
+  let buffer: string[] = [];
+  let insideCodeFence = false;
+  const flush = () => {
+    const text = buffer.join("\n");
+    if (text.trim()) blocks.push(<MarkdownText className="lesson-content" citations={citations} key={`text-${blocks.length}`}>{text}</MarkdownText>);
+    buffer = [];
+  };
+  for (const line of markdown.split("\n")) {
+    if (line.trimStart().startsWith("```")) insideCodeFence = !insideCodeFence;
+    const match = insideCodeFence ? null : line.match(LESSON_MARKER);
+    if (!match) {
+      buffer.push(line);
+      continue;
+    }
+    const index = Number(match[2]) - 1;
+    if (match[1] === "example" && examples[index] && !placedExamples.has(index)) {
+      flush();
+      placedExamples.add(index);
+      blocks.push(<WorkedExampleCard example={examples[index]} citations={citations} key={`example-${index}`} />);
+    } else if (match[1] === "quiz" && quizItems[index] && !placedQuiz.has(index)) {
+      flush();
+      placedQuiz.add(index);
+      blocks.push(
+        <div className="quiz-inline" key={`quiz-${index}`}>
+          <QuizQuestion courseId={courseId} slug={slug} item={quizItems[index]} index={placedQuiz.size - 1} retryable />
+        </div>
+      );
+    } else {
+      flush();
+    }
+  }
+  flush();
+  const leftoverExamples = examples.filter((_, index) => !placedExamples.has(index));
+  return (
+    <>
+      {blocks}
+      <WorkedExamples examples={leftoverExamples} citations={citations} />
+    </>
+  );
+}
 
 function defaultScratchScript(starterFiles: LessonWorkspaceFile[]): string {
   const moduleName = starterFiles[0]?.path.replace(/\.py$/, "") ?? "solution";
@@ -168,7 +267,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
         <button className="button button-secondary" type="button" onClick={handleRegenerateLesson} disabled={regenerating}>{regenerating ? "Regenerating…" : "Regenerate lesson"}</button>
       </header>
 
-      <MarkdownText>{concept.summary_markdown}</MarkdownText>
+      <MarkdownText citations={concept.citations}>{concept.summary_markdown}</MarkdownText>
       {errorMessage ? <p className="error">{errorMessage}</p> : null}
 
       {concept.kind === "conceptual" && isBuildPending ? (
@@ -180,13 +279,42 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
 
       {concept.kind === "conceptual" && generationStatus === "failed" ? <p className="error">Lesson generation failed. Use Regenerate lesson to retry.</p> : null}
 
+      {concept.kind === "conceptual" && !isBuildPending && concept.lesson?.status === "built" && concept.lesson.explanation_markdown ? (
+        <div className="lesson-preview">
+          <div className="lesson-content-divider"><span>Lesson</span></div>
+          <LessonBody
+            courseId={courseId}
+            slug={slug}
+            markdown={concept.lesson.explanation_markdown}
+            citations={concept.citations}
+            examples={concept.lesson.worked_examples ?? []}
+            quizItems={concept.lesson.quiz_items ?? []}
+          />
+          <QuizSection
+            courseId={courseId}
+            slug={slug}
+            items={(concept.lesson.quiz_items ?? []).filter(
+              (_, index) => !markerReferencedQuizIndexes(concept.lesson?.explanation_markdown ?? "").has(index)
+            )}
+          />
+        </div>
+      ) : null}
+
       {concept.kind === "coding" ? (
         concept.lesson && concept.lesson.status === "built" ? (
           <div className="lesson-preview">
             {concept.lesson.explanation_markdown ? <>
               <div className="lesson-content-divider"><span>Lesson</span></div>
-              <MarkdownText className="lesson-content">{concept.lesson.explanation_markdown}</MarkdownText>
-            </> : null}
+              <LessonBody
+                courseId={courseId}
+                slug={slug}
+                markdown={concept.lesson.explanation_markdown}
+                citations={concept.citations}
+                examples={concept.lesson.worked_examples ?? []}
+                quizItems={concept.lesson.quiz_items ?? []}
+              />
+            </> : <WorkedExamples examples={concept.lesson.worked_examples} citations={concept.citations} />}
+
 
             {concept.lesson.hints.length > 0 ? (
               <div className="notice">
@@ -242,6 +370,13 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
                 </pre>
               ) : null}
             </div>
+            <QuizSection
+              courseId={courseId}
+              slug={slug}
+              items={(concept.lesson.quiz_items ?? []).filter(
+                (_, index) => !markerReferencedQuizIndexes(concept.lesson?.explanation_markdown ?? "").has(index)
+              )}
+            />
           </div>
         ) : concept.lesson?.status === "failed" ? (
           <div>

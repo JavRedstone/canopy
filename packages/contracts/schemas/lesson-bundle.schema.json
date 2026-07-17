@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adaptive-source-learning.local/schemas/lesson-bundle.v2.json",
+  "title": "Lesson bundle (v2)",
+  "description": "One envelope for every lesson kind. Conceptual lessons omit workspace and carry quiz items; coding lessons carry a workspace, visible/hidden pytest files, and a reference solution. Hidden tests, the reference solution, and quiz answers/explanations are grading material and must never be returned through learner-facing APIs. Canonical validation lives in services/worker/worker/lesson_schema.py.",
+  "type": "object",
+  "required": ["schema_version", "lesson_content", "assessment"],
+  "properties": {
+    "schema_version": { "const": 2 },
+    "lesson_content": {
+      "type": "object",
+      "required": ["title", "explanation_markdown", "citations"],
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "explanation_markdown": { "type": "string", "minLength": 1, "maxLength": 12000 },
+        "citations": { "type": "array", "items": { "type": "string" } },
+        "worked_examples": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "required": ["title", "body_markdown"],
+            "properties": {
+              "title": { "type": "string", "minLength": 1, "maxLength": 160 },
+              "body_markdown": { "type": "string", "minLength": 1, "maxLength": 4000 },
+              "citations": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        }
+      }
+    },
+    "workspace": {
+      "type": ["object", "null"],
+      "description": "Null for conceptual lessons. Visible files are the editable starter files; inspectable files are read-only context. editable_regions null means the whole file is editable.",
+      "required": ["environment_id", "files"],
+      "properties": {
+        "environment_id": { "type": "string", "minLength": 1, "description": "Pinned to python-basic until the environment provisioner resolves immutable IDs." },
+        "files": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10,
+          "items": {
+            "type": "object",
+            "required": ["path", "content"],
+            "properties": {
+              "path": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_./-]*\\.py$" },
+              "content": { "type": "string", "minLength": 1, "maxLength": 20000 },
+              "visibility": { "enum": ["visible", "inspectable"], "default": "visible" },
+              "editable_regions": { "type": ["array", "null"], "items": { "type": "string" } }
+            }
+          }
+        }
+      }
+    },
+    "assessment": {
+      "type": "object",
+      "properties": {
+        "visible_tests": { "$ref": "#/$defs/testFiles", "maxItems": 3, "description": "Learner-runnable pytest files; every path must be pytest-discoverable (test_*.py)." },
+        "hidden_tests": { "$ref": "#/$defs/testFiles", "maxItems": 5, "description": "Grading-only pytest files; never exposed to the learner." },
+        "quiz_items": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "required": ["id", "kind", "prompt_markdown", "explanation_markdown"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+              "kind": { "enum": ["mcq", "multi_select", "fill", "short_answer"] },
+              "prompt_markdown": { "type": "string", "minLength": 1, "maxLength": 2000 },
+              "options": {
+                "type": "array",
+                "maxItems": 6,
+                "description": "mcq and multi_select only (2-6 entries); each option explains why it is right or wrong.",
+                "items": {
+                  "type": "object",
+                  "required": ["text", "explanation_markdown"],
+                  "properties": {
+                    "text": { "type": "string", "minLength": 1, "maxLength": 500 },
+                    "explanation_markdown": { "type": "string", "minLength": 1, "maxLength": 1000 }
+                  }
+                }
+              },
+              "correct_option_index": { "type": ["integer", "null"], "description": "mcq only." },
+              "correct_option_indices": { "type": "array", "maxItems": 6, "items": { "type": "integer" }, "description": "multi_select only; every correct option must be selected to be graded correct." },
+              "correct_answers": { "type": "array", "maxItems": 8, "items": { "type": "string" }, "description": "fill only; accepted strings, matched case-insensitively." },
+              "rubric_markdown": { "type": ["string", "null"], "maxLength": 2000, "description": "short_answer only; grading criteria for the LLM judge. Grading-only, never shown to the learner." },
+              "explanation_markdown": { "type": "string", "minLength": 1, "maxLength": 2000 },
+              "citations": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        },
+        "hints": { "type": "array", "maxItems": 5, "items": { "type": "string" }, "description": "Ordered progressively; delivered one at a time." },
+        "reference_solution_files": {
+          "$ref": "#/$defs/testFiles",
+          "maxItems": 10,
+          "description": "Must cover exactly the visible workspace file paths. Grading-only."
+        }
+      }
+    }
+  },
+  "$defs": {
+    "testFiles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "content"],
+        "properties": {
+          "path": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_./-]*\\.py$" },
+          "content": { "type": "string", "minLength": 1, "maxLength": 20000 }
+        }
+      }
+    }
+  }
+}

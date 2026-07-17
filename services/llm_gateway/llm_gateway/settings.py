@@ -5,7 +5,7 @@ from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-GatewayTask = Literal["course_planning", "lesson_build", "lesson_repair", "concept_regeneration", "embedding"]
+GatewayTask = Literal["course_planning", "lesson_build", "lesson_repair", "concept_regeneration", "quiz_grading", "embedding"]
 
 
 class GatewaySettings(BaseSettings):
@@ -24,18 +24,26 @@ class GatewaySettings(BaseSettings):
     openai_api_key: SecretStr | None = None
     openai_planner_model: str = "gpt-5.4-mini"
     openai_embedding_model: str = "text-embedding-3-small"
-    openai_builder_model: str = "gpt-5.4-mini"
+    # Lesson generation runs on every concept, so it uses Luna, the newest-generation
+    # small/fast tier. Repair only fires on labs that already failed their first sandbox
+    # run, so it can afford the flagship Sol reasoning tier where generation cannot.
+    openai_builder_model: str = "gpt-5.6-luna"
+    openai_repair_model: str = "gpt-5.6-sol"
 
     azure_openai_endpoint: str | None = None
     azure_openai_planner_deployment: str | None = None
     azure_openai_embedding_deployment: str | None = None
     azure_openai_builder_deployment: str | None = None
+    # Optional; repair reuses the builder deployment when this is unset.
+    azure_openai_repair_deployment: str | None = None
 
     # AWS Bedrock (Converse API). Credentials come from the standard boto3
     # chain (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / profile / role).
     aws_region: str | None = None
     aws_bedrock_planner_model: str = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
     aws_bedrock_builder_model: str = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+    # Optional; repair reuses the builder model when unset (Bedrock has no Sol tier).
+    aws_bedrock_repair_model: str | None = None
     aws_bedrock_embedding_model: str = "amazon.titan-embed-text-v2:0"
 
     # Only used when llm_provider=aws_openai: a long-term Bedrock API key for
@@ -44,6 +52,8 @@ class GatewaySettings(BaseSettings):
     aws_bedrock_api_key: SecretStr | None = None
     aws_openai_planner_model: str = "openai.gpt-5.4"
     aws_openai_builder_model: str = "openai.gpt-5.4"
+    # Only used when llm_provider=aws_openai: repair reuses the builder model when unset.
+    aws_openai_repair_model: str | None = None
 
     def require_runtime_configuration(self) -> None:
         if self.environment != "development" and not self.internal_service_token:
@@ -68,7 +78,7 @@ class GatewaySettings(BaseSettings):
             raise RuntimeError("APP_AWS_BEDROCK_API_KEY must be configured when APP_LLM_PROVIDER=aws_openai.")
 
     def model_for(self, task: GatewayTask) -> str:
-        if task in {"course_planning"}:
+        if task == "course_planning":
             return self._provider_model(
                 self.openai_planner_model,
                 self.azure_openai_planner_deployment,
@@ -82,6 +92,16 @@ class GatewaySettings(BaseSettings):
                 self.azure_openai_embedding_deployment,
                 self.aws_bedrock_embedding_model,
                 self.aws_bedrock_embedding_model,
+            )
+        if task == "lesson_repair":
+            # The agentic repair loop is the last line of defense before a lab is declared
+            # failed, so it runs on the flagship tier. Providers without a dedicated repair
+            # model fall back to their builder model, leaving their behavior unchanged.
+            return self._provider_model(
+                self.openai_repair_model,
+                self.azure_openai_repair_deployment or self.azure_openai_builder_deployment,
+                self.aws_bedrock_repair_model or self.aws_bedrock_builder_model,
+                self.aws_openai_repair_model or self.aws_openai_builder_model,
             )
         return self._provider_model(
             self.openai_builder_model,

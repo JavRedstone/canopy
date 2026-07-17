@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
     sandbox_timeout_seconds: int = 20
     sandbox_runner_url: str = "http://localhost:8020"
+    llm_gateway_url: str = "http://localhost:8010"
+    llm_gateway_timeout_seconds: int = 30
     internal_service_token: SecretStr | None = None
 
     @property

@@ -53,6 +53,15 @@ def test_settings_accept_legacy_openai_provider_env_alias(monkeypatch) -> None:
     assert GatewaySettings(_env_file=None).llm_provider == "aws"
 
 
+def test_settings_model_for_splits_openai_generation_and_repair() -> None:
+    settings = _settings(openai_api_key="test-key")
+    # Generation tasks share the builder (Luna) tier; only repair is promoted to Sol.
+    assert settings.model_for("lesson_build") == "gpt-5.6-luna"
+    assert settings.model_for("concept_regeneration") == "gpt-5.6-luna"
+    assert settings.model_for("quiz_grading") == "gpt-5.6-luna"
+    assert settings.model_for("lesson_repair") == "gpt-5.6-sol"
+
+
 def test_settings_model_for_uses_bedrock_models_when_aws() -> None:
     settings = _settings(
         llm_provider="aws",
@@ -62,8 +71,11 @@ def test_settings_model_for_uses_bedrock_models_when_aws() -> None:
         aws_bedrock_embedding_model="embed-bedrock",
     )
     assert settings.model_for("course_planning") == "planner-bedrock"
+    # Bedrock has no dedicated repair tier, so repair falls back to the builder model.
     assert settings.model_for("lesson_repair") == "builder-bedrock"
     assert settings.model_for("embedding") == "embed-bedrock"
+    # An explicit repair model overrides that fallback.
+    assert settings.model_copy(update={"aws_bedrock_repair_model": "repair-bedrock"}).model_for("lesson_repair") == "repair-bedrock"
 
 
 def test_bedrock_openai_targets_mantle_endpoint_and_uses_titan_for_embeddings() -> None:

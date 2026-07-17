@@ -15,31 +15,43 @@ class PlannerConcept(BaseModel):
     citations: list[str] = Field(default_factory=list)
 
 
-class ModuleSkeleton(BaseModel):
+class OutlineModule(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str = Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
     title: str = Field(min_length=1, max_length=160)
+    focus: str = Field(min_length=1, max_length=400)
+    # One lesson per concept, so this is also the concept count for the module. Capped at
+    # ModuleConcepts' limit so the target is always achievable in a single concepts call.
+    lesson_count: int = Field(ge=1, le=8)
 
 
-class CourseSkeleton(BaseModel):
-    """The first, fast planning call: module titles only, no concepts yet."""
+class CourseOutline(BaseModel):
+    """The first planning call: audience, objectives, and modules with a scope and a
+    planned lesson count each -- but no concepts yet. The per-module lesson counts are
+    the course's lesson budget, validated against the learner's requested range."""
 
     model_config = ConfigDict(extra="forbid")
 
     course_title: str = Field(min_length=1, max_length=160)
     source_set_hash: str = Field(min_length=1)
-    modules: list[ModuleSkeleton] = Field(min_length=1, max_length=10)
+    audience: str = Field(min_length=1, max_length=600)
+    objectives: list[str] = Field(min_length=1, max_length=8)
+    modules: list[OutlineModule] = Field(min_length=1, max_length=10)
 
     @model_validator(mode="after")
-    def unique_module_ids(self) -> "CourseSkeleton":
+    def unique_module_ids(self) -> "CourseOutline":
         if len({module.id for module in self.modules}) != len(self.modules):
             raise ValueError("Module identifiers must be unique.")
         return self
 
+    @property
+    def total_lessons(self) -> int:
+        return sum(module.lesson_count for module in self.modules)
+
 
 class ModuleConcepts(BaseModel):
-    """One module's concepts, generated and persisted after the skeleton."""
+    """One module's concepts, generated and persisted after the outline."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -52,15 +64,23 @@ class ModuleConcepts(BaseModel):
         return self
 
 
-def validate_course_skeleton(skeleton: CourseSkeleton, source_set_hash: str) -> None:
-    if skeleton.source_set_hash != source_set_hash:
+def validate_course_outline(outline: CourseOutline, source_set_hash: str, lesson_min: int, lesson_max: int) -> None:
+    if outline.source_set_hash != source_set_hash:
         raise ValueError("Planner output does not match this course's source set.")
+    total = outline.total_lessons
+    if not lesson_min <= total <= lesson_max:
+        raise ValueError(
+            f"The module lesson counts total {total}, but the course must contain between "
+            f"{lesson_min} and {lesson_max} lessons. Adjust the number of modules or their "
+            f"lesson_count values so the total lands in that range."
+        )
 
 
 def validate_module_concepts(
     concepts: Iterable[PlannerConcept],
     available_citations: Iterable[str],
     known_concept_ids: Iterable[str],
+    expected_count: int | None = None,
 ) -> None:
     """Validate one module's concepts against everything generated before it.
 
@@ -68,8 +88,15 @@ def validate_module_concepts(
     earlier module, or an earlier concept within this same module. Because
     modules and their concepts are generated and validated in strict order,
     this makes the overall course graph acyclic by construction -- no
-    separate cycle-detection pass is needed.
+    separate cycle-detection pass is needed. When ``expected_count`` is given,
+    the module must produce exactly that many concepts so the course lands on
+    the lesson budget its outline promised.
     """
+    concepts = list(concepts)
+    if expected_count is not None and len(concepts) != expected_count:
+        raise ValueError(
+            f"This module must contain exactly {expected_count} concept(s), but {len(concepts)} were generated."
+        )
     available_citations = set(available_citations)
     resolved = set(known_concept_ids)
     for concept in concepts:

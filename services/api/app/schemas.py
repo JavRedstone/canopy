@@ -93,6 +93,52 @@ class LessonWorkspaceFile(BaseModel):
 LessonBuildStatus = Literal["pending", "building", "built", "failed"]
 
 
+class WorkedExamplePreview(BaseModel):
+    title: str
+    body_markdown: str
+
+
+class QuizOptionPreview(BaseModel):
+    text: str
+
+
+QuizKind = Literal["mcq", "multi_select", "fill", "short_answer"]
+
+
+class QuizItemPreview(BaseModel):
+    """A quiz item with grading fields (correct answers, rubric, explanations) stripped."""
+
+    id: str
+    kind: QuizKind
+    prompt_markdown: str
+    options: list[QuizOptionPreview] = Field(default_factory=list)
+
+
+class QuizAnswerRequest(BaseModel):
+    """The learner's response; exactly the field matching the item's kind must be set."""
+
+    selected_option_index: int | None = Field(default=None, ge=0)
+    selected_option_indices: list[int] | None = Field(default=None, max_length=6)
+    answer_text: str | None = Field(default=None, max_length=4000)
+
+
+class QuizOptionGrade(BaseModel):
+    text: str
+    explanation_markdown: str
+    correct: bool
+
+
+class QuizGradeResponse(BaseModel):
+    """Full feedback, revealed only after the learner has answered."""
+
+    item_id: str
+    correct: bool
+    explanation_markdown: str
+    options: list[QuizOptionGrade] = Field(default_factory=list)
+    correct_answers: list[str] = Field(default_factory=list)
+    feedback_markdown: str | None = None
+
+
 class LessonPreview(BaseModel):
     status: LessonBuildStatus
     title: str
@@ -100,6 +146,8 @@ class LessonPreview(BaseModel):
     starter_files: list[LessonWorkspaceFile]
     hints: list[str]
     public_test_files: list[LessonWorkspaceFile] = Field(default_factory=list)
+    worked_examples: list[WorkedExamplePreview] = Field(default_factory=list)
+    quiz_items: list[QuizItemPreview] = Field(default_factory=list)
 
 
 class RunLessonRequest(BaseModel):

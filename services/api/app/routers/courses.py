@@ -4,9 +4,11 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.dependencies import CurrentUser
+from app.llm import LLMGatewayClient
+from app.quiz import grade_quiz_answer
 from app.repository import CourseRepository, get_repository
 from app.sandbox import SandboxError, SandboxFile, SandboxRunnerClient
-from app.schemas import ConceptDetailResponse, CourseMapResponse, CourseProgressResponse, CourseSummary, CreateCourseRequest, RunLessonRequest, RunLessonResponse, RunScriptRequest, RunScriptResponse
+from app.schemas import ConceptDetailResponse, CourseMapResponse, CourseProgressResponse, CourseSummary, CreateCourseRequest, QuizAnswerRequest, QuizGradeResponse, RunLessonRequest, RunLessonResponse, RunScriptRequest, RunScriptResponse
 from app.settings import get_settings
 
 router = APIRouter(prefix="/courses", tags=["courses"])
@@ -24,6 +26,19 @@ def get_lesson_sandbox() -> SandboxRunnerClient:
 
 
 LessonSandbox = Annotated[SandboxRunnerClient, Depends(get_lesson_sandbox)]
+
+
+def get_quiz_grader() -> LLMGatewayClient:
+    settings = get_settings()
+    token = settings.internal_service_token.get_secret_value() if settings.internal_service_token else None
+    return LLMGatewayClient(
+        settings.llm_gateway_url,
+        internal_service_token=token,
+        timeout_seconds=settings.llm_gateway_timeout_seconds,
+    )
+
+
+QuizGrader = Annotated[LLMGatewayClient, Depends(get_quiz_grader)]
 
 
 @router.get("", response_model=list[CourseSummary])
@@ -117,6 +132,24 @@ def run_script(
     except (SandboxError, ValueError) as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="The exercise runner is unavailable.") from exc
     return RunScriptResponse(output=result.output, exit_code=result.exit_code, timed_out=result.timed_out)
+
+
+@router.post("/{course_id}/concepts/{slug}/quiz-items/{item_id}/answer", response_model=QuizGradeResponse)
+def answer_quiz_item(
+    course_id: UUID,
+    slug: str,
+    item_id: str,
+    request: QuizAnswerRequest,
+    current_user: CurrentUser,
+    repository: Repository,
+    grader: QuizGrader,
+) -> QuizGradeResponse:
+    """Grade one quiz response against the bundle's server-side answers and reveal the feedback.
+
+    Stateless for now: responses become durable observations once learner assignments exist.
+    """
+    item = repository.quiz_item(current_user, course_id, slug, item_id)
+    return grade_quiz_answer(item, request, grader)
 
 
 @router.post("/{course_id}/concepts/{slug}/regenerate", status_code=status.HTTP_202_ACCEPTED)
