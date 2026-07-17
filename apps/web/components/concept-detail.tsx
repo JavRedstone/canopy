@@ -10,6 +10,7 @@ import { MarkdownText } from "@/components/markdown-text";
 import { PageShell } from "@/components/page-shell";
 import { QuizQuestion, QuizSection } from "@/components/quiz";
 import { SettingsMenu } from "@/components/settings-menu";
+import { ConfettiBurst } from "@/components/confetti-burst";
 import { conceptKindIcon, conceptKindLabel } from "@/lib/concept-kind";
 import { createClient } from "@/lib/supabase/client";
 import { parsePytestCases } from "@/lib/pytest-output";
@@ -27,13 +28,16 @@ import CircularProgress from "@mui/material/CircularProgress";
 import Button from "@mui/material/Button";
 import Tabs from "@mui/material/Tabs";
 import Tab from "@mui/material/Tab";
-import Badge from "@mui/material/Badge";
 import Collapse from "@mui/material/Collapse";
 import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
 import DialogContentText from "@mui/material/DialogContentText";
 import DialogActions from "@mui/material/DialogActions";
+import List from "@mui/material/List";
+import ListItemButton from "@mui/material/ListItemButton";
+import ListItemIcon from "@mui/material/ListItemIcon";
+import ListItemText from "@mui/material/ListItemText";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 const stallThresholdMs = 45_000;
@@ -142,6 +146,13 @@ function defaultScratchScript(starterFiles: LessonWorkspaceFile[]): string {
   return `# Import your solution and try anything - print() shows up below when you run it.\nfrom ${moduleName} import *\n`;
 }
 
+// "classification_workflow.py" -> "classification_workflow_solution.py", so the revealed
+// solution lands in its own tab next to the learner's file rather than colliding with it.
+function solutionFilePath(path: string): string {
+  const dotIndex = path.lastIndexOf(".");
+  return dotIndex === -1 ? `${path}_solution` : `${path.slice(0, dotIndex)}_solution${path.slice(dotIndex)}`;
+}
+
 function BuildingBanner({ title, detail }: { title: string; detail: string }) {
   return (
     <Alert severity="info" icon={false}>
@@ -168,6 +179,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
   const [files, setFiles] = useState<LessonWorkspaceFile[]>([]);
   const [runResult, setRunResult] = useState<LessonRunResult>();
   const [running, setRunning] = useState(false);
+  const [celebrateNonce, setCelebrateNonce] = useState(0);
   const [regenerating, setRegenerating] = useState(false);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [activeFilePath, setActiveFilePath] = useState<string>();
@@ -177,8 +189,10 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
   const [instructionsTab, setInstructionsTab] = useState<"lesson" | "solution">("lesson");
   const [solutionRevealed, setSolutionRevealed] = useState(false);
   const [solutionConfirmOpen, setSolutionConfirmOpen] = useState(false);
+  const [solutionFilePaths, setSolutionFilePaths] = useState<Set<string>>(new Set());
   const [consoleTab, setConsoleTab] = useState<"testcase" | "console" | "tests">("testcase");
   const [fullOutputOpen, setFullOutputOpen] = useState(false);
+  const [expandedCases, setExpandedCases] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -204,6 +218,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
         setScratchCode(defaultScratchScript(starterFiles));
         setInstructionsTab("lesson");
         setSolutionRevealed(false);
+        setSolutionFilePaths(new Set());
         setConsoleTab("testcase");
         setState("ready");
       } catch (caught) {
@@ -234,15 +249,20 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
     setFiles((current) => current.map((file) => file.path === path ? { ...file, content } : file));
   }
 
-  // Unlocking the solution loads it straight into the live workspace editor -- in place
-  // of whatever the learner had written -- so it can be run/submitted exactly like their
-  // own work, rather than sitting inert as a read-only preview.
+  // Unlocking the solution adds it to the workspace as new, separately-named files rather
+  // than overwriting whatever the learner had written -- their own files stay untouched,
+  // and the solution files are fully editable/runnable tabs, not a read-only preview.
   function handleRevealSolution() {
     const solutionFiles = concept?.lesson?.solution_files ?? [];
-    setFiles(solutionFiles.map((file) => ({ ...file })));
-    setActiveFilePath(solutionFiles[0]?.path);
+    const additions = solutionFiles.map((file) => ({ path: solutionFilePath(file.path), content: file.content }));
+    const additionPaths = new Set(additions.map((file) => file.path));
+    setFiles((current) => [...current.filter((file) => !additionPaths.has(file.path)), ...additions]);
+    setSolutionFilePaths(additionPaths);
+    setActiveFilePath(additions[0]?.path);
     setRunResult(undefined);
     setScriptResult(undefined);
+    setExpandedCases(new Set());
+    setFullOutputOpen(false);
     setConsoleTab("testcase");
     setSolutionRevealed(true);
     setSolutionConfirmOpen(false);
@@ -261,14 +281,25 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
   const activeFile = activeEditableFile ?? activePublicTestFile ?? files[0];
   const activeFileIsReadOnly = !activeEditableFile;
 
+  // The API rejects a run/submit unless the file set is *exactly* the lesson's starter
+  // paths (HTTP 422 "Submit exactly the lesson starter files."). Revealing the solution
+  // adds extra `_solution.py` tabs to `files` for viewing/editing, so submissions must be
+  // filtered back down to just the starter paths -- the solution tabs never get graded.
+  const starterFilePaths = new Set((concept?.lesson?.starter_files ?? []).map((file) => file.path));
+  const submittableFiles = files.filter((file) => starterFilePaths.has(file.path));
+
   async function handleRun() {
     setConsoleTab("tests");
     setRunning(true);
+    setExpandedCases(new Set());
+    setFullOutputOpen(false);
     try {
       const { data } = await createClient().auth.getSession();
       if (!data.session) throw new Error("Your session has expired. Please sign in again.");
       setErrorMessage(undefined);
-      setRunResult(await runLesson(courseId, slug, files, data.session.access_token));
+      const result = await runLesson(courseId, slug, submittableFiles, data.session.access_token);
+      setRunResult(result);
+      if (result.passed) setCelebrateNonce((current) => current + 1);
     } catch (caught) {
       setErrorMessage(caught instanceof Error ? caught.message : "Unable to run exercise tests.");
     } finally {
@@ -284,7 +315,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
       if (!data.session) throw new Error("Your session has expired. Please sign in again.");
       setErrorMessage(undefined);
       setScriptResult(
-        await runLessonScript(courseId, slug, files, { path: "scratch.py", content: scratchCode }, data.session.access_token)
+        await runLessonScript(courseId, slug, submittableFiles, { path: "scratch.py", content: scratchCode }, data.session.access_token)
       );
     } catch (caught) {
       setErrorMessage(caught instanceof Error ? caught.message : "Unable to run your script.");
@@ -419,8 +450,8 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
         <DialogTitle>Unlock the reference solution?</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            This replaces whatever you&apos;ve written in the editor with the reference solution, which you can then run or submit.
-            Your current code in the editor will be lost.
+            Seeing the reference solution before you&apos;ve solved it yourself will spoil the exercise. It&apos;s added as new file(s)
+            in your workspace, alongside your own -- your existing work is untouched, and you can run or submit the solution files too.
           </DialogContentText>
         </DialogContent>
         <DialogActions>
@@ -501,21 +532,24 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
             ) : (
               <Stack sx={{ gap: 2 }}>
                 <Alert severity="success" icon={<Icon name="lock_open" />}>
-                  The reference solution is now loaded in your editor on the right -- run or submit it like your own work.
+                  The reference solution was added as new file(s) in the editor on the right -- your own files are untouched.
                 </Alert>
-                {concept.lesson.explanation_markdown ? (
-                  <LessonBody
-                    courseId={courseId}
-                    slug={slug}
-                    markdown={concept.lesson.explanation_markdown}
-                    citations={concept.citations}
-                    examples={concept.lesson.worked_examples ?? []}
-                    quizItems={concept.lesson.quiz_items ?? []}
-                    quizMaxAttempts={concept.lesson.quiz_max_attempts}
-                  />
-                ) : (
-                  <WorkedExamples examples={concept.lesson.worked_examples} citations={concept.citations} />
-                )}
+                <List disablePadding sx={{ display: "grid", gap: 1 }}>
+                  {concept.lesson.solution_files.map((file) => {
+                    const path = solutionFilePath(file.path);
+                    return (
+                      <ListItemButton
+                        key={path}
+                        selected={activeFilePath === path}
+                        onClick={() => setActiveFilePath(path)}
+                        sx={{ border: 1, borderColor: "divider", borderRadius: 1.5 }}
+                      >
+                        <ListItemIcon sx={{ minWidth: 36, color: "success.main" }}><Icon name="auto_awesome" /></ListItemIcon>
+                        <ListItemText primary={path} slotProps={{ primary: { sx: { fontFamily: monoFont, fontSize: "0.85rem" } } }} />
+                      </ListItemButton>
+                    );
+                  })}
+                </List>
               </Stack>
             )}
           </Box>
@@ -543,14 +577,27 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
                   scrollButtons="auto"
                   sx={{ minHeight: 38, flex: 1, minWidth: 0 }}
                 >
-                  {files.map((file) => (
-                    <Tab
-                      key={file.path}
-                      value={file.path}
-                      label={<Stack direction="row" sx={{ alignItems: "center", gap: 0.75 }}><Icon name="code" /> {file.path}</Stack>}
-                      sx={{ minHeight: 38, textTransform: "none", fontFamily: monoFont, fontSize: "0.78rem" }}
-                    />
-                  ))}
+                  {files.map((file) => {
+                    const isSolutionFile = solutionFilePaths.has(file.path);
+                    return (
+                      <Tab
+                        key={file.path}
+                        value={file.path}
+                        label={
+                          <Stack direction="row" sx={{ alignItems: "center", gap: 0.75 }}>
+                            <Icon name={isSolutionFile ? "auto_awesome" : "code"} /> {file.path}
+                          </Stack>
+                        }
+                        sx={{
+                          minHeight: 38,
+                          textTransform: "none",
+                          fontFamily: monoFont,
+                          fontSize: "0.78rem",
+                          color: isSolutionFile ? "success.main" : undefined
+                        }}
+                      />
+                    );
+                  })}
                   {publicTestFiles.map((file) => (
                     <Tab
                       key={file.path}
@@ -573,6 +620,10 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
                 <Typography variant="body2" color="text.secondary" sx={{ px: 2, pt: 1 }}>
                   This is one of the checks your solution is graded against (read-only, but always included when you Submit).
                 </Typography>
+              ) : activeFile && solutionFilePaths.has(activeFile.path) ? (
+                <Typography variant="body2" color="text.secondary" sx={{ px: 2, pt: 1 }}>
+                  This is the reference solution, editable for experimentation -- Run and Submit always test your own files, not this one.
+                </Typography>
               ) : null}
               <Box sx={{ flex: 1, minHeight: 0 }}>
                 {activeFile ? (
@@ -588,7 +639,8 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
                 ) : null}
               </Box>
 
-              <Box sx={{ flexShrink: 0, height: 260, display: "flex", flexDirection: "column", borderTop: 1, borderColor: "divider", bgcolor: "background.paper" }}>
+              <Box sx={{ position: "relative", flexShrink: 0, height: 260, display: "flex", flexDirection: "column", borderTop: 1, borderColor: "divider", bgcolor: "background.paper" }}>
+                {celebrateNonce > 0 && runResult?.passed && consoleTab === "tests" ? <ConfettiBurst key={celebrateNonce} /> : null}
                 <Tabs value={consoleTab} onChange={(_event, value) => setConsoleTab(value)} sx={{ minHeight: 34, px: 1, pt: 1 }}>
                   <Tab
                     value="testcase"
@@ -657,20 +709,45 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
                         const cases = parsePytestCases(runResult.output);
                         return cases.length > 0 ? (
                           <Stack component="ul" sx={{ listStyle: "none", m: 0, p: 0, gap: "2px" }}>
-                            {cases.map((testCase, index) => (
-                              <Stack
-                                component="li"
-                                direction="row"
-                                key={index}
-                                sx={{
-                                  alignItems: "center", gap: 1, px: 1, py: 0.75, borderRadius: 1, fontSize: "0.85rem",
-                                  color: testCase.status === "passed" ? "success.light" : testCase.status === "skipped" ? "text.secondary" : "error.light"
-                                }}
-                              >
-                                <Icon name={testCase.status === "passed" ? "check_circle" : testCase.status === "skipped" ? "remove_circle" : "cancel"} />
-                                <Typography variant="body2" sx={{ color: "inherit" }}>{testCase.name}</Typography>
-                              </Stack>
-                            ))}
+                            {cases.map((testCase, index) => {
+                              const caseExpanded = expandedCases.has(index);
+                              return (
+                                <Box component="li" key={index}>
+                                  <Stack
+                                    direction="row"
+                                    onClick={testCase.output ? () => {
+                                      setExpandedCases((current) => {
+                                        const next = new Set(current);
+                                        if (next.has(index)) next.delete(index); else next.add(index);
+                                        return next;
+                                      });
+                                    } : undefined}
+                                    sx={{
+                                      alignItems: "center", gap: 1, px: 1, py: 0.75, borderRadius: 1, fontSize: "0.85rem",
+                                      cursor: testCase.output ? "pointer" : "default",
+                                      color: testCase.status === "passed" ? "success.light" : testCase.status === "skipped" ? "text.secondary" : "error.light"
+                                    }}
+                                  >
+                                    <Icon name={testCase.status === "passed" ? "check_circle" : testCase.status === "skipped" ? "remove_circle" : "cancel"} />
+                                    <Typography variant="body2" sx={{ color: "inherit", flex: 1 }}>{testCase.name}</Typography>
+                                    {testCase.output ? <Icon name={caseExpanded ? "expand_less" : "expand_more"} /> : null}
+                                  </Stack>
+                                  {testCase.output ? (
+                                    <Collapse in={caseExpanded}>
+                                      <Box
+                                        component="pre"
+                                        sx={{
+                                          m: "0 0 4px", p: 1.5, borderRadius: 1, overflowX: "auto", whiteSpace: "pre-wrap", wordBreak: "break-word",
+                                          fontSize: "0.78rem", bgcolor: "#131313", color: "#ddd", borderLeft: 3, borderColor: "error.main"
+                                        }}
+                                      >
+                                        {testCase.output}
+                                      </Box>
+                                    </Collapse>
+                                  ) : null}
+                                </Box>
+                              );
+                            })}
                           </Stack>
                         ) : null;
                       })()}
@@ -682,7 +759,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
                           onClick={() => setFullOutputOpen((current) => !current)}
                           sx={{ textTransform: "none", color: "text.secondary", px: 0 }}
                         >
-                          {fullOutputOpen ? "Hide full output" : "Full output"}
+                          {fullOutputOpen ? "Hide full raw output" : "Full raw output"}
                         </Button>
                         <Collapse in={fullOutputOpen}>
                           <Box

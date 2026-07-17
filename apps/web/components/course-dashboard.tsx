@@ -87,7 +87,13 @@ export function CourseDashboard() {
             {course.status === "draft" ? (
               <Chip size="small" icon={<CircularProgress size={12} sx={{ color: "inherit" }} />} label="Building…" />
             ) : (
-              <Chip size="small" label={course.status} sx={{ textTransform: "capitalize" }} />
+              <Chip
+                size="small"
+                label={course.status}
+                color={course.status === "ready" ? "success" : "default"}
+                variant={course.status === "ready" ? "filled" : "outlined"}
+                sx={{ textTransform: "capitalize" }}
+              />
             )}
           </ListItemButton>
         </motion.div>

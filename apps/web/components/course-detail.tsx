@@ -192,6 +192,7 @@ export function CourseDetail({ courseId }: { courseId: string }) {
               label={`${points.points_earned} / ${points.points_total} pts`}
               title={`${points.points_per_lesson} points per lesson`}
               variant="outlined"
+              sx={{ "& .MuiChip-icon": { color: "#f5c518" } }}
             />
           ) : null}
           <SettingsMenu actions={settingsActions} label="Course settings" />
@@ -268,7 +269,7 @@ export function CourseDetail({ courseId }: { courseId: string }) {
                             {building ? (
                               <Chip size="small" icon={<CircularProgress size={12} sx={{ color: "inherit" }} />} label="Building…" />
                             ) : (
-                              <Chip size="small" label={concept.kind} sx={{ textTransform: "capitalize" }} />
+                              <Chip size="small" label={concept.kind} color="success" variant="outlined" sx={{ textTransform: "capitalize" }} />
                             )}
                           </ListItemButton>
                         );

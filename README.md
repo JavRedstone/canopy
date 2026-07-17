@@ -128,5 +128,8 @@ The current vertical slice uses Supabase Auth and the Supabase-backed course rep
 
 - [Product idea](./docs/IDEA.md)
 - [Architecture](./docs/ARCHITECTURE.md)
+- [Architecture audit (current-state)](./docs/ARCHITECTURE_AUDIT_2026_07_16.md)
+- [Sandbox architecture: frontend UX and backend execution](./docs/SANDBOX_ARCHITECTURE.md)
 - [Scaffold status](./docs/SCAFFOLD_STATUS.md)
 - [Sample course inputs](./docs/SAMPLE_COURSES.md)
+    

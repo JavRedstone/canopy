@@ -16,6 +16,7 @@ import Divider from "@mui/material/Divider";
 import { alpha } from "@mui/material/styles";
 import { QuizAnswerRequest, QuizGradeResponse, QuizItemPreview, answerQuizItem } from "@/lib/api";
 import { MarkdownText } from "@/components/markdown-text";
+import { ConfettiBurst } from "@/components/confetti-burst";
 import { createClient } from "@/lib/supabase/client";
 
 function answerFor(item: QuizItemPreview, selected: number[], text: string): QuizAnswerRequest | null {
@@ -41,10 +42,14 @@ export function QuizQuestion({ courseId, slug, item, index, maxAttempts = DEFAUL
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string>();
   const [attemptsUsed, setAttemptsUsed] = useState(item.attempts_used);
+  // Only fresh, just-submitted correct answers celebrate -- not ones hydrated from a
+  // previous session, which would confetti-spam every page load.
+  const [celebrateNonce, setCelebrateNonce] = useState(0);
 
   function handleRetry() {
+    // Clear choice selections (naturally re-picked), but leave any typed text answer in
+    // place so a retry is an edit, not a re-type from scratch.
     setSelected([]);
-    setText("");
     setGrade(undefined);
     setError(undefined);
   }
@@ -77,6 +82,7 @@ export function QuizQuestion({ courseId, slug, item, index, maxAttempts = DEFAUL
       const result = await answerQuizItem(courseId, slug, item.id, answer, data.session.access_token);
       setGrade(result);
       setAttemptsUsed(result.attempts_used);
+      if (result.correct) setCelebrateNonce((current) => current + 1);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to grade your answer.");
     } finally {
@@ -88,6 +94,7 @@ export function QuizQuestion({ courseId, slug, item, index, maxAttempts = DEFAUL
     <Paper
       variant="outlined"
       sx={{
+        position: "relative",
         p: 2,
         display: "grid",
         gap: 1.5,
@@ -95,6 +102,7 @@ export function QuizQuestion({ courseId, slug, item, index, maxAttempts = DEFAUL
         borderLeftColor: answered ? (grade.correct ? "success.main" : "error.main") : "divider"
       }}
     >
+      {celebrateNonce > 0 ? <ConfettiBurst key={celebrateNonce} /> : null}
       <Stack direction="row" sx={{ gap: 1.25, alignItems: "baseline" }}>
         <Avatar sx={{ width: 22, height: 22, fontSize: "0.78rem", fontWeight: 700, bgcolor: "action.hover", color: "text.primary" }}>
           {index + 1}
@@ -108,7 +116,9 @@ export function QuizQuestion({ courseId, slug, item, index, maxAttempts = DEFAUL
             const optionGrade = grade?.options[optionIndex];
             const isSelected = selected.includes(optionIndex);
             const isIncorrect = Boolean(answered && isSelected && optionGrade && !optionGrade.correct);
-            const isCorrect = Boolean(optionGrade?.correct);
+            // Only reveal correctness for options the learner actually picked -- marking an
+            // unselected option green would give away an answer they never chose.
+            const isCorrect = Boolean(isSelected && optionGrade?.correct);
             return (
               <Paper
                 key={optionIndex}
@@ -148,7 +158,7 @@ export function QuizQuestion({ courseId, slug, item, index, maxAttempts = DEFAUL
                 )}
                 <Box sx={{ display: "grid", gap: 0.5 }}>
                   <Typography variant="body2">{option.text}</Typography>
-                  {answered && optionGrade && (isSelected || optionGrade.correct) ? (
+                  {answered && optionGrade && isSelected ? (
                     <Typography variant="caption" color="text.secondary">{optionGrade.explanation_markdown}</Typography>
                   ) : null}
                 </Box>
@@ -224,7 +234,7 @@ export function QuizSection({ courseId, slug, items, maxAttempts = DEFAULT_MAX_A
         <Typography variant="overline" color="text.secondary">Mastery check</Typography>
       </Divider>
       <Typography variant="body2" color="text.secondary" sx={{ mt: -1 }}>
-        Up to {maxAttempts} attempts per question: show what you&apos;ve learned.
+        Use up to <Box component="strong" sx={{ fontWeight: 700, color: "text.primary" }}>{maxAttempts}</Box>{" "}attempts per question to show what you&apos;ve learned.
       </Typography>
       {items.map((item, index) => (
         <QuizQuestion courseId={courseId} slug={slug} item={item} index={index} maxAttempts={maxAttempts} key={item.id} />

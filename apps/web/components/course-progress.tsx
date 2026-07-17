@@ -74,9 +74,9 @@ function StepMarker({ state, index }: { state: StepState; index: number }) {
     fontSize: "0.8rem",
     fontWeight: 700,
     flexShrink: 0,
-    ...(state === "done" && { bgcolor: "text.primary", color: "background.paper" }),
+    ...(state === "done" && { bgcolor: "success.main", color: "success.contrastText" }),
     ...(state === "failed" && { bgcolor: "error.main", color: "error.contrastText" }),
-    ...(state === "active" && { border: 2, borderColor: "text.primary", color: "text.primary" }),
+    ...(state === "active" && { border: 2, borderColor: "primary.main", color: "primary.main" }),
     ...(state === "pending" && { border: 1, borderColor: "divider", color: "text.secondary" })
   } as const;
 
