@@ -49,6 +49,14 @@ def _require(condition: bool, detail: str) -> None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=detail)
 
 
+def withhold_answer(grade: QuizGradeResponse) -> QuizGradeResponse:
+    """Strip everything that reveals the correct answer, for a wrong response that still has
+    attempts left. The learner keeps the pass/fail verdict and (for short answers) the coaching
+    feedback, but the accepted answers, per-option correctness, and explanation are held back --
+    over the wire as well as on screen -- until they run out of attempts or get it right."""
+    return grade.model_copy(update={"explanation_markdown": "", "options": [], "correct_answers": []})
+
+
 def grade_quiz_answer(item: dict, answer: QuizAnswerRequest, grader: LLMGatewayClient) -> QuizGradeResponse:
     kind = item["kind"]
     if kind == "mcq":

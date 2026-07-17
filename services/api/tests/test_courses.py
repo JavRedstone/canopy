@@ -65,6 +65,31 @@ def test_course_vertical_slice() -> None:
     assert missing_concept.status_code == 404
 
 
+def test_course_mastery_endpoint_returns_the_threshold_and_concepts() -> None:
+    client = TestClient(app)
+    course = client.post(
+        "/api/v1/courses",
+        json={"title": "Mastery", "goal": "Track it", "source_ids": []},
+    )
+    assert course.status_code == 201
+    course_id = course.json()["id"]
+
+    mastery = client.get(f"/api/v1/courses/{course_id}/mastery")
+    assert mastery.status_code == 200
+    body = mastery.json()
+    assert body["course_id"] == course_id
+    assert body["threshold"] == 0.95
+    assert isinstance(body["concepts"], list)
+
+    prerequisites = client.get(f"/api/v1/courses/{course_id}/concepts/core-pattern/prerequisites")
+    assert prerequisites.status_code == 200
+    prereq_body = prerequisites.json()
+    assert prereq_body["slug"] == "core-pattern"
+    assert prereq_body["review_threshold"] == 0.6
+    assert prereq_body["review_recommended"] is False
+    assert isinstance(prereq_body["prerequisites"], list)
+
+
 def test_course_deletion() -> None:
     client = TestClient(app)
     owner = {"X-Demo-User-Id": "00000000-0000-0000-0000-000000000004"}

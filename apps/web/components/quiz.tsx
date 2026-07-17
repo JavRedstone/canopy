@@ -33,7 +33,7 @@ function selectionFromAnswer(answer: QuizAnswerRequest | null): number[] {
   return answer.selected_option_indices ?? [];
 }
 
-export function QuizQuestion({ courseId, slug, item, index, maxAttempts = DEFAULT_MAX_ATTEMPTS, onCorrect }: { courseId: string; slug: string; item: QuizItemPreview; index: number; maxAttempts?: number; onCorrect?: (itemId: string) => void }) {
+export function QuizQuestion({ courseId, slug, item, index, maxAttempts = DEFAULT_MAX_ATTEMPTS, onCorrect, onAnswered }: { courseId: string; slug: string; item: QuizItemPreview; index: number; maxAttempts?: number; onCorrect?: (itemId: string) => void; onAnswered?: () => void }) {
   // A previously-correct item is hydrated with the exact answer and grade it was given
   // last time, so it replays as the real answered state instead of resetting blank.
   const [selected, setSelected] = useState<number[]>(() => selectionFromAnswer(item.previous_answer));
@@ -82,6 +82,9 @@ export function QuizQuestion({ courseId, slug, item, index, maxAttempts = DEFAUL
       const result = await answerQuizItem(courseId, slug, item.id, answer, data.session.access_token);
       setGrade(result);
       setAttemptsUsed(result.attempts_used);
+      // Every graded answer -- right or wrong -- is an understand-track observation, so let
+      // the mastery meter refresh on either outcome. Only correct answers celebrate/complete.
+      onAnswered?.();
       if (result.correct) {
         setCelebrateNonce((current) => current + 1);
         onCorrect?.(item.id);
@@ -209,7 +212,8 @@ export function QuizQuestion({ courseId, slug, item, index, maxAttempts = DEFAUL
               {!grade.correct && grade.correct_answers.length > 0 ? (
                 <Typography variant="body2">Accepted answer{grade.correct_answers.length > 1 ? "s" : ""}: {grade.correct_answers.join(", ")}</Typography>
               ) : null}
-              <MarkdownText>{grade.explanation_markdown}</MarkdownText>
+              {/* Withheld while attempts remain -- the answer only comes back once they're correct or out of tries. */}
+              {grade.explanation_markdown ? <MarkdownText>{grade.explanation_markdown}</MarkdownText> : null}
               {!grade.correct ? (
                 canRetry ? (
                   <Box>
@@ -229,7 +233,7 @@ export function QuizQuestion({ courseId, slug, item, index, maxAttempts = DEFAUL
   );
 }
 
-export function QuizSection({ courseId, slug, items, maxAttempts = DEFAULT_MAX_ATTEMPTS, title = "Mastery check", onComplete }: { courseId: string; slug: string; items?: QuizItemPreview[]; maxAttempts?: number; title?: string; onComplete?: () => void }) {
+export function QuizSection({ courseId, slug, items, maxAttempts = DEFAULT_MAX_ATTEMPTS, title = "Mastery check", onComplete, onAnswered }: { courseId: string; slug: string; items?: QuizItemPreview[]; maxAttempts?: number; title?: string; onComplete?: () => void; onAnswered?: () => void }) {
   const questions = items ?? [];
   const [correctIds, setCorrectIds] = useState<Set<string>>(() => new Set(questions.filter((item) => item.previous_grade?.correct).map((item) => item.id)));
   if (!questions.length) return null;
@@ -250,7 +254,7 @@ export function QuizSection({ courseId, slug, items, maxAttempts = DEFAULT_MAX_A
         Use up to <Box component="strong" sx={{ fontWeight: 700, color: "text.primary" }}>{maxAttempts}</Box>{" "}attempts per question to show what you&apos;ve learned.
       </Typography>
       {questions.map((item, index) => (
-        <QuizQuestion courseId={courseId} slug={slug} item={item} index={index} maxAttempts={maxAttempts} onCorrect={handleCorrect} key={item.id} />
+        <QuizQuestion courseId={courseId} slug={slug} item={item} index={index} maxAttempts={maxAttempts} onCorrect={handleCorrect} onAnswered={onAnswered} key={item.id} />
       ))}
     </Stack>
   );

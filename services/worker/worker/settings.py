@@ -29,8 +29,12 @@ class WorkerSettings(BaseSettings):
     sandbox_timeout_seconds: int = 20
 
     @property
-    def planner_model(self) -> str:
-        return "course_planning"
+    def outline_model(self) -> str:
+        return "course_outline"
+
+    @property
+    def module_concepts_model(self) -> str:
+        return "module_concepts"
 
     @property
     def embedding_model(self) -> str:

@@ -47,6 +47,15 @@ function inline(text: string, citations?: string[]): ReactNode[] {
   return nodes;
 }
 
+// Body headings need real hierarchy or the prose reads flat: MUI's default subtitle1/h6
+// land at ~body weight and size. These map each markdown level to a distinct size + bold
+// weight + tighter leading, with extra top margin so a heading signals a new section.
+const HEADING_STYLES = {
+  1: { component: "h2" as const, fontSize: "1.3rem", fontWeight: 700, lineHeight: 1.3, mt: 2 },
+  2: { component: "h3" as const, fontSize: "1.1rem", fontWeight: 700, lineHeight: 1.35, mt: 1.75 },
+  3: { component: "h4" as const, fontSize: "0.95rem", fontWeight: 700, lineHeight: 1.4, mt: 1.25 }
+};
+
 /** A deliberately small, safe Markdown renderer for LLM-authored lesson text. */
 export function MarkdownText({ children, citations }: { children: string; citations?: string[] }) {
   // Some older generated lessons put list markers directly after a sentence. Make those readable too.
@@ -103,8 +112,16 @@ export function MarkdownText({ children, citations }: { children: string; citati
     if (heading) {
       flushParagraph(); flushList();
       const text = inline(heading[2], citations);
-      if (heading[1].length === 1) blocks.push(<Typography variant="h6" sx={{ mt: 1, letterSpacing: "-0.01em" }} key={`h-${blocks.length}`}>{text}</Typography>);
-      else blocks.push(<Typography variant="subtitle1" sx={{ mt: 1, letterSpacing: "-0.01em" }} key={`h-${blocks.length}`}>{text}</Typography>);
+      const style = HEADING_STYLES[heading[1].length as 1 | 2 | 3];
+      blocks.push(
+        <Typography
+          component={style.component}
+          key={`h-${blocks.length}`}
+          sx={{ mt: style.mt, fontSize: style.fontSize, fontWeight: style.fontWeight, lineHeight: style.lineHeight, letterSpacing: "-0.01em", "&:first-of-type": { mt: 0 } }}
+        >
+          {text}
+        </Typography>
+      );
     } else if (unordered || ordered) {
       flushParagraph();
       const isOrdered = Boolean(ordered);

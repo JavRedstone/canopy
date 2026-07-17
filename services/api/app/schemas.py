@@ -73,6 +73,51 @@ class CoursePointsResponse(BaseModel):
     points_per_lesson: int
 
 
+class ConceptMastery(BaseModel):
+    """Per-concept dual-track mastery: continuous BKT estimates, distinct from the coarse
+    completion/points signal. ``p_understand`` (quiz-fed) and ``p_apply`` (coding-fed) are
+    ``None`` until that track has at least one observation, so the UI can show "no data yet"
+    rather than a misleading zero."""
+
+    slug: str
+    title: str
+    kind: Literal["conceptual", "coding", "assessment"]
+    p_understand: float | None = None
+    p_apply: float | None = None
+    understand_opportunities: int = 0
+    apply_opportunities: int = 0
+    mastered: bool = False
+
+
+class CourseMasteryResponse(BaseModel):
+    course_id: UUID
+    threshold: float
+    concepts: list[ConceptMastery]
+
+
+class PrerequisiteConcept(BaseModel):
+    """A concept the current one builds on, with the learner's mastery on it. ``needs_review``
+    means it was practiced but is shaky, so reviewing it should help the current concept."""
+
+    slug: str
+    title: str
+    kind: Literal["conceptual", "coding", "assessment"]
+    p_understand: float | None = None
+    p_apply: float | None = None
+    mastered: bool = False
+    needs_review: bool = False
+
+
+class PrerequisiteReviewResponse(BaseModel):
+    course_id: UUID
+    slug: str
+    threshold: float
+    review_threshold: float
+    prerequisites: list[PrerequisiteConcept]
+    # True when at least one prerequisite is shaky enough to recommend reviewing first.
+    review_recommended: bool = False
+
+
 class CourseMapConcept(BaseModel):
     slug: str
     title: str

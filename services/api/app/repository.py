@@ -13,7 +13,18 @@ from postgrest.exceptions import APIError
 from supabase import Client
 
 from app.lesson_bundle import bundle_view
-from app.schemas import ConceptDetailResponse, CoursePointsResponse, CourseMapConcept, CourseMapModule, CourseMapResponse, CourseProgressResponse, CourseSummary, CreateCourseRequest, CreateSourceRequest, LessonPreview, LessonWorkspaceFile, QuizAnswerRequest, QuizGradeResponse, QuizItemPreview, SourceSummary, SourceUploadTarget, UpdateCourseRequest
+from app.mastery import (
+    AssessmentKind,
+    assessment_for_quiz_kind,
+    bkt_update,
+    concept_mastered,
+    params_for,
+    prerequisite_needs_review,
+    track_for,
+    MASTERY_THRESHOLD,
+    REVIEW_THRESHOLD,
+)
+from app.schemas import ConceptDetailResponse, ConceptMastery, CoursePointsResponse, CourseMapConcept, CourseMapModule, CourseMapResponse, CourseMasteryResponse, CourseProgressResponse, CourseSummary, CreateCourseRequest, CreateSourceRequest, LessonPreview, LessonWorkspaceFile, PrerequisiteConcept, PrerequisiteReviewResponse, QuizAnswerRequest, QuizGradeResponse, QuizItemPreview, SourceSummary, SourceUploadTarget, UpdateCourseRequest
 from app.settings import get_settings
 from app.supabase import get_service_client
 
@@ -73,6 +84,20 @@ class CourseRepository(Protocol):
 
     def complete_coding_lesson(self, owner_id: UUID, course_id: UUID, slug: str) -> None:
         """Marks a coding lab's assignment completed once its checks pass."""
+        ...
+
+    def record_coding_submission(self, owner_id: UUID, course_id: UUID, slug: str, passed: bool) -> None:
+        """Records a deliberate Submit as an ``apply``-track mastery observation (pass or
+        fail) and, on pass, marks the lab completed. Run (visible tests only) is behavioral
+        signal and never lands here."""
+        ...
+
+    def course_mastery(self, owner_id: UUID, course_id: UUID) -> CourseMasteryResponse:
+        """Per-concept dual-track BKT estimates for the learner over the active version."""
+        ...
+
+    def concept_prerequisites(self, owner_id: UUID, course_id: UUID, slug: str) -> PrerequisiteReviewResponse:
+        """The concepts this one builds on, each with the learner's mastery and a review flag."""
         ...
 
     def course_points(self, owner_id: UUID, course_id: UUID) -> CoursePointsResponse: ...
@@ -243,6 +268,20 @@ class MemoryCourseRepository:
 
     def complete_coding_lesson(self, owner_id: UUID, course_id: UUID, slug: str) -> None:
         self._course_for_owner(owner_id, course_id)
+
+    def record_coding_submission(self, owner_id: UUID, course_id: UUID, slug: str, passed: bool) -> None:
+        self._course_for_owner(owner_id, course_id)
+
+    def course_mastery(self, owner_id: UUID, course_id: UUID) -> CourseMasteryResponse:
+        course = self._course_for_owner(owner_id, course_id)
+        return CourseMasteryResponse(course_id=course.id, threshold=MASTERY_THRESHOLD, concepts=[])
+
+    def concept_prerequisites(self, owner_id: UUID, course_id: UUID, slug: str) -> PrerequisiteReviewResponse:
+        course = self._course_for_owner(owner_id, course_id)
+        return PrerequisiteReviewResponse(
+            course_id=course.id, slug=slug, threshold=MASTERY_THRESHOLD,
+            review_threshold=REVIEW_THRESHOLD, prerequisites=[], review_recommended=False,
+        )
 
     def course_points(self, owner_id: UUID, course_id: UUID) -> CoursePointsResponse:
         course = self._course_for_owner(owner_id, course_id)
@@ -831,6 +870,14 @@ class SupabaseCourseRepository:
         self, owner_id: UUID, course_id: UUID, slug: str, item_id: str, answer: QuizAnswerRequest, grade: QuizGradeResponse
     ) -> int:
         assignment = self._ensure_assignment(owner_id, course_id, slug)
+        prior = self._data(
+            self.client.table("quiz_responses")
+            .select("result")
+            .eq("assignment_id", assignment["id"])
+            .eq("quiz_item_id", item_id),
+            "load quiz responses",
+        )
+        already_correct = any(row["result"] == "correct" for row in prior)
         self._data(
             self.client.table("quiz_responses").insert(
                 {
@@ -846,15 +893,21 @@ class SupabaseCourseRepository:
             ),
             "record quiz response",
         )
-        attempts_used = len(
-            self._data(
-                self.client.table("quiz_responses")
-                .select("result")
-                .eq("assignment_id", assignment["id"])
-                .eq("quiz_item_id", item_id),
-                "load quiz responses",
+        attempts_used = len(prior) + 1
+        # Every assessed attempt (right or wrong) is one understand-track opportunity for the
+        # lesson's concept -- except a replay of a question the learner already got right,
+        # which would otherwise inflate mastery for free. See docs/IDEA.md mastery model.
+        if not already_correct:
+            item_kind = next(
+                (
+                    entry["kind"]
+                    for entry in (assignment["bundle"].get("assessment") or {}).get("quiz_items") or []
+                    if entry.get("id") == item_id
+                ),
+                "mcq",
             )
-        )
+            concept = self._concept_for(owner_id, course_id, slug)
+            self._record_observation(owner_id, concept["id"], assessment_for_quiz_kind(item_kind), grade.correct)
         if grade.correct and assignment["status"] != "completed":
             self._maybe_complete_assignment(assignment)
         return attempts_used
@@ -866,6 +919,77 @@ class SupabaseCourseRepository:
                 self.client.table("learner_lesson_assignments").update({"status": "completed"}).eq("id", assignment["id"]),
                 "complete lesson assignment",
             )
+
+    def record_coding_submission(self, owner_id: UUID, course_id: UUID, slug: str, passed: bool) -> None:
+        # A deliberate Submit (visible + hidden suite) is the applied-skill observation --
+        # recorded pass or fail so failed attempts count as opportunities, unlike Run.
+        concept = self._concept_for(owner_id, course_id, slug)
+        self._record_observation(owner_id, concept["id"], "coding_submission", passed)
+        if passed:
+            self.complete_coding_lesson(owner_id, course_id, slug)
+
+    def course_mastery(self, owner_id: UUID, course_id: UUID) -> CourseMasteryResponse:
+        course = self._course_for_owner(owner_id, course_id)
+        version_id = course.get("active_version_id")
+        if not version_id:
+            return CourseMasteryResponse(course_id=course_id, threshold=MASTERY_THRESHOLD, concepts=[])
+        concepts = self._data(
+            self.client.table("concepts")
+            .select("id,slug,title,kind")
+            .eq("course_version_id", version_id)
+            .order("slug"),
+            "load concepts for mastery",
+        )
+        # Only concepts that actually carry a lesson can be assessed; skip planner-only nodes.
+        lesson_concept_ids = {
+            row["concept_id"]
+            for row in self._data(
+                self.client.table("lesson_definitions")
+                .select("concept_id")
+                .eq("course_version_id", version_id)
+                .eq("kind", "lesson"),
+                "load lesson definitions for mastery",
+            )
+        }
+        mastery = self._mastery_rows(owner_id, [row["id"] for row in concepts if row["id"] in lesson_concept_ids])
+        entries = [
+            self._concept_mastery(concept, mastery)
+            for concept in concepts
+            if concept["id"] in lesson_concept_ids
+        ]
+        return CourseMasteryResponse(course_id=course_id, threshold=MASTERY_THRESHOLD, concepts=entries)
+
+    def concept_prerequisites(self, owner_id: UUID, course_id: UUID, slug: str) -> PrerequisiteReviewResponse:
+        concept = self._concept_for(owner_id, course_id, slug)
+        edges = self._data(
+            self.client.table("concept_prerequisites")
+            .select("prerequisite_concept_id")
+            .eq("concept_id", concept["id"]),
+            "load concept prerequisites",
+        )
+        prerequisite_ids = [row["prerequisite_concept_id"] for row in edges]
+        if not prerequisite_ids:
+            return PrerequisiteReviewResponse(
+                course_id=course_id, slug=slug, threshold=MASTERY_THRESHOLD,
+                review_threshold=REVIEW_THRESHOLD, prerequisites=[], review_recommended=False,
+            )
+        prerequisites = self._data(
+            self.client.table("concepts")
+            .select("id,slug,title,kind")
+            .in_("id", prerequisite_ids)
+            .order("slug"),
+            "load prerequisite concepts",
+        )
+        mastery = self._mastery_rows(owner_id, prerequisite_ids)
+        entries = [self._prerequisite_concept(prerequisite, mastery) for prerequisite in prerequisites]
+        return PrerequisiteReviewResponse(
+            course_id=course_id,
+            slug=slug,
+            threshold=MASTERY_THRESHOLD,
+            review_threshold=REVIEW_THRESHOLD,
+            prerequisites=entries,
+            review_recommended=any(entry.needs_review for entry in entries),
+        )
 
     def course_points(self, owner_id: UUID, course_id: UUID) -> CoursePointsResponse:
         course = self._course_for_owner(owner_id, course_id)
@@ -993,6 +1117,131 @@ class SupabaseCourseRepository:
                 self.client.table("learner_lesson_assignments").update({"status": "completed"}).eq("id", assignment["id"]),
                 "complete lesson assignment",
             )
+
+    def _concept_for(self, owner_id: UUID, course_id: UUID, slug: str) -> dict[str, Any]:
+        course = self._course_for_owner(owner_id, course_id)
+        version_id = course.get("active_version_id")
+        if not version_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Concept not found.")
+        return self._one(
+            self._data(
+                self.client.table("concepts")
+                .select("id,slug,title,kind")
+                .eq("course_version_id", version_id)
+                .eq("slug", slug),
+                "load concept",
+            ),
+            "Concept",
+        )
+
+    def _record_observation(
+        self,
+        owner_id: UUID,
+        concept_id: str,
+        assessment_kind: AssessmentKind,
+        correct: bool,
+        support_level: str = "independent",
+        evidence_id: str | None = None,
+    ) -> None:
+        """Append one BKT observation and roll the concept's mastery estimate forward.
+
+        Best-effort: the graded answer / submission it derives from is already durable, and
+        ``observations`` is an immutable ledger from which ``mastery`` could be recomputed, so
+        a bookkeeping hiccup here is logged rather than surfaced as a failed answer."""
+        track = track_for(assessment_kind)
+        params = params_for(assessment_kind)
+        try:
+            existing = (
+                self.client.table("mastery")
+                .select("p_l,opportunities")
+                .eq("user_id", str(owner_id))
+                .eq("concept_id", concept_id)
+                .eq("track", track)
+                .execute()
+                .data
+                or []
+            )
+            current_p_l = existing[0]["p_l"] if existing else params.p_l0
+            opportunities = (existing[0]["opportunities"] if existing else 0) + 1
+            p_l_new = bkt_update(current_p_l, correct, params)
+            self.client.table("observations").insert(
+                {
+                    "user_id": str(owner_id),
+                    "concept_id": concept_id,
+                    "track": track,
+                    "assessment_kind": assessment_kind,
+                    "result": "correct" if correct else "incorrect",
+                    "support_level": support_level,
+                    "evidence_id": evidence_id,
+                }
+            ).execute()
+            self.client.table("mastery").upsert(
+                {
+                    "user_id": str(owner_id),
+                    "concept_id": concept_id,
+                    "track": track,
+                    "p_l": p_l_new,
+                    "opportunities": opportunities,
+                    "last_update": datetime.now(UTC).isoformat(),
+                },
+                on_conflict="user_id,concept_id,track",
+            ).execute()
+        except (APIError, HTTPError):
+            logger.exception(
+                "Could not record mastery observation", extra={"concept_id": str(concept_id), "track": track}
+            )
+
+    def _mastery_rows(self, owner_id: UUID, concept_ids: Sequence[str]) -> dict[tuple[str, str], dict[str, Any]]:
+        """Learner mastery rows keyed by ``(concept_id, track)`` for a set of concepts."""
+        if not concept_ids:
+            return {}
+        rows = self._data(
+            self.client.table("mastery")
+            .select("concept_id,track,p_l,opportunities")
+            .eq("user_id", str(owner_id))
+            .in_("concept_id", list(concept_ids)),
+            "load mastery",
+        )
+        return {(row["concept_id"], row["track"]): row for row in rows}
+
+    @staticmethod
+    def _concept_mastery(concept: dict[str, Any], mastery: dict[tuple[str, str], dict[str, Any]]) -> ConceptMastery:
+        understand = mastery.get((concept["id"], "understand"))
+        apply = mastery.get((concept["id"], "apply"))
+        p_understand = understand["p_l"] if understand else None
+        p_apply = apply["p_l"] if apply else None
+        return ConceptMastery(
+            slug=concept["slug"],
+            title=concept["title"],
+            kind=concept["kind"],
+            p_understand=p_understand,
+            p_apply=p_apply,
+            understand_opportunities=understand["opportunities"] if understand else 0,
+            apply_opportunities=apply["opportunities"] if apply else 0,
+            mastered=concept_mastered(concept["kind"], p_understand, p_apply),
+        )
+
+    @staticmethod
+    def _prerequisite_concept(concept: dict[str, Any], mastery: dict[tuple[str, str], dict[str, Any]]) -> PrerequisiteConcept:
+        understand = mastery.get((concept["id"], "understand"))
+        apply = mastery.get((concept["id"], "apply"))
+        p_understand = understand["p_l"] if understand else None
+        p_apply = apply["p_l"] if apply else None
+        return PrerequisiteConcept(
+            slug=concept["slug"],
+            title=concept["title"],
+            kind=concept["kind"],
+            p_understand=p_understand,
+            p_apply=p_apply,
+            mastered=concept_mastered(concept["kind"], p_understand, p_apply),
+            needs_review=prerequisite_needs_review(
+                concept["kind"],
+                p_understand,
+                p_apply,
+                understand["opportunities"] if understand else 0,
+                apply["opportunities"] if apply else 0,
+            ),
+        )
 
     def _built_lesson(self, owner_id: UUID, course_id: UUID, slug: str) -> tuple[str, str, dict[str, Any]]:
         course = self._course_for_owner(owner_id, course_id)

@@ -55,10 +55,14 @@ def test_settings_accept_legacy_openai_provider_env_alias(monkeypatch) -> None:
 
 def test_settings_model_for_splits_openai_generation_and_repair() -> None:
     settings = _settings(openai_api_key="test-key")
-    # Generation tasks share the builder (Luna) tier; only repair is promoted to Sol.
+    # The outline is the one planning call promoted to the Sol reasoning tier; per-module
+    # concepts and every generation task share the cheaper builder (Luna) tier.
+    assert settings.model_for("course_outline") == "gpt-5.6-sol"
+    assert settings.model_for("module_concepts") == "gpt-5.6-luna"
     assert settings.model_for("lesson_build") == "gpt-5.6-luna"
     assert settings.model_for("concept_regeneration") == "gpt-5.6-luna"
     assert settings.model_for("quiz_grading") == "gpt-5.6-luna"
+    # Repair is the other Sol task: the last line of defense before a lab is declared failed.
     assert settings.model_for("lesson_repair") == "gpt-5.6-sol"
 
 
@@ -70,7 +74,8 @@ def test_settings_model_for_uses_bedrock_models_when_aws() -> None:
         aws_bedrock_builder_model="builder-bedrock",
         aws_bedrock_embedding_model="embed-bedrock",
     )
-    assert settings.model_for("course_planning") == "planner-bedrock"
+    assert settings.model_for("course_outline") == "planner-bedrock"
+    assert settings.model_for("module_concepts") == "builder-bedrock"
     # Bedrock has no dedicated repair tier, so repair falls back to the builder model.
     assert settings.model_for("lesson_repair") == "builder-bedrock"
     assert settings.model_for("embedding") == "embed-bedrock"
@@ -87,7 +92,7 @@ def test_bedrock_openai_targets_mantle_endpoint_and_uses_titan_for_embeddings() 
     provider = BedrockOpenAIProvider(settings, bedrock_client=FakeBedrockClient())
 
     assert str(provider.client.base_url).startswith("https://bedrock-mantle.us-west-2.api.aws/openai/v1")
-    assert settings.model_for("course_planning") == "openai.gpt-5.4"
+    assert settings.model_for("course_outline") == "openai.gpt-5.4"
     assert settings.model_for("embedding") == "amazon.titan-embed-text-v2:0"
     assert provider.embed(model="amazon.titan-embed-text-v2:0", texts=["a"], dimensions=None) == [[0.1, 0.2, 0.3]]
 

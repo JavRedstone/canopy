@@ -21,14 +21,14 @@ class FakeProvider:
 
 def test_structured_generation_uses_registered_task_model_and_strict_schema() -> None:
     provider = FakeProvider()
-    settings = GatewaySettings(_env_file=None, openai_api_key="test-key", openai_planner_model="planner-model")
+    settings = GatewaySettings(_env_file=None, openai_api_key="test-key", openai_outline_model="outline-model")
     app.dependency_overrides[get_settings] = lambda: settings
     app.dependency_overrides[_provider] = lambda: provider
     try:
         response = TestClient(app).post(
             "/internal/v1/structured",
             json={
-                "task": "course_planning",
+                "task": "course_outline",
                 "input": [{"role": "user", "content": "Build a course."}],
                 "schema_name": "CoursePlan",
                 "schema": {"type": "object", "properties": {"title": {"type": "string"}}},
@@ -41,7 +41,7 @@ def test_structured_generation_uses_registered_task_model_and_strict_schema() ->
     assert response.json() == {"output": {"title": "Generated"}}
     assert provider.structured_calls == [
         {
-            "model": "planner-model",
+            "model": "outline-model",
             "input": [{"role": "user", "content": "Build a course."}],
             "schema_name": "CoursePlan",
             "schema": {"type": "object", "properties": {"title": {"type": "string"}}},

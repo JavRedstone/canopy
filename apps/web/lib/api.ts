@@ -97,6 +97,62 @@ export async function getCoursePoints(courseId: string, accessToken: string): Pr
   return response.json();
 }
 
+export interface ConceptMastery {
+  slug: string;
+  title: string;
+  kind: "conceptual" | "coding" | "assessment";
+  // null until the track has at least one observation (show as "—", not 0%).
+  p_understand: number | null;
+  p_apply: number | null;
+  understand_opportunities: number;
+  apply_opportunities: number;
+  mastered: boolean;
+}
+
+export interface CourseMasteryResponse {
+  course_id: string;
+  threshold: number;
+  concepts: ConceptMastery[];
+}
+
+export async function getCourseMastery(courseId: string, accessToken: string): Promise<CourseMasteryResponse> {
+  const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/mastery`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: "no-store"
+  });
+  if (!response.ok) throw new Error(`Unable to load course mastery (HTTP ${response.status}).`);
+  return response.json();
+}
+
+export interface PrerequisiteConcept {
+  slug: string;
+  title: string;
+  kind: "conceptual" | "coding" | "assessment";
+  p_understand: number | null;
+  p_apply: number | null;
+  mastered: boolean;
+  // Practiced but shaky -- reviewing it should help the concept that builds on it.
+  needs_review: boolean;
+}
+
+export interface PrerequisiteReviewResponse {
+  course_id: string;
+  slug: string;
+  threshold: number;
+  review_threshold: number;
+  prerequisites: PrerequisiteConcept[];
+  review_recommended: boolean;
+}
+
+export async function getConceptPrerequisites(courseId: string, slug: string, accessToken: string): Promise<PrerequisiteReviewResponse> {
+  const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/concepts/${slug}/prerequisites`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: "no-store"
+  });
+  if (!response.ok) throw new Error(`Unable to load prerequisites (HTTP ${response.status}).`);
+  return response.json();
+}
+
 export interface UpdateCourseRequest {
   title?: string;
   quiz_max_attempts?: number;
@@ -226,6 +282,18 @@ export async function runLesson(courseId: string, slug: string, files: LessonWor
     body: JSON.stringify({ files })
   });
   if (!response.ok) throw new Error(`Unable to run exercise tests (HTTP ${response.status}).`);
+  return response.json();
+}
+
+// Submit runs the full suite (visible + hidden checks) and records an applied-skill
+// mastery observation server-side. Run (above) is visible-only with no mastery effect.
+export async function submitLesson(courseId: string, slug: string, files: LessonWorkspaceFile[], accessToken: string): Promise<LessonRunResult> {
+  const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/concepts/${slug}/submit`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ files })
+  });
+  if (!response.ok) throw new Error(`Unable to submit your solution (HTTP ${response.status}).`);
   return response.json();
 }
 

@@ -263,7 +263,7 @@ class CoursePlanner:
                 }
             )
         response = self.openai.responses.parse(
-            model=self.settings.planner_model,
+            model=self.settings.outline_model,
             input=input_items,
             text_format=CourseOutline,
         )
@@ -311,7 +311,7 @@ class CoursePlanner:
                 }
             )
         response = self.openai.responses.parse(
-            model=self.settings.planner_model,
+            model=self.settings.module_concepts_model,
             input=input_items,
             text_format=ModuleConcepts,
         )

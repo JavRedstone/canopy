@@ -9,7 +9,7 @@
       "additionalProperties": true
     },
     "task": {
-      "enum": ["course_planning", "lesson_build", "lesson_repair", "concept_regeneration", "embedding"]
+      "enum": ["course_outline", "module_concepts", "lesson_build", "lesson_repair", "concept_regeneration", "embedding"]
     }
   },
   "type": "object",
@@ -18,7 +18,7 @@
       "title": "Structured generation request",
       "required": ["task", "input", "schema_name", "schema"],
       "properties": {
-        "task": { "enum": ["course_planning", "lesson_build"] },
+        "task": { "enum": ["course_outline", "module_concepts", "lesson_build"] },
         "input": { "type": "array", "items": { "$ref": "#/$defs/input_item" } },
         "schema_name": { "type": "string" },
         "schema": { "type": "object" }

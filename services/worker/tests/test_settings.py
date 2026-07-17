@@ -10,7 +10,8 @@ def _settings(**overrides: object) -> WorkerSettings:
 def test_worker_uses_gateway_task_names_instead_of_provider_models() -> None:
     settings = _settings()
 
-    assert settings.planner_model == "course_planning"
+    assert settings.outline_model == "course_outline"
+    assert settings.module_concepts_model == "module_concepts"
     assert settings.embedding_model == "embedding"
     assert settings.builder_model == "lesson_build"
 

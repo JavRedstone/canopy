@@ -5,10 +5,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.dependencies import CurrentUser
 from app.llm import LLMGatewayClient
-from app.quiz import grade_quiz_answer
+from app.quiz import grade_quiz_answer, withhold_answer
 from app.repository import CourseRepository, get_repository
 from app.sandbox import SandboxError, SandboxFile, SandboxRunnerClient
-from app.schemas import ConceptDetailResponse, CoursePointsResponse, CourseMapResponse, CourseProgressResponse, CourseSummary, CreateCourseRequest, QuizAnswerRequest, QuizGradeResponse, RunLessonRequest, RunLessonResponse, RunScriptRequest, RunScriptResponse, UpdateCourseRequest
+from app.schemas import ConceptDetailResponse, CoursePointsResponse, CourseMapResponse, CourseMasteryResponse, CourseProgressResponse, CourseSummary, CreateCourseRequest, LessonWorkspaceFile, PrerequisiteReviewResponse, QuizAnswerRequest, QuizGradeResponse, RunLessonRequest, RunLessonResponse, RunScriptRequest, RunScriptResponse, UpdateCourseRequest
 from app.settings import get_settings
 
 router = APIRouter(prefix="/courses", tags=["courses"])
@@ -76,6 +76,11 @@ def get_course_points(course_id: UUID, current_user: CurrentUser, repository: Re
     return repository.course_points(current_user, course_id)
 
 
+@router.get("/{course_id}/mastery", response_model=CourseMasteryResponse)
+def get_course_mastery(course_id: UUID, current_user: CurrentUser, repository: Repository) -> CourseMasteryResponse:
+    return repository.course_mastery(current_user, course_id)
+
+
 @router.post("/{course_id}/regenerate", response_model=CourseSummary)
 def regenerate_course(course_id: UUID, current_user: CurrentUser, repository: Repository) -> CourseSummary:
     return repository.regenerate_course(current_user, course_id)
@@ -91,6 +96,30 @@ def get_concept_detail(course_id: UUID, slug: str, current_user: CurrentUser, re
     return repository.concept_detail(current_user, course_id, slug)
 
 
+@router.get("/{course_id}/concepts/{slug}/prerequisites", response_model=PrerequisiteReviewResponse)
+def get_concept_prerequisites(course_id: UUID, slug: str, current_user: CurrentUser, repository: Repository) -> PrerequisiteReviewResponse:
+    return repository.concept_prerequisites(current_user, course_id, slug)
+
+
+def _validated_submission(request: RunLessonRequest, starter_files: list[LessonWorkspaceFile]) -> dict[str, str]:
+    expected_paths = {file.path for file in starter_files}
+    submitted = {file.path: file.content for file in request.files}
+    if len(submitted) != len(request.files) or set(submitted) != expected_paths:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Submit exactly the lesson starter files.")
+    return submitted
+
+
+def _run_pytest(sandbox: SandboxRunnerClient, submitted: dict[str, str], test_files: list[LessonWorkspaceFile]) -> RunLessonResponse:
+    test_set = [SandboxFile(file.path, file.content) for file in test_files]
+    try:
+        result = sandbox.run_pytest(
+            [SandboxFile(path, submitted[path]) for path in sorted(submitted)] + test_set
+        )
+    except (SandboxError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="The exercise runner is unavailable.") from exc
+    return RunLessonResponse(passed=result.passed, output=result.output, timed_out=result.timed_out)
+
+
 @router.post("/{course_id}/concepts/{slug}/run", response_model=RunLessonResponse)
 def run_lesson(
     course_id: UUID,
@@ -100,22 +129,29 @@ def run_lesson(
     repository: Repository,
     sandbox: LessonSandbox,
 ) -> RunLessonResponse:
-    starter_files, public_test_files, hidden_test_files = repository.lesson_workspace(current_user, course_id, slug)
-    expected_paths = {file.path for file in starter_files}
-    submitted = {file.path: file.content for file in request.files}
-    if len(submitted) != len(request.files) or set(submitted) != expected_paths:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Submit exactly the lesson starter files.")
+    """Run the *visible* checks only, on demand. This is a tight feedback loop -- no hidden
+    suite, no completion, and never a mastery observation. Deliberate Submit does those."""
+    starter_files, public_test_files, _hidden_test_files = repository.lesson_workspace(current_user, course_id, slug)
+    submitted = _validated_submission(request, starter_files)
+    return _run_pytest(sandbox, submitted, public_test_files)
 
-    test_set = [SandboxFile(file.path, file.content) for file in public_test_files + hidden_test_files]
-    try:
-        result = sandbox.run_pytest(
-            [SandboxFile(path, submitted[path]) for path in sorted(submitted)] + test_set
-        )
-    except (SandboxError, ValueError) as exc:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="The exercise runner is unavailable.") from exc
-    if result.passed:
-        repository.complete_coding_lesson(current_user, course_id, slug)
-    return RunLessonResponse(passed=result.passed, output=result.output, timed_out=result.timed_out)
+
+@router.post("/{course_id}/concepts/{slug}/submit", response_model=RunLessonResponse)
+def submit_lesson(
+    course_id: UUID,
+    slug: str,
+    request: RunLessonRequest,
+    current_user: CurrentUser,
+    repository: Repository,
+    sandbox: LessonSandbox,
+) -> RunLessonResponse:
+    """Full evaluation: visible + hidden suite. Records an applied-skill (``p(apply)``)
+    mastery observation whether it passes or fails, and marks the lab complete on pass."""
+    starter_files, public_test_files, hidden_test_files = repository.lesson_workspace(current_user, course_id, slug)
+    submitted = _validated_submission(request, starter_files)
+    result = _run_pytest(sandbox, submitted, public_test_files + hidden_test_files)
+    repository.record_coding_submission(current_user, course_id, slug, result.passed)
+    return result
 
 
 @router.post("/{course_id}/concepts/{slug}/run-script", response_model=RunScriptResponse)
@@ -166,8 +202,14 @@ def answer_quiz_item(
 
     grade = grade_quiz_answer(item, request, grader)
     attempts_used = repository.record_quiz_response(current_user, course_id, slug, item_id, request, grade)
+    attempts_remaining = max(max_attempts - attempts_used, 0)
+    # Don't hand over the answer while the learner still has tries left -- the full reveal
+    # (accepted answers, per-option correctness, explanation) waits until they're correct or
+    # out of attempts. The unredacted grade is still persisted above for the correct-replay.
+    if not grade.correct and attempts_remaining > 0:
+        grade = withhold_answer(grade)
     grade.attempts_used = attempts_used
-    grade.attempts_remaining = max(max_attempts - attempts_used, 0)
+    grade.attempts_remaining = attempts_remaining
     return grade
 
 

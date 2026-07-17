@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from app.llm import LLMGatewayError
 from app.main import app
-from app.quiz import ShortAnswerGrade, grade_quiz_answer
+from app.quiz import ShortAnswerGrade, grade_quiz_answer, withhold_answer
 from app.repository import get_repository
 from app.routers.courses import get_quiz_grader
 from app.schemas import QuizAnswerRequest
@@ -124,6 +124,21 @@ def test_short_answer_uses_llm_judge_and_returns_feedback() -> None:
     assert "Rubric" in judge_input and "stolen token" in judge_input
 
 
+def test_withhold_answer_strips_the_reveal_but_keeps_the_verdict() -> None:
+    graded = grade_quiz_answer(SHORT_ANSWER_ITEM, QuizAnswerRequest(answer_text="close but incomplete"),
+                               FakeGrader(grade=ShortAnswerGrade(correct=False, feedback_markdown="You're missing the damage-bounding point.")))
+    graded.options = grade_quiz_answer(MCQ_ITEM, QuizAnswerRequest(selected_option_index=1), FakeGrader()).options
+    graded.correct_answers = ["rejected"]
+
+    withheld = withhold_answer(graded)
+
+    assert withheld.correct is False
+    assert withheld.feedback_markdown == "You're missing the damage-bounding point."
+    assert withheld.explanation_markdown == ""
+    assert withheld.options == []
+    assert withheld.correct_answers == []
+
+
 def test_short_answer_gateway_failure_returns_503() -> None:
     grader = FakeGrader(error=LLMGatewayError("down"))
     with pytest.raises(HTTPException) as caught:
@@ -191,6 +206,32 @@ def test_answer_endpoint_reports_attempts_remaining_after_a_wrong_answer() -> No
     assert body["correct"] is False
     assert body["attempts_used"] == 1
     assert body["attempts_remaining"] == 2
+    # Attempts remain, so the answer is held back -- verdict only, no reveal to read off the wire.
+    assert body["explanation_markdown"] == ""
+    assert body["options"] == []
+    assert body["correct_answers"] == []
+
+
+def test_answer_endpoint_reveals_the_answer_on_the_final_wrong_attempt() -> None:
+    repository = QuizRepository(max_attempts=2)
+    repository.responses = [("expiry-check", False)]
+    app.dependency_overrides[get_repository] = lambda: repository
+    app.dependency_overrides[get_quiz_grader] = lambda: FakeGrader()
+    try:
+        response = TestClient(app).post(
+            f"/api/v1/courses/{uuid4()}/concepts/token-expiry/quiz-items/expiry-check/answer",
+            json={"selected_option_index": 1},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["correct"] is False
+    assert body["attempts_remaining"] == 0
+    # No attempts left: the full reveal comes back so the learner still learns the answer.
+    assert body["explanation_markdown"] == "Expired tokens must never validate."
+    assert [option["correct"] for option in body["options"]] == [True, False]
 
 
 def test_answer_endpoint_rejects_once_attempts_are_exhausted() -> None:

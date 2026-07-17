@@ -13,6 +13,7 @@ class ExerciseRepository:
     def __init__(self) -> None:
         self.regenerated: tuple[object, object, str] | None = None
         self.completed: tuple[object, object, str] | None = None
+        self.submitted: tuple[object, object, str, bool] | None = None
 
     def lesson_workspace(
         self, owner_id: object, course_id: object, slug: str
@@ -25,6 +26,9 @@ class ExerciseRepository:
 
     def complete_coding_lesson(self, owner_id: object, course_id: object, slug: str) -> None:
         self.completed = (owner_id, course_id, slug)
+
+    def record_coding_submission(self, owner_id: object, course_id: object, slug: str, passed: bool) -> None:
+        self.submitted = (owner_id, course_id, slug, passed)
 
     def regenerate_lesson(self, owner_id: object, course_id: object, slug: str) -> None:
         self.regenerated = (owner_id, course_id, slug)
@@ -46,7 +50,7 @@ class ExerciseSandbox:
         return SandboxRunResult(exit_code=0, output="hello from scratch\n", timed_out=False)
 
 
-def test_run_lesson_uses_private_tests_and_returns_result() -> None:
+def test_run_uses_only_visible_tests_and_has_no_side_effects() -> None:
     repository = ExerciseRepository()
     sandbox = ExerciseSandbox()
     app.dependency_overrides[get_repository] = lambda: repository
@@ -61,12 +65,36 @@ def test_run_lesson_uses_private_tests_and_returns_result() -> None:
 
     assert response.status_code == 200
     assert response.json() == {"passed": True, "output": "1 passed", "timed_out": False}
+    # Run sends the learner's files plus the *visible* tests only -- the hidden suite stays out.
     assert [(file.path, file.content) for file in sandbox.files] == [
         ("solution.py", "def add(a, b):\n    return a + b\n"),
         ("test_basic.py", "from solution import add\n\ndef test_add_two_positive_numbers():\n    assert add(1, 2) == 3\n"),
-        ("test_solution.py", "from solution import add\n\ndef test_add():\n    assert add(1, 2) == 3\n"),
     ]
-    assert repository.completed is not None
+    # No mastery observation and no completion from a Run.
+    assert repository.submitted is None
+    assert repository.completed is None
+
+
+def test_submit_uses_full_suite_and_records_the_apply_observation() -> None:
+    repository = ExerciseRepository()
+    sandbox = ExerciseSandbox()
+    app.dependency_overrides[get_repository] = lambda: repository
+    app.dependency_overrides[get_lesson_sandbox] = lambda: sandbox
+    course_id = uuid4()
+    try:
+        response = TestClient(app).post(
+            f"/api/v1/courses/{course_id}/concepts/addition/submit",
+            json={"files": [{"path": "solution.py", "content": "def add(a, b):\n    return a + b\n"}]},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == {"passed": True, "output": "1 passed", "timed_out": False}
+    # Submit swaps in the full suite: visible + hidden tests together.
+    assert [file.path for file in sandbox.files] == ["solution.py", "test_basic.py", "test_solution.py"]
+    # The deliberate submission is recorded on the apply track (pass here).
+    assert repository.submitted == (repository.submitted[0], course_id, "addition", True)
 
 
 def test_run_script_executes_arbitrary_code_and_returns_console_output() -> None:

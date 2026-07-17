@@ -120,7 +120,8 @@ def _planner_with(responses: "FakeResponses", chunks: list[dict[str, object]]) -
     """
     worker = CoursePlanner.__new__(CoursePlanner)
     worker.settings = SimpleNamespace(
-        planner_model="course_planning",
+        outline_model="course_outline",
+        module_concepts_model="module_concepts",
         embedding_model="embedding",
         embedding_dimensions=3,
         planner_context_chunk_limit=40,
@@ -151,7 +152,7 @@ def test_gateway_client_sends_schema_and_validates_structured_output() -> None:
     client = LLMGatewayClient("http://gateway", internal_service_token="secret", http_client=http)
 
     result = client.responses.parse(
-        model="course_planning",
+        model="course_outline",
         input=[{"role": "user", "content": "Build a course."}],
         text_format=CourseOutline,
     )
@@ -162,7 +163,7 @@ def test_gateway_client_sends_schema_and_validates_structured_output() -> None:
             "url": "http://gateway/internal/v1/structured",
             "headers": {"X-Internal-Service-Token": "secret"},
             "json": {
-                "task": "course_planning",
+                "task": "course_outline",
                 "input": [{"role": "user", "content": "Build a course."}],
                 "schema_name": "CourseOutline",
                 "schema": CourseOutline.model_json_schema(),
@@ -178,7 +179,7 @@ def test_structured_output_failing_validation_is_retried_with_feedback() -> None
     client = LLMGatewayClient("http://gateway", internal_service_token=None, http_client=http)
 
     result = client.responses.parse(
-        model="course_planning",
+        model="course_outline",
         input=[{"role": "user", "content": "Build a course."}],
         text_format=CourseOutline,
     )
@@ -199,7 +200,7 @@ def test_structured_output_failing_validation_repeatedly_is_not_retryable() -> N
 
     with pytest.raises(LLMValidationError):
         client.responses.parse(
-            model="course_planning",
+            model="course_outline",
             input=[{"role": "user", "content": "Build a course."}],
             text_format=CourseOutline,
         )
@@ -220,7 +221,7 @@ def test_embedding_request_uses_gateway_task() -> None:
     assert result == [[0.0, 0.5, 0.25], [1.0, 0.5, 0.25], [0.0, 0.5, 0.25]]
 
 
-def test_planner_request_uses_course_planning_task() -> None:
+def test_planner_requests_use_outline_then_concepts_tasks() -> None:
     outline = CourseOutline.model_validate(_outline_dict())
     module_concepts = ModuleConcepts.model_validate(
         {
@@ -241,7 +242,7 @@ def test_planner_request_uses_course_planning_task() -> None:
 
     worker.plan_course("course-id")
 
-    assert [call["model"] for call in responses.calls] == ["course_planning", "course_planning"]
+    assert [call["model"] for call in responses.calls] == ["course_outline", "module_concepts"]
     assert [call[0] for call in worker.client.calls] == [
         "claim_course_planning",
         "reset_course_planning",

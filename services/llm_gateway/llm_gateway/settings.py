@@ -5,7 +5,9 @@ from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-GatewayTask = Literal["course_planning", "lesson_build", "lesson_repair", "concept_regeneration", "quiz_grading", "embedding"]
+GatewayTask = Literal[
+    "course_outline", "module_concepts", "lesson_build", "lesson_repair", "concept_regeneration", "quiz_grading", "embedding"
+]
 
 
 class GatewaySettings(BaseSettings):
@@ -22,7 +24,11 @@ class GatewaySettings(BaseSettings):
         validation_alias=AliasChoices("app_llm_provider", "app_openai_provider"),
     )
     openai_api_key: SecretStr | None = None
-    openai_planner_model: str = "gpt-5.4-mini"
+    # The outline is one call per course but fixes the whole course's framing, so it runs on
+    # the flagship Sol reasoning tier; per-module concepts only elaborate that fixed outline,
+    # so they run on the cheaper Luna tier like the lesson builders.
+    openai_outline_model: str = "gpt-5.6-sol"
+    openai_concepts_model: str = "gpt-5.6-luna"
     openai_embedding_model: str = "text-embedding-3-small"
     # Lesson generation runs on every concept, so it uses Luna, the newest-generation
     # small/fast tier. Repair only fires on labs that already failed their first sandbox
@@ -78,12 +84,23 @@ class GatewaySettings(BaseSettings):
             raise RuntimeError("APP_AWS_BEDROCK_API_KEY must be configured when APP_LLM_PROVIDER=aws_openai.")
 
     def model_for(self, task: GatewayTask) -> str:
-        if task == "course_planning":
+        if task == "course_outline":
+            # One high-stakes planning call per course, so it runs on the flagship reasoning
+            # tier. Non-OpenAI providers keep their existing planner model here.
             return self._provider_model(
-                self.openai_planner_model,
+                self.openai_outline_model,
                 self.azure_openai_planner_deployment,
                 self.aws_bedrock_planner_model,
                 self.aws_openai_planner_model,
+            )
+        if task == "module_concepts":
+            # Runs once per module to fill in the fixed outline, so it stays on the cheaper
+            # builder tier that the lesson generators use.
+            return self._provider_model(
+                self.openai_concepts_model,
+                self.azure_openai_builder_deployment,
+                self.aws_bedrock_builder_model,
+                self.aws_openai_builder_model,
             )
         if task == "embedding":
             # bedrock-mantle serves no embedding models, so aws_openai reuses Titan.

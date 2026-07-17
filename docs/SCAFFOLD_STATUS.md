@@ -73,7 +73,8 @@ One upstream FastAPI/Starlette `TestClient` deprecation warning appears during t
 
 - Run an authenticated end-to-end upload, ingestion, and planning check after adding the server-only OpenAI key.
 - Add retries, dead-letter review, and operational metrics around the worker queues.
-- Add quiz-response endpoints, asynchronous evaluation status, and realtime authorization as specified in the system design.
+- Add asynchronous evaluation status and realtime authorization as specified in the system design.
+- Mastery tracking is live (dual-track BKT): quiz answers feed `p(understand)`, coding **Submit** feeds `p(apply)`, written to `observations`/`mastery` via the API's service client. Run/Submit are now split — Run executes only the visible tests (no mastery effect), Submit executes the full suite and records the observation. Not yet built: adaptation-event triggers, the LLM diagnosis layer, transfer-check exercises, and per-checkpoint concept tagging (a lesson currently maps to its single concept).
 
 `npm audit` currently reports two moderate vulnerabilities through Next.js's pinned transitive `postcss` dependency. A root override was tested but conflicts with Next.js's exact dependency declaration, so it was removed. Upgrade Next.js when it provides a compatible resolution; do not use a forced audit fix.
 

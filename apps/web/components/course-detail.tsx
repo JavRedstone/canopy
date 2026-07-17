@@ -27,6 +27,7 @@ import { CourseMapResponse, CoursePointsResponse, CourseProgressResponse, Course
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { CourseCategoryBadge } from "@/components/course-category-badge";
 import { CourseProgressSteps } from "@/components/course-progress";
+import { MasteryDashboard } from "@/components/mastery-dashboard";
 import { CourseSettingsDialog } from "@/components/course-settings-dialog";
 import { Icon } from "@/components/icon";
 import { SettingsMenu, SettingsMenuAction } from "@/components/settings-menu";
@@ -217,6 +218,8 @@ export function CourseDetail({ courseId }: { courseId: string }) {
       {progress.stage !== "ready" ? <CourseProgressSteps progress={progress} onResume={handleRegenerate} /> : null}
       {refreshError ? <Alert severity="error" sx={{ mb: 2 }}>{refreshError} Retrying automatically…</Alert> : null}
       {deleteError ? <Alert severity="error" sx={{ mb: 2 }}>{deleteError}</Alert> : null}
+
+      {progress.stage === "ready" && map.modules.length > 0 ? <MasteryDashboard courseId={courseId} /> : null}
 
       {map.modules.length === 0 ? (
         progress.stage === "ready" ? <Typography color="text.secondary">This course has no modules yet.</Typography> : null

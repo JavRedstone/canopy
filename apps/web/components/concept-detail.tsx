@@ -3,13 +3,15 @@
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { ConceptDetailResponse, CourseMapResponse, CourseSummary, LessonRunResult, LessonWorkspaceFile, QuizItemPreview, ScriptRunResult, WorkedExamplePreview, getConceptDetail, getCourse, getCourseMap, regenerateLesson, runLesson, runLessonScript } from "@/lib/api";
+import { ConceptDetailResponse, ConceptMastery, CourseMapResponse, CourseMasteryResponse, CourseSummary, LessonRunResult, LessonWorkspaceFile, QuizItemPreview, ScriptRunResult, WorkedExamplePreview, getConceptDetail, getCourse, getCourseMap, getCourseMastery, regenerateLesson, runLesson, runLessonScript, submitLesson } from "@/lib/api";
 import { useFullBleed } from "@/components/app-shell";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Icon } from "@/components/icon";
 import { MarkdownText } from "@/components/markdown-text";
 import { PageShell } from "@/components/page-shell";
 import { QuizQuestion, QuizSection } from "@/components/quiz";
+import { MasteryCard } from "@/components/mastery-meter";
+import { PrerequisiteReview } from "@/components/prerequisite-review";
 import { SettingsMenu } from "@/components/settings-menu";
 import { ConfettiBurst } from "@/components/confetti-burst";
 import { conceptKindIcon, conceptKindLabel } from "@/lib/concept-kind";
@@ -92,6 +94,7 @@ function LessonBody({
   examples,
   quizItems,
   quizMaxAttempts,
+  onQuizAnswered,
 }: {
   courseId: string;
   slug: string;
@@ -100,6 +103,7 @@ function LessonBody({
   examples: WorkedExamplePreview[];
   quizItems: QuizItemPreview[];
   quizMaxAttempts: number;
+  onQuizAnswered?: () => void;
 }) {
   const blocks: ReactNode[] = [];
   const placedExamples = new Set<number>();
@@ -127,7 +131,7 @@ function LessonBody({
       flush();
       placedQuiz.add(index);
       blocks.push(
-        <QuizQuestion courseId={courseId} slug={slug} item={quizItems[index]} index={placedQuiz.size - 1} maxAttempts={quizMaxAttempts} key={`quiz-${index}`} />
+        <QuizQuestion courseId={courseId} slug={slug} item={quizItems[index]} index={placedQuiz.size - 1} maxAttempts={quizMaxAttempts} onAnswered={onQuizAnswered} key={`quiz-${index}`} />
       );
     } else {
       flush();
@@ -241,8 +245,11 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState<string>();
   const [files, setFiles] = useState<LessonWorkspaceFile[]>([]);
-  const [runResult, setRunResult] = useState<LessonRunResult>();
+  const [testResult, setTestResult] = useState<LessonRunResult>();
   const [running, setRunning] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [labComplete, setLabComplete] = useState(false);
+  const [mastery, setMastery] = useState<CourseMasteryResponse>();
   const [celebrateNonce, setCelebrateNonce] = useState(0);
   const [assessmentComplete, setAssessmentComplete] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
@@ -268,20 +275,23 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
       if (!data.session) return;
       try {
         const token = data.session.access_token;
-        const [courseSummary, conceptDetail, map] = await Promise.all([
+        const [courseSummary, conceptDetail, map, masteryResponse] = await Promise.all([
           getCourse(courseId, token),
           getConceptDetail(courseId, slug, token),
-          getCourseMap(courseId, token)
+          getCourseMap(courseId, token),
+          getCourseMastery(courseId, token).catch(() => undefined)
         ]);
         if (cancelled) return;
         setCourse(courseSummary);
         setConcept(conceptDetail);
         setCourseMap(map);
+        setMastery(masteryResponse);
         const starterFiles = conceptDetail.lesson?.starter_files ?? [];
         setFiles(starterFiles);
         setActiveFilePath(starterFiles[0]?.path);
-        setRunResult(undefined);
+        setTestResult(undefined);
         setScriptResult(undefined);
+        setLabComplete(false);
         setScratchCode(defaultScratchScript(starterFiles));
         setInstructionsTab("lesson");
         setSolutionRevealed(false);
@@ -327,7 +337,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
     setFiles((current) => [...current.filter((file) => !additionPaths.has(file.path)), ...additions]);
     setSolutionFilePaths(additionPaths);
     setActiveFilePath(additions[0]?.path);
-    setRunResult(undefined);
+    setTestResult(undefined);
     setScriptResult(undefined);
     setExpandedCases(new Set());
     setFullOutputOpen(false);
@@ -356,7 +366,21 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
   const starterFilePaths = new Set((concept?.lesson?.starter_files ?? []).map((file) => file.path));
   const submittableFiles = files.filter((file) => starterFilePaths.has(file.path));
 
-  async function handleRun() {
+  const conceptMastery: ConceptMastery | undefined = mastery?.concepts.find((entry) => entry.slug === slug);
+  const masteryThreshold = mastery?.threshold ?? 0.95;
+
+  async function refreshMastery() {
+    try {
+      const { data } = await createClient().auth.getSession();
+      if (!data.session) return;
+      setMastery(await getCourseMastery(courseId, data.session.access_token));
+    } catch {
+      // Non-fatal: the meter just keeps its last value if a refresh fails.
+    }
+  }
+
+  // Run = visible checks only. Tight feedback loop, no mastery effect, no completion.
+  async function handleRunTests() {
     setConsoleTab("tests");
     setRunning(true);
     setExpandedCases(new Set());
@@ -365,13 +389,36 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
       const { data } = await createClient().auth.getSession();
       if (!data.session) throw new Error("Your session has expired. Please sign in again.");
       setErrorMessage(undefined);
-      const result = await runLesson(courseId, slug, submittableFiles, data.session.access_token);
-      setRunResult(result);
-      if (result.passed) setCelebrateNonce((current) => current + 1);
+      setTestResult(await runLesson(courseId, slug, submittableFiles, data.session.access_token));
     } catch (caught) {
       setErrorMessage(caught instanceof Error ? caught.message : "Unable to run exercise tests.");
     } finally {
       setRunning(false);
+    }
+  }
+
+  // Submit = full suite (visible + hidden). Records the applied-skill mastery observation
+  // server-side, so we refresh the meter afterwards to show p(apply) move.
+  async function handleSubmit() {
+    setConsoleTab("tests");
+    setSubmitting(true);
+    setExpandedCases(new Set());
+    setFullOutputOpen(false);
+    try {
+      const { data } = await createClient().auth.getSession();
+      if (!data.session) throw new Error("Your session has expired. Please sign in again.");
+      setErrorMessage(undefined);
+      const result = await submitLesson(courseId, slug, submittableFiles, data.session.access_token);
+      setTestResult(result);
+      if (result.passed) {
+        setLabComplete(true);
+        setCelebrateNonce((current) => current + 1);
+      }
+      await refreshMastery();
+    } catch (caught) {
+      setErrorMessage(caught instanceof Error ? caught.message : "Unable to submit your solution.");
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -464,6 +511,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
         </Stack>
 
         <Stack sx={{ gap: 2 }}>
+          <PrerequisiteReview courseId={courseId} slug={slug} />
           <MarkdownText citations={concept.citations}>{concept.summary_markdown}</MarkdownText>
           {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}
 
@@ -487,6 +535,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
                 examples={concept.lesson.worked_examples ?? []}
                 quizItems={concept.lesson.quiz_items ?? []}
                 quizMaxAttempts={concept.lesson.quiz_max_attempts}
+                onQuizAnswered={refreshMastery}
               />
               <QuizSection
                 courseId={courseId}
@@ -497,7 +546,9 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
                 maxAttempts={concept.lesson.quiz_max_attempts}
                 title={concept.kind === "assessment" ? "Topic assessment" : undefined}
                 onComplete={concept.kind === "assessment" ? () => setAssessmentComplete(true) : undefined}
+                onAnswered={refreshMastery}
               />
+              {conceptMastery ? <MasteryCard concept={conceptMastery} threshold={masteryThreshold} /> : null}
               {assessmentComplete ? <LessonComplete courseId={courseId} map={courseMap} slug={slug} title="Assessment" /> : null}
             </Stack>
           ) : null}
@@ -565,6 +616,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
 
             {instructionsTab === "lesson" ? (
               <Stack sx={{ gap: 2 }}>
+                <PrerequisiteReview courseId={courseId} slug={slug} />
                 <MarkdownText citations={concept.citations}>{concept.summary_markdown}</MarkdownText>
 
                 {concept.lesson.explanation_markdown ? (
@@ -602,8 +654,10 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
                     (_, index) => !markerReferencedQuizIndexes(concept.lesson?.explanation_markdown ?? "").has(index)
                   )}
                   maxAttempts={concept.lesson.quiz_max_attempts}
+                  onAnswered={refreshMastery}
                 />
-                {runResult?.passed ? <LessonComplete courseId={courseId} map={courseMap} slug={slug} title="Lab" /> : null}
+                {conceptMastery ? <MasteryCard concept={conceptMastery} threshold={masteryThreshold} /> : null}
+                {labComplete ? <LessonComplete courseId={courseId} map={courseMap} slug={slug} title="Lab" /> : null}
               </Stack>
             ) : !solutionRevealed ? (
               <Stack sx={{ gap: 1.5, py: 3, alignItems: "flex-start" }}>
@@ -690,10 +744,10 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
                   ))}
                 </Tabs>
                 <Stack direction="row" sx={{ gap: 1, px: 1.25, borderLeft: 1, borderColor: "divider", flexShrink: 0 }}>
-                  <Button size="small" variant="outlined" color="success" startIcon={<Icon name="play_arrow" />} onClick={handleRunScript} loading={runningScript} sx={{ borderRadius: 999, textTransform: "none", fontWeight: 700 }}>
+                  <Button size="small" variant="outlined" color="success" startIcon={<Icon name="play_arrow" />} onClick={handleRunTests} loading={running} sx={{ borderRadius: 999, textTransform: "none", fontWeight: 700 }}>
                     Run
                   </Button>
-                  <Button size="small" variant="contained" color="success" startIcon={<Icon name="play_arrow" />} onClick={handleRun} loading={running} sx={{ borderRadius: 999, textTransform: "none", fontWeight: 700 }}>
+                  <Button size="small" variant="contained" color="success" startIcon={<Icon name="task_alt" />} onClick={handleSubmit} loading={submitting} sx={{ borderRadius: 999, textTransform: "none", fontWeight: 700 }}>
                     Submit
                   </Button>
                 </Stack>
@@ -722,7 +776,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
               </Box>
 
               <Box sx={{ position: "relative", flexShrink: 0, height: 260, display: "flex", flexDirection: "column", borderTop: 1, borderColor: "divider", bgcolor: "background.paper" }}>
-                {celebrateNonce > 0 && runResult?.passed && consoleTab === "tests" ? <ConfettiBurst key={celebrateNonce} /> : null}
+                {celebrateNonce > 0 && labComplete && consoleTab === "tests" ? <ConfettiBurst key={celebrateNonce} /> : null}
                 <Tabs value={consoleTab} onChange={(_event, value) => setConsoleTab(value)} sx={{ minHeight: 34, px: 1, pt: 1 }}>
                   <Tab
                     value="testcase"
@@ -744,7 +798,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
                     label={
                       <Stack direction="row" sx={{ alignItems: "center", gap: 0.75 }}>
                         <Icon name="fact_check" /> Test Result
-                        {runResult ? <TabDot ok={runResult.passed} /> : null}
+                        {testResult ? <TabDot ok={testResult.passed} /> : null}
                       </Stack>
                     }
                     sx={{ minHeight: 34, textTransform: "none" }}
@@ -753,9 +807,14 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
                 <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", bgcolor: "background.default", p: "12px 14px", display: "grid", gap: 1.25, alignContent: "start" }}>
                   {consoleTab === "testcase" ? (
                     <>
-                      <Typography variant="body2" color="text.secondary">
-                        Edit this script to call your code with whatever input you want, then hit Run to see what it prints. Never affects grading.
-                      </Typography>
+                      <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", gap: 1 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Scratch script: call your code with any input and hit Run script to see what it prints. Never affects grading or mastery.
+                        </Typography>
+                        <Button size="small" variant="outlined" color="success" startIcon={<Icon name="play_arrow" />} onClick={handleRunScript} loading={runningScript} sx={{ borderRadius: 999, textTransform: "none", fontWeight: 700, flexShrink: 0 }}>
+                          Run script
+                        </Button>
+                      </Stack>
                       <MonacoEditor
                         height="150px"
                         language="python"
@@ -782,13 +841,13 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
                     ) : (
                       <Typography variant="body2" color="text.secondary">Edit your script on the Testcase tab, then hit Run above to see its output here.</Typography>
                     )
-                  ) : runResult ? (
+                  ) : testResult ? (
                     <>
                       <Typography variant="body2" color="text.secondary">
-                        Submit swaps in the full test suite, including hidden checks you can&apos;t see, to validate your solution.
+                        Run checks the visible tests only. Submit swaps in the full suite — hidden checks included — and updates your Apply mastery.
                       </Typography>
                       {(() => {
-                        const cases = parsePytestCases(runResult.output);
+                        const cases = parsePytestCases(testResult.output);
                         return cases.length > 0 ? (
                           <Stack component="ul" sx={{ listStyle: "none", m: 0, p: 0, gap: "2px" }}>
                             {cases.map((testCase, index) => {
@@ -849,16 +908,16 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
                             sx={{
                               mt: 1, mb: 0, p: 1.75, borderRadius: 1, overflowX: "auto", whiteSpace: "pre-wrap", wordBreak: "break-word",
                               fontSize: "0.82rem", bgcolor: "#131313", color: "#ddd",
-                              borderLeft: 3, borderColor: runResult.passed ? "success.main" : "error.main"
+                              borderLeft: 3, borderColor: testResult.passed ? "success.main" : "error.main"
                             }}
                           >
-                            {runResult.output}
+                            {testResult.output}
                           </Box>
                         </Collapse>
                       </Box>
                     </>
                   ) : (
-                    <Typography variant="body2" color="text.secondary">Hit Submit above to see check results here.</Typography>
+                    <Typography variant="body2" color="text.secondary">Hit Run or Submit above to see check results here.</Typography>
                   )}
                 </Box>
               </Box>
