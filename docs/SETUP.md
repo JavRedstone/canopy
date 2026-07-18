@@ -47,6 +47,30 @@ Replace the Supabase values in `.env` with the local keys printed by `npx supaba
 
 There is one root `.env`. The web app, API, worker, LLM gateway, and sandbox runner read only the settings relevant to them. `npm run dev:web` synchronizes the root values required by Next.js into `apps/web/.env.local`; do not manually edit that generated file.
 
+## Database migrations
+
+Check `APP_SUPABASE_URL` in `.env` to see which Supabase you're pointed at: a local address (from `npx supabase start`) means local, a `https://<ref>.supabase.co` URL means a real hosted project.
+
+### Local
+
+`npx supabase db reset` (§2 above) applies every file under `supabase/migrations/` to the local stack. Re-run it after pulling new migrations.
+
+### Hosted
+
+New migration files don't apply themselves to a hosted project — push them explicitly from the repository root:
+
+```powershell
+npx supabase link --project-ref <ref>
+npx supabase migration list   # diff local files against what's already applied remotely
+npx supabase db push          # apply everything pending, in order
+```
+
+`<ref>` is the subdomain in `APP_SUPABASE_URL` (e.g. `https://cbyhaonzgoxnrpqifmuf.supabase.co` → `cbyhaonzgoxnrpqifmuf`).
+
+**None of this needs the database password.** `link`/`migration`/`db push` authenticate as your Supabase *account* — via a cached access token from an earlier `supabase login`, or a `SUPABASE_ACCESS_TOKEN` env var — against Supabase's management API, not as a direct Postgres connection. `npx supabase projects list` is a quick way to confirm the CLI is already authenticated before linking; if it prompts to log in instead, run `npx supabase login` first.
+
+This is unrelated to `APP_DATABASE_URL` in `.env`, which is a full Postgres connection string (password included) that the application's own services use to talk to the database directly — the CLI doesn't read or need it for migrations.
+
 ## 3. Run the services
 
 You need **all five** of the services below running at once, each in its own terminal with the virtual environment active. It's easy to start only the API and web app and think you're done — the app will load fine, but course generation will silently never progress, because nothing will be consuming the generation queue (see the Worker section below).
