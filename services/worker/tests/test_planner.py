@@ -82,20 +82,29 @@ def test_module_concepts_validation_rejects_wrong_expected_count() -> None:
         validate_module_concepts(concepts, [], [], expected_count=2)
 
 
-def test_module_concepts_validation_rejects_a_topic_without_the_required_sequence() -> None:
-    # Satisfies the 3-lecture/2-lab/1-assessment counts but puts a lab before the module's
-    # last lecture, which the sequence check must still catch.
+def test_module_concepts_validation_accepts_any_kind_mix_and_order() -> None:
+    # The 3-lecture/2-lab/lecture-then-lab-then-assessment shape is prompt guidance, not a
+    # hard requirement: a module with a single lecture, a lab before it, and no assessment
+    # at all must still validate. Display order is guaranteed separately by course_map()'s
+    # kind-based re-sort in services/api/app/repository.py, not by generation order.
+    concepts = _concepts(
+        [
+            {"id": "lab", "title": "Lab", "kind": "coding", "summary_markdown": "Practice.", "prerequisites": [], "citations": []},
+            {"id": "intro", "title": "Intro", "kind": "conceptual", "summary_markdown": "Intro.", "prerequisites": [], "citations": []},
+        ]
+    )
+    validate_module_concepts(concepts, [], [])
+
+
+def test_module_concepts_validation_rejects_multiple_assessments() -> None:
     concepts = _concepts(
         [
             {"id": "intro", "title": "Intro", "kind": "conceptual", "summary_markdown": "Intro.", "prerequisites": [], "citations": []},
-            {"id": "lab", "title": "Lab", "kind": "coding", "summary_markdown": "Practice.", "prerequisites": [], "citations": []},
-            {"id": "more", "title": "More", "kind": "conceptual", "summary_markdown": "More.", "prerequisites": [], "citations": []},
-            {"id": "extra", "title": "Extra", "kind": "conceptual", "summary_markdown": "Extra.", "prerequisites": [], "citations": []},
-            {"id": "lab2", "title": "Lab 2", "kind": "coding", "summary_markdown": "Practice more.", "prerequisites": [], "citations": []},
-            {"id": "check", "title": "Check", "kind": "assessment", "summary_markdown": "Check.", "prerequisites": [], "citations": []},
+            {"id": "check-one", "title": "Check one", "kind": "assessment", "summary_markdown": "Check.", "prerequisites": [], "citations": []},
+            {"id": "check-two", "title": "Check two", "kind": "assessment", "summary_markdown": "Check.", "prerequisites": [], "citations": []},
         ]
     )
-    with pytest.raises(ValueError, match="ordered as lectures"):
+    with pytest.raises(ValueError, match="at most one assessment"):
         validate_module_concepts(concepts, [], [])
 
 

@@ -49,7 +49,17 @@ There is one root `.env`. The web app, API, worker, LLM gateway, and sandbox run
 
 ## 3. Run the services
 
-Use separate terminals with the virtual environment active. The API is the backend; the LLM gateway is a separate internal dependency used for generation, short-answer grading, and the learning helper.
+You need **all five** of the services below running at once, each in its own terminal with the virtual environment active. It's easy to start only the API and web app and think you're done — the app will load fine, but course generation will silently never progress, because nothing will be consuming the generation queue (see the Worker section below).
+
+| Service | Command (zsh) | Port |
+|---|---|---|
+| API backend | `python -m uvicorn app.main:app --app-dir services/api --reload --reload-dir services/api --port 8000` | 8000 |
+| LLM gateway | `python -m uvicorn llm_gateway.main:app --app-dir services/llm_gateway --port 8010` | 8010 |
+| Sandbox runner | `python -m uvicorn sandbox_runner.main:app --app-dir services/sandbox_runner --port 8020` | 8020 |
+| Worker | `python -m worker.main` | — |
+| Web app | `npm run dev:web` | 3000 |
+
+The API is the backend; the LLM gateway is a separate internal dependency used for generation, short-answer grading, and the learning helper.
 
 ### API backend — port 8000
 
@@ -83,7 +93,9 @@ Restart this service after changing a gateway task or any `APP_*_MODEL` setting.
 python -m uvicorn sandbox_runner.main:app --app-dir services/sandbox_runner --port 8020
 ```
 
-### Worker
+### Worker — required for course generation, no port, no error if you forget it
+
+This process reads the `ingestion` and `generation` queues and does the actual work: ingesting sources, planning courses, and building lessons. **If it isn't running, nothing tells you** — a new course or a Regenerate just sits at "planning" indefinitely, with no error in the UI or the API logs, because the job that would move it forward was enqueued but nothing is there to pick it up.
 
 ```powershell
 .\.venv\Scripts\python.exe -m worker.main
@@ -106,7 +118,7 @@ npm run dev:web
 ## Troubleshooting
 
 - A learning-helper 503 usually means the LLM gateway is stopped, still running old code, or lacks a working provider configuration. Restart the gateway after pulling helper changes.
-- Course generation needs the worker, LLM gateway, and sandbox runner running in addition to the API and web app.
+- **A course (or a Regenerate) stuck at "planning" with no error is almost always the worker not running.** Course generation needs the worker, LLM gateway, and sandbox runner running in addition to the API and web app — see the table in [§3](#3-run-the-services). Check for a `python -m worker.main` process; if it's not there, start it.
 - The current vertical slice uses Supabase Auth and the Supabase-backed repository when `APP_AUTH_MODE=supabase` and `APP_REPOSITORY_BACKEND=supabase` are set.
 
 ### Windows: a port is already in use

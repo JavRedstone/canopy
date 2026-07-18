@@ -9,11 +9,12 @@ import Paper from "@mui/material/Paper";
 import { alpha } from "@mui/material/styles";
 import { Icon } from "@/components/icon";
 import type { ConceptMastery } from "@/lib/api";
+import { APPLY_COLOR, UNDERSTAND_COLOR } from "@/lib/palette";
 
 // A single BKT track rendered as a labelled bar with a marker at the mastery threshold, so
 // the learner sees both where they are and how far the 95% bar is. `p === null` means the
 // track has no observations yet -- shown as an empty bar with an em dash, never a false 0%.
-// Each track gets its own accent color (Understand = indigo, Apply = orange) so the two
+// Each track gets its own accent color (Understand = indigo, Apply = teal) so the two
 // signals read as distinct at a glance instead of collapsing into the same flat black bar.
 function TrackBar({ label, hint, p, opportunities, threshold, color }: { label: string; hint: string; p: number | null; opportunities: number; threshold: number; color: string }) {
   const hasData = p !== null;
@@ -53,8 +54,6 @@ function TrackBar({ label, hint, p, opportunities, threshold, color }: { label: 
 
 const UNDERSTAND_HINT = "Recall & explanation, from quiz answers.";
 const APPLY_HINT = "Implementing it in code, from your submissions.";
-export const UNDERSTAND_COLOR = "#4f46e5";
-export const APPLY_COLOR = "#f97316";
 
 /** Whether each track is relevant for a concept: everything shows Understand; only coding
  *  labs show Apply. A coding lab that also quizzes still shows both. */
@@ -102,8 +101,8 @@ export function MasteryCard({ concept, threshold }: { concept: ConceptMastery; t
               borderRadius: "50%",
               display: "grid",
               placeItems: "center",
-              color: "#fff",
-              background: `linear-gradient(135deg, ${UNDERSTAND_COLOR}, ${APPLY_COLOR})`,
+              color: UNDERSTAND_COLOR,
+              bgcolor: alpha(UNDERSTAND_COLOR, 0.15),
               "& .material-symbol": { fontSize: "16px" },
             }}
           >

@@ -18,6 +18,7 @@ import { CourseSummary, getCourses } from "@/lib/api";
 import { CourseCategoryBadge } from "@/components/course-category-badge";
 import { Icon } from "@/components/icon";
 import { LinkButton } from "@/components/link-button";
+import { UNDERSTAND_COLOR } from "@/lib/palette";
 import { createClient } from "@/lib/supabase/client";
 
 export function CourseDashboard() {
@@ -101,7 +102,7 @@ export function CourseDashboard() {
                         left: 0,
                         width: `${Math.round((course.lessons_completed / course.lessons_total) * 100)}%`,
                         borderRadius: 999,
-                        bgcolor: "primary.main",
+                        bgcolor: UNDERSTAND_COLOR,
                       }}
                     />
                   </Box>

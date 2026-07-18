@@ -7,7 +7,7 @@ import { BrandLink } from "@/components/brand-link";
 export default function LoginPage() {
   return (
     <PageShell>
-      <BrandLink />
+      <BrandLink size="large" />
       <Box sx={{ maxWidth: 480, mt: 7 }}>
         <Typography variant="overline" color="text.secondary">Welcome</Typography>
         <Typography variant="h3" sx={{ fontSize: "clamp(2rem, 5vw, 3rem)", letterSpacing: "-0.02em", lineHeight: 1.1, my: "12px" }}>

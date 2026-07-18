@@ -17,6 +17,7 @@ import ListItemText from "@mui/material/ListItemText";
 import IconButton from "@mui/material/IconButton";
 import { Icon } from "@/components/icon";
 import { createClient } from "@/lib/supabase/client";
+import { APPLY_COLOR, UNDERSTAND_COLOR } from "@/lib/palette";
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const maxSourceBytes = 6 * 1024 * 1024;
@@ -210,8 +211,8 @@ export function NewCourseForm() {
       <Box>
         <Typography gutterBottom>Add sources (optional)</Typography>
         <Tabs value={sourceTab} onChange={(_event: SyntheticEvent, value: "file" | "text") => setSourceTab(value)}>
-          <Tab value="file" label="Upload file" />
-          <Tab value="text" label="Paste text" />
+          <Tab value="file" icon={<Icon name="upload_file" />} iconPosition="start" label="Upload file" sx={{ color: sourceTab === "file" ? UNDERSTAND_COLOR : undefined }} />
+          <Tab value="text" icon={<Icon name="article" />} iconPosition="start" label="Paste text" sx={{ color: sourceTab === "text" ? APPLY_COLOR : undefined }} />
         </Tabs>
         {sourceTab === "file" ? (
           <Stack direction="row" sx={{ alignItems: "center", gap: 1.5, mt: 2 }}>

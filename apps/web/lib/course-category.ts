@@ -9,43 +9,45 @@ const categories: CourseCategory[] = [
   {
     key: "security",
     icon: "shield",
-    color: "#fbe4e6",
+    color: "#fbe0e2",
     keywords: ["security", "auth", "jwt", "oauth", "encryption", "vulnerability", "penetration"]
   },
   {
     key: "ml",
     icon: "psychology",
-    color: "#ece3fb",
+    color: "#e8defa",
     keywords: ["machine learning", " ml ", "neural", "deep learning", "supervised", "unsupervised", "llm", "artificial intelligence", " ai "]
   },
   {
     key: "data",
     icon: "database",
-    color: "#fdf1d6",
+    color: "#fcedc7",
     keywords: ["sql", "database", "data engineering", "postgres", "etl", "pipeline", "warehouse"]
   },
   {
     key: "web",
     icon: "language",
-    color: "#dcedfb",
+    color: "#d6e9fb",
     keywords: ["web", "react", "frontend", "html", "css", "next.js", "javascript", "typescript", "dom"]
   },
   {
     key: "backend",
     icon: "dns",
-    color: "#ddf3e4",
+    color: "#d1f0dd",
     keywords: ["api", "backend", "server", "fastapi", "django", "microservice", "rest"]
   },
   {
     key: "cloud",
     icon: "cloud",
-    color: "#dbf3f1",
+    color: "#cef2ef",
     keywords: ["cloud", "docker", "kubernetes", "aws", "azure", "devops", "deployment", "infrastructure"]
   },
   {
     key: "code",
     icon: "code",
-    color: "#e5f1da",
+    // Shifted further toward yellow-green than "backend" so the two greens are
+    // actually distinguishable at a glance -- they were nearly identical before.
+    color: "#e9f2c4",
     keywords: ["python", "programming", "algorithm", "code", "software", "language"]
   }
 ];

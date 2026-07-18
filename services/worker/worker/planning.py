@@ -41,11 +41,12 @@ OUTLINE_SYSTEM_PROMPT = (
     "Identify the intended audience and assumed prior knowledge, 3-6 concrete course-level learning "
     "objectives, and an ordered list of modules. For each module write a short focus (1-2 sentences on "
     "what it covers and how it differs from the other modules) and a lesson_count -- the number of "
-    "activities that topic will contain. Every module is a textbook-style topic and therefore needs at least "
-    "six activities: three or more short lectures, two or more focused coding labs, and one assessment checkpoint. "
-    "lesson_count values across all modules MUST sum to between "
-    "{lesson_min} and {lesson_max}, the learner's requested course length. Order modules so each builds "
-    "on earlier ones, give each a scope proportional to its lesson_count, and avoid overlap between "
+    "activities that topic will contain. A module ideally mixes a short lecture or two, a focused coding lab, "
+    "and an assessment checkpoint, but this is guidance, not a quota: size each module's lesson_count to its "
+    "actual scope. The hard constraint is that lesson_count values across all modules MUST sum to between "
+    "{lesson_min} and {lesson_max}, the learner's requested course length -- if that budget is small, prefer "
+    "fewer modules or smaller ones over padding any module past what its focus needs. Order modules so each "
+    "builds on earlier ones, give each a scope proportional to its lesson_count, and avoid overlap between "
     "modules. Concepts for each module are generated separately afterward."
 )
 
@@ -55,10 +56,13 @@ MODULE_CONCEPTS_SYSTEM_PROMPT = (
     "this module's focus without repeating concepts assigned to other modules in the roadmap. Use "
     "lowercase hyphenated concept IDs that do not collide with any already-generated concept. A concept's "
     "prerequisites may only reference concepts that already exist, listed below, never a concept from a "
-    "later module or later in this same list. Each topic must contain at least three short 'conceptual' lecture "
-    "concepts first, then at least two focused 'coding' lab concepts, and exactly one final 'assessment' concept. "
-    "The assessment is a no-workspace, integrative mastery check. Keep each summary_markdown to one concise sentence; detailed "
-    "teaching belongs in the individual lesson, not the course overview."
+    "later module or later in this same list. Where the concept count allows, prefer a few short 'conceptual' "
+    "lecture concepts first, then one or more focused 'coding' lab concepts, optionally ending in a single "
+    "'assessment' concept -- but this shape is guidance, not a quota, and a module with only one or two concepts "
+    "should just cover its focus directly rather than padding to fit the pattern. At most one 'assessment' "
+    "concept per module. The assessment, if present, is a no-workspace, integrative mastery check. Keep each "
+    "summary_markdown to one concise sentence; detailed teaching belongs in the individual lesson, not the "
+    "course overview."
 )
 
 

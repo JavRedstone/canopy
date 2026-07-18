@@ -21,8 +21,8 @@ def _outline_dict(modules: list[dict] | None = None) -> dict:
 
 
 def _module_concept_entries(citations: list[str] | None = None) -> list[dict]:
-    """Six concepts (3 lectures, 2 labs, 1 assessment, in that order) -- the minimum
-    validate_module_concepts now requires for every module, and matching the default
+    """Six concepts (3 lectures, 2 labs, 1 assessment, in that order) -- the shape the
+    planner prompt guides toward (not a hard requirement), matching the default
     six-lesson module from _outline_dict()."""
     cites = ["chunk-id"] if citations is None else citations
     kinds = ["conceptual", "conceptual", "conceptual", "coding", "coding", "assessment"]

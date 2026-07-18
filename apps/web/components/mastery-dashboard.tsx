@@ -9,8 +9,9 @@ import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
 import { alpha } from "@mui/material/styles";
 import { CourseMasteryResponse, getCourseMastery } from "@/lib/api";
-import { APPLY_COLOR, MasteryMeter, UNDERSTAND_COLOR } from "@/components/mastery-meter";
+import { MasteryMeter } from "@/components/mastery-meter";
 import { Icon } from "@/components/icon";
+import { UNDERSTAND_COLOR } from "@/lib/palette";
 import { conceptKindIcon } from "@/lib/concept-kind";
 import { createClient } from "@/lib/supabase/client";
 
@@ -67,8 +68,8 @@ export function MasteryDashboard({ courseId, refreshKey }: { courseId: string; r
                 borderRadius: "50%",
                 display: "grid",
                 placeItems: "center",
-                color: "#fff",
-                background: `linear-gradient(135deg, ${UNDERSTAND_COLOR}, ${APPLY_COLOR})`,
+                color: UNDERSTAND_COLOR,
+                bgcolor: alpha(UNDERSTAND_COLOR, 0.15),
                 "& .material-symbol": { fontSize: "18px" },
               }}
             >
@@ -90,17 +91,7 @@ export function MasteryDashboard({ courseId, refreshKey }: { courseId: string; r
         </Stack>
 
         <Box sx={{ position: "relative", height: 8, borderRadius: 999, bgcolor: "action.hover", overflow: "hidden" }}>
-          <Box
-            sx={{
-              position: "absolute",
-              insetBlock: 0,
-              left: 0,
-              width: `${pct}%`,
-              borderRadius: 999,
-              background: `linear-gradient(90deg, ${UNDERSTAND_COLOR}, ${APPLY_COLOR})`,
-              transition: "width .5s cubic-bezier(.2,.8,.2,1)",
-            }}
-          />
+          <Box sx={{ position: "absolute", insetBlock: 0, left: 0, width: `${pct}%`, borderRadius: 999, bgcolor: "success.main", transition: "width .5s cubic-bezier(.2,.8,.2,1)" }} />
         </Box>
 
         <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))" }}>
@@ -110,11 +101,16 @@ export function MasteryDashboard({ courseId, refreshKey }: { courseId: string; r
               variant="outlined"
               sx={{ p: 1.75, display: "grid", gap: 1.25, borderColor: (theme) => (concept.mastered ? alpha(theme.palette.success.main, 0.6) : "divider") }}
             >
-              <Stack direction="row" sx={{ alignItems: "center", gap: 1, minWidth: 0 }}>
-                <Icon name={concept.mastered ? "verified" : conceptKindIcon(concept.kind)} />
+              <Stack direction="row" sx={{ alignItems: "center", gap: 0.75, minWidth: 0 }}>
+                <Icon name={conceptKindIcon(concept.kind)} />
                 <Typography variant="body2" sx={{ fontWeight: 600, flex: 1, minWidth: 0 }} noWrap title={concept.title}>
                   {concept.title}
                 </Typography>
+                {concept.mastered ? (
+                  <Box component="span" sx={{ color: "success.main", display: "inline-flex", "& .material-symbol": { fontSize: 18 } }}>
+                    <Icon name="verified" />
+                  </Box>
+                ) : null}
               </Stack>
               <MasteryMeter concept={concept} threshold={mastery.threshold} />
             </Paper>

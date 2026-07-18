@@ -25,7 +25,7 @@ import DialogContent from "@mui/material/DialogContent";
 import DialogContentText from "@mui/material/DialogContentText";
 import DialogActions from "@mui/material/DialogActions";
 import Button from "@mui/material/Button";
-import { CourseMapResponse, CoursePointsResponse, CourseProgressResponse, CourseSummary, deleteCourse, getCourse, getCourseMap, getCoursePoints, getCourseProgress, regenerateCourse, resumeCourseLessons } from "@/lib/api";
+import { CoursePlanningNotStartedError, CourseMapResponse, CoursePointsResponse, CourseProgressResponse, CourseSummary, deleteCourse, getCourse, getCourseMap, getCoursePoints, getCourseProgress, regenerateCourse, resumeCourseLessons } from "@/lib/api";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { CourseCategoryBadge } from "@/components/course-category-badge";
 import { CourseProgressSteps } from "@/components/course-progress";
@@ -67,12 +67,24 @@ export function CourseDetail({ courseId }: { courseId: string }) {
       if (!data.session) return;
       try {
         const token = data.session.access_token;
-        const [courseSummary, courseProgress, courseMap, coursePoints] = await Promise.all([
+        const [courseSummary, courseProgress, coursePoints] = await Promise.all([
           getCourse(courseId, token),
           getCourseProgress(courseId, token),
-          getCourseMap(courseId, token),
           getCoursePoints(courseId, token)
         ]);
+        if (cancelled) return;
+        // Right after creating or regenerating a course, the active version has no concept
+        // skeleton yet -- getCourseMap 409s until planning produces one. That's not a fatal
+        // error, just "not ready yet": fall back to an empty map so the build-progress
+        // stepper renders instead of a hard error screen, and let the poll below refetch
+        // once planning has actually produced a skeleton.
+        let courseMap: CourseMapResponse;
+        try {
+          courseMap = await getCourseMap(courseId, token);
+        } catch (mapError) {
+          if (!(mapError instanceof CoursePlanningNotStartedError)) throw mapError;
+          courseMap = { course_id: courseId, version: 0, modules: [] };
+        }
         if (cancelled) return;
         setCourse(courseSummary);
         setProgress(courseProgress);
@@ -292,15 +304,20 @@ export function CourseDetail({ courseId }: { courseId: string }) {
                             sx={{ border: 1, borderColor: "divider", borderRadius: 1.5 }}
                           >
                             <ListItemIcon sx={{ minWidth: 44 }}>
-                              <Icon name={concept.completed ? "check_circle" : conceptKindIcon(concept.kind)} />
+                              <Icon name={conceptKindIcon(concept.kind)} />
                             </ListItemIcon>
                             <ListItemText primary={concept.title} secondary={concept.summary_markdown} />
-                            {concept.completed ? (
-                              <Chip size="small" icon={<Icon name="check" />} label="Complete" color="success" />
-                            ) : building ? (
+                            {building ? (
                               <Chip size="small" icon={<CircularProgress size={12} sx={{ color: "inherit" }} />} label="Building…" />
                             ) : (
-                              <Chip size="small" label={concept.kind} color="success" variant="outlined" sx={{ textTransform: "capitalize" }} />
+                              <Chip
+                                size="small"
+                                icon={concept.completed ? <Icon name="check" /> : undefined}
+                                label={concept.kind}
+                                color="success"
+                                variant={concept.completed ? "filled" : "outlined"}
+                                sx={{ textTransform: "capitalize" }}
+                              />
                             )}
                           </ListItemButton>
                         );

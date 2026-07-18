@@ -21,10 +21,14 @@ class OutlineModule(BaseModel):
     id: str = Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
     title: str = Field(min_length=1, max_length=160)
     focus: str = Field(min_length=1, max_length=400)
-    # A textbook-style topic has several focused activities, never one monolithic lesson.
-    # One lesson per concept, so this is also the concept count for the module. Capped at
-    # ModuleConcepts' limit so the target is always achievable in a single concepts call.
-    lesson_count: int = Field(ge=6, le=10)
+    # A textbook-style topic usually has several focused activities, never one monolithic
+    # lesson -- but the floor stays low so a course with a small total lesson budget can
+    # still have more than one module (min_length=1 modules * a high floor here can make
+    # the outline's own total-lessons budget mathematically unsatisfiable; see
+    # OUTLINE_SYSTEM_PROMPT/validate_course_outline). One lesson per concept, so this is
+    # also the concept count for the module. Capped at ModuleConcepts' limit so the target
+    # is always achievable in a single concepts call.
+    lesson_count: int = Field(ge=2, le=10)
 
 
 class CourseOutline(BaseModel):
@@ -98,18 +102,16 @@ def validate_module_concepts(
         raise ValueError(
             f"This module must contain exactly {expected_count} concept(s), but {len(concepts)} were generated."
         )
-    if len(concepts) < 6:
-        raise ValueError("Each topic needs at least three lectures, two labs, and an assessment.")
     kinds = [concept.kind for concept in concepts]
-    if kinds.count("conceptual") < 3:
-        raise ValueError("Each topic needs at least three focused lecture concepts before its labs.")
-    if kinds.count("coding") < 2:
-        raise ValueError("Each topic needs at least two coding labs.")
-    if kinds.count("assessment") != 1:
-        raise ValueError("Each topic needs exactly one assessment checkpoint.")
-    phase = {"conceptual": 0, "coding": 1, "assessment": 2}
-    if any(phase[left] > phase[right] for left, right in zip(kinds, kinds[1:])):
-        raise ValueError("Topic activities must be ordered as lectures, then labs, then the assessment.")
+    if kinds.count("assessment") > 1:
+        raise ValueError("Each topic may have at most one assessment checkpoint.")
+    # The 3-lecture/2-lab/lecture-then-lab-then-assessment shape is prompt guidance
+    # (MODULE_CONCEPTS_SYSTEM_PROMPT), not a hard requirement here -- a topic that
+    # genuinely only needs two lectures or one lab shouldn't fail generation over it.
+    # Display order doesn't depend on generation order either: course_map() re-sorts
+    # each module's concepts by kind (conceptual, coding, assessment) on every read
+    # (see CONCEPT_KIND_PHASE in services/api/app/repository.py), so a learner never
+    # sees a lab before a lecture regardless of what order the planner produced them in.
     available_citations = set(available_citations)
     resolved = set(known_concept_ids)
     for concept in concepts:

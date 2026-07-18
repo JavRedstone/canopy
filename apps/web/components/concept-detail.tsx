@@ -14,13 +14,13 @@ import { MasteryCard } from "@/components/mastery-meter";
 import { PrerequisiteReview } from "@/components/prerequisite-review";
 import { SettingsMenu } from "@/components/settings-menu";
 import { ConfettiBurst } from "@/components/confetti-burst";
-import { conceptKindIcon, conceptKindLabel } from "@/lib/concept-kind";
+import { conceptKindColor, conceptKindIcon, conceptKindLabel } from "@/lib/concept-kind";
 import { createClient } from "@/lib/supabase/client";
 import { parsePytestCases } from "@/lib/pytest-output";
 import { useStallDetector } from "@/lib/use-stall-detector";
 import { labTheme } from "@/lib/theme";
 import type { ReactNode } from "react";
-import { ThemeProvider } from "@mui/material/styles";
+import { ThemeProvider, alpha } from "@mui/material/styles";
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
@@ -242,13 +242,32 @@ function CourseOutlineSidebar({ courseId, map, activeSlug, collapsed, onToggle }
                 selected={item.slug === activeSlug}
                 sx={{ borderRadius: 1, py: 0.75, px: 1, alignItems: "flex-start" }}
               >
-                <ListItemIcon sx={{ minWidth: 28, mt: 0.15 }}><Icon name={conceptKindIcon(item.kind)} /></ListItemIcon>
+                <ListItemIcon sx={{ minWidth: 28, mt: 0.15 }}>
+                  <Icon name={conceptKindIcon(item.kind)} />
+                </ListItemIcon>
                 <ListItemText primary={item.title} secondary={conceptKindLabel(item.kind)} slotProps={{ primary: { sx: { fontSize: "0.82rem", lineHeight: 1.25 } }, secondary: { sx: { fontSize: "0.72rem" } } }} />
+                {item.completed ? (
+                  <Box component="span" sx={{ mt: 0.15, color: "success.main", display: "inline-flex", "& .material-symbol": { fontSize: 16 } }}>
+                    <Icon name="check_circle" />
+                  </Box>
+                ) : null}
               </ListItemButton>
             ))}
           </Box>
         ))}
       </List> : null}
+    </Box>
+  );
+}
+
+/** A small floating "Ask" pill that appears next to a text selection, so the learning
+ *  helper is discoverable without spotting the collapsed icon rail on the page edge. */
+function SelectionAskBubble({ rect, onAsk }: { rect: { top: number; left: number }; onAsk: () => void }) {
+  return (
+    <Box sx={{ display: { xs: "none", lg: "block" }, position: "fixed", top: rect.top, left: rect.left, transform: "translateX(-50%)", zIndex: 4 }}>
+      <Button variant="contained" size="small" startIcon={<Icon name="auto_awesome" />} onClick={onAsk} sx={{ boxShadow: 3 }}>
+        Ask
+      </Button>
     </Box>
   );
 }
@@ -399,10 +418,12 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
   const [concept, setConcept] = useState<ConceptDetailResponse>();
   const [courseMap, setCourseMap] = useState<CourseMapResponse>();
   const [outlineCollapsed, setOutlineCollapsed] = useState(false);
+  const [codeCollapsed, setCodeCollapsed] = useState(false);
   const [helperOpen, setHelperOpen] = useState(false);
   const [selectedText, setSelectedText] = useState("");
   const [selectedRange, setSelectedRange] = useState<Range>();
   const [selectedParagraph, setSelectedParagraph] = useState<{ id: string; source: string; occurrence: number }>();
+  const [bubbleRect, setBubbleRect] = useState<{ top: number; left: number }>();
   const [lessonUpdateNotice, setLessonUpdateNotice] = useState(false);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState<string>();
@@ -504,6 +525,21 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
     };
   }, [selectedRange]);
 
+  useEffect(() => {
+    function clearIfEmpty() {
+      if (!window.getSelection()?.toString().trim()) setBubbleRect(undefined);
+    }
+    function dismissBubble() {
+      setBubbleRect(undefined);
+    }
+    document.addEventListener("selectionchange", clearIfEmpty);
+    window.addEventListener("scroll", dismissBubble, { capture: true });
+    return () => {
+      document.removeEventListener("selectionchange", clearIfEmpty);
+      window.removeEventListener("scroll", dismissBubble, { capture: true });
+    };
+  }, []);
+
   function updateFile(path: string, content: string) {
     setFiles((current) => current.map((file) => file.path === path ? { ...file, content } : file));
   }
@@ -527,7 +563,11 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
       setSelectedParagraph(undefined);
     }
     setSelectedText(text.slice(0, 6000));
-    setHelperOpen(true);
+    const rect = selection.getRangeAt(0).getBoundingClientRect();
+    setBubbleRect({
+      top: Math.max(8, rect.top - 44),
+      left: Math.min(Math.max(8, rect.left + rect.width / 2), window.innerWidth - 60),
+    });
   }
 
   function applyHelperRevision(replacement: string): boolean {
@@ -603,6 +643,24 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
     }
   }
 
+  // courseMap is only fetched once on load, so its per-concept `completed` flags (the
+  // checkmarks in the outline sidebar and course overview) would otherwise go stale for
+  // the rest of the session the moment a lesson is finished. Refresh it alongside mastery
+  // on every completion-relevant event so "done" shows up live, not just after a reload.
+  async function refreshCourseMap() {
+    try {
+      const { data } = await createClient().auth.getSession();
+      if (!data.session) return;
+      setCourseMap(await getCourseMap(courseId, data.session.access_token));
+    } catch {
+      // Non-fatal: the outline/module list just keeps its last known completion state.
+    }
+  }
+
+  async function refreshProgress() {
+    await Promise.all([refreshMastery(), refreshCourseMap()]);
+  }
+
   // Run = visible checks only. Tight feedback loop, no mastery effect, no completion.
   async function handleRunTests() {
     setConsoleTab("tests");
@@ -638,7 +696,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
         setLabComplete(true);
         setCelebrateNonce((current) => current + 1);
       }
-      await refreshMastery();
+      await refreshProgress();
     } catch (caught) {
       setErrorMessage(caught instanceof Error ? caught.message : "Unable to submit your solution.");
     } finally {
@@ -686,14 +744,16 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
     return (
       <PageShell maxWidth={{ xs: 1040, xl: helperOpen ? 1360 : 1040 }}>
         <CourseOutlineSidebar courseId={courseId} map={courseMap} activeSlug={slug} collapsed={outlineCollapsed} onToggle={() => setOutlineCollapsed((current) => !current)} />
-        <LearningHelperSidebar courseId={courseId} slug={slug} selectedText={selectedText} selectedParagraph={selectedParagraph} open={helperOpen} onToggle={() => setHelperOpen((current) => !current)} onClearSelection={() => { setSelectedText(""); setSelectedRange(undefined); setSelectedParagraph(undefined); }} onApplyRevision={applyHelperRevision} />
+        <LearningHelperSidebar courseId={courseId} slug={slug} selectedText={selectedText} selectedParagraph={selectedParagraph} open={helperOpen} onToggle={() => setHelperOpen((current) => !current)} onClearSelection={() => { setSelectedText(""); setSelectedRange(undefined); setSelectedParagraph(undefined); setBubbleRect(undefined); }} onApplyRevision={applyHelperRevision} />
+        {bubbleRect ? <SelectionAskBubble rect={bubbleRect} onAsk={() => { setHelperOpen(true); setBubbleRect(undefined); }} /> : null}
         <Stack direction="row" sx={{ ml: { md: outlineCollapsed ? "56px" : "280px" }, mr: { xs: "56px", xl: helperOpen ? "360px" : "56px" }, alignItems: "center", gap: 1.5, color: "text.secondary" }}>
           <CircularProgress size={18} /> <Typography>Loading…</Typography>
         </Stack>
       </PageShell>
     );
   }
-  if (state === "error") return <PageShell><CourseOutlineSidebar courseId={courseId} map={courseMap} activeSlug={slug} collapsed={outlineCollapsed} onToggle={() => setOutlineCollapsed((current) => !current)} /><LearningHelperSidebar courseId={courseId} slug={slug} selectedText={selectedText} selectedParagraph={selectedParagraph} open={helperOpen} onToggle={() => setHelperOpen((current) => !current)} onClearSelection={() => { setSelectedText(""); setSelectedRange(undefined); setSelectedParagraph(undefined); }} onApplyRevision={applyHelperRevision} /><Box sx={{ ml: { md: outlineCollapsed ? "56px" : "280px" }, mr: { xs: "56px", xl: helperOpen ? "360px" : "56px" } }}><Alert severity="error">{errorMessage ?? "We could not load this concept."}</Alert></Box></PageShell>;
+  if (state === "error") return <PageShell><CourseOutlineSidebar courseId={courseId} map={courseMap} activeSlug={slug} collapsed={outlineCollapsed} onToggle={() => setOutlineCollapsed((current) => !current)} /><LearningHelperSidebar courseId={courseId} slug={slug} selectedText={selectedText} selectedParagraph={selectedParagraph} open={helperOpen} onToggle={() => setHelperOpen((current) => !current)} onClearSelection={() => { setSelectedText(""); setSelectedRange(undefined); setSelectedParagraph(undefined); setBubbleRect(undefined); }} onApplyRevision={applyHelperRevision} />
+        {bubbleRect ? <SelectionAskBubble rect={bubbleRect} onAsk={() => { setHelperOpen(true); setBubbleRect(undefined); }} /> : null}<Box sx={{ ml: { md: outlineCollapsed ? "56px" : "280px" }, mr: { xs: "56px", xl: helperOpen ? "360px" : "56px" } }}><Alert severity="error">{errorMessage ?? "We could not load this concept."}</Alert></Box></PageShell>;
   if (!course || !concept) return null;
 
   const breadcrumbs = (
@@ -707,7 +767,16 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
   );
 
   const conceptHeaderBadge = (
-    <Avatar variant="rounded" sx={{ width: 32, height: 32, bgcolor: "action.hover", color: "text.primary", "& .material-symbol": { fontSize: 17, opacity: 0.75 } }}>
+    <Avatar
+      variant="rounded"
+      sx={{
+        width: 32,
+        height: 32,
+        bgcolor: alpha(conceptKindColor(concept.kind), 0.15),
+        color: conceptKindColor(concept.kind),
+        "& .material-symbol": { fontSize: 17 },
+      }}
+    >
       <Icon name={conceptKindIcon(concept.kind)} />
     </Avatar>
   );
@@ -719,7 +788,8 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
   if (concept.kind !== "coding") {
     return (
       <PageShell maxWidth={{ xs: 1040, xl: helperOpen ? 1360 : 1040 }}>
-        <LearningHelperSidebar courseId={courseId} slug={slug} selectedText={selectedText} selectedParagraph={selectedParagraph} open={helperOpen} onToggle={() => setHelperOpen((current) => !current)} onClearSelection={() => { setSelectedText(""); setSelectedRange(undefined); setSelectedParagraph(undefined); }} onApplyRevision={applyHelperRevision} />
+        <LearningHelperSidebar courseId={courseId} slug={slug} selectedText={selectedText} selectedParagraph={selectedParagraph} open={helperOpen} onToggle={() => setHelperOpen((current) => !current)} onClearSelection={() => { setSelectedText(""); setSelectedRange(undefined); setSelectedParagraph(undefined); setBubbleRect(undefined); }} onApplyRevision={applyHelperRevision} />
+        {bubbleRect ? <SelectionAskBubble rect={bubbleRect} onAsk={() => { setHelperOpen(true); setBubbleRect(undefined); }} /> : null}
         <Box sx={{ ml: { md: outlineCollapsed ? "56px" : "280px" }, mr: { xs: "56px", xl: helperOpen ? "360px" : "56px" } }}>
         {breadcrumbs}
         <Box sx={{ display: "flex", gap: 3, alignItems: "flex-start" }}>
@@ -761,7 +831,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
                 examples={concept.lesson.worked_examples ?? []}
                 quizItems={concept.lesson.quiz_items ?? []}
                 quizMaxAttempts={concept.lesson.quiz_max_attempts}
-                onQuizAnswered={refreshMastery}
+                onQuizAnswered={refreshProgress}
                 paragraphGroup="lesson"
               /></Box>
               <QuizSection
@@ -773,7 +843,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
                 maxAttempts={concept.lesson.quiz_max_attempts}
                 title={concept.kind === "assessment" ? "Topic assessment" : undefined}
                 onComplete={concept.kind === "assessment" ? () => setAssessmentComplete(true) : undefined}
-                onAnswered={refreshMastery}
+                onAnswered={refreshProgress}
               />
               {conceptMastery ? <MasteryCard concept={conceptMastery} threshold={masteryThreshold} /> : null}
               {assessmentComplete ? <LessonComplete courseId={courseId} map={courseMap} slug={slug} title="Assessment" /> : null}
@@ -791,7 +861,8 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
       <CourseOutlineSidebar courseId={courseId} map={courseMap} activeSlug={slug} collapsed={outlineCollapsed} onToggle={() => setOutlineCollapsed((current) => !current)} />
-      <LearningHelperSidebar courseId={courseId} slug={slug} selectedText={selectedText} selectedParagraph={selectedParagraph} open={helperOpen} onToggle={() => setHelperOpen((current) => !current)} onClearSelection={() => { setSelectedText(""); setSelectedRange(undefined); setSelectedParagraph(undefined); }} onApplyRevision={applyHelperRevision} />
+      <LearningHelperSidebar courseId={courseId} slug={slug} selectedText={selectedText} selectedParagraph={selectedParagraph} open={helperOpen} onToggle={() => setHelperOpen((current) => !current)} onClearSelection={() => { setSelectedText(""); setSelectedRange(undefined); setSelectedParagraph(undefined); setBubbleRect(undefined); }} onApplyRevision={applyHelperRevision} />
+        {bubbleRect ? <SelectionAskBubble rect={bubbleRect} onAsk={() => { setHelperOpen(true); setBubbleRect(undefined); }} /> : null}
       <Dialog open={solutionConfirmOpen} onClose={() => setSolutionConfirmOpen(false)}>
         <DialogTitle>Unlock the reference solution?</DialogTitle>
         <DialogContent>
@@ -810,7 +881,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
 
       {concept.lesson && concept.lesson.status === "built" ? (
         <Box sx={{ flex: 1, minHeight: 0, display: "flex", pl: { md: outlineCollapsed ? "56px" : "280px" }, pr: { xs: "56px", xl: helperOpen ? "360px" : "56px" } }}>
-          <Box sx={{ width: 420, flexShrink: 0, overflowY: "auto", p: "24px 24px 48px", borderRight: 1, borderColor: "divider", display: "grid", gap: 3, alignContent: "start" }}>
+          <Box sx={{ flex: codeCollapsed ? 1 : "0 1 420px", minWidth: 280, overflowY: "auto", p: "24px 24px 48px", borderRight: 1, borderColor: "divider", display: "grid", gap: 3, alignContent: "start" }}>
             <Stack direction="row" sx={{ alignItems: "flex-start", justifyContent: "space-between", gap: 1 }}>
               <Stack sx={{ minWidth: 0, gap: 0.25 }}>
                 <Typography variant="overline" color="text.secondary">{conceptKindLabel(concept.kind)}</Typography>
@@ -876,7 +947,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
                     (_, index) => !markerReferencedQuizIndexes(concept.lesson?.explanation_markdown ?? "").has(index)
                   )}
                   maxAttempts={concept.lesson.quiz_max_attempts}
-                  onAnswered={refreshMastery}
+                  onAnswered={refreshProgress}
                 />
                 {conceptMastery ? <MasteryCard concept={conceptMastery} threshold={masteryThreshold} /> : null}
                 {labComplete ? <LessonComplete courseId={courseId} map={courseMap} slug={slug} title="Lab" /> : null}
@@ -915,9 +986,9 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
           <ThemeProvider theme={labTheme}>
             <Box
               sx={{
-                flex: 1,
-                minWidth: 0,
-                display: "flex",
+                flex: codeCollapsed ? "0 0 0px" : 1,
+                minWidth: codeCollapsed ? 0 : 360,
+                display: codeCollapsed ? "none" : "flex",
                 flexDirection: "column",
                 overflow: "hidden",
                 bgcolor: "background.default",
@@ -972,6 +1043,9 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
                   <Button size="small" variant="contained" color="success" startIcon={<Icon name="task_alt" />} onClick={handleSubmit} loading={submitting} sx={{ borderRadius: 999, textTransform: "none", fontWeight: 700 }}>
                     Submit
                   </Button>
+                  <IconButton size="small" onClick={() => setCodeCollapsed(true)} aria-label="Collapse code">
+                    <Icon name="chevron_right" />
+                  </IconButton>
                 </Stack>
               </Stack>
               {activeFileIsReadOnly ? (
@@ -1144,6 +1218,13 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
                 </Box>
               </Box>
             </Box>
+            {codeCollapsed ? (
+              <Stack sx={{ width: 56, flexShrink: 0, alignItems: "center", pt: 1.5, bgcolor: "background.paper", borderLeft: 1, borderColor: "divider" }}>
+                <IconButton size="small" onClick={() => setCodeCollapsed(false)} aria-label="Expand code">
+                  <Icon name="chevron_left" />
+                </IconButton>
+              </Stack>
+            ) : null}
           </ThemeProvider>
         </Box>
       ) : concept.lesson?.status === "failed" ? (

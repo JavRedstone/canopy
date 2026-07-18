@@ -2,6 +2,7 @@ import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { SignOutButton } from "@/components/sign-out-button";
+import { BrandLink } from "@/components/brand-link";
 import { LinkButton } from "@/components/link-button";
 import { PageShell } from "@/components/page-shell";
 import { createClient } from "@/lib/supabase/server";
@@ -13,7 +14,7 @@ export default async function HomePage() {
   return (
     <PageShell>
       <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", gap: 3, mb: 7 }}>
-        <Typography sx={{ fontWeight: 700, fontSize: "1.05rem", letterSpacing: "-0.01em" }}>Canopy</Typography>
+        <BrandLink size="large" />
         {user ? (
           <Stack direction="row" sx={{ alignItems: "center", gap: 2 }}>
             <Typography color="text.secondary">{user.email}</Typography>

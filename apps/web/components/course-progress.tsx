@@ -11,6 +11,7 @@ import Button from "@mui/material/Button";
 import { Icon } from "@/components/icon";
 import { CourseProgressResponse } from "@/lib/api";
 import { useStallDetector } from "@/lib/use-stall-detector";
+import { UNDERSTAND_COLOR } from "@/lib/palette";
 
 const stallThresholdMs = 45_000;
 
@@ -76,14 +77,14 @@ function StepMarker({ state, index }: { state: StepState; index: number }) {
     flexShrink: 0,
     ...(state === "done" && { bgcolor: "success.main", color: "success.contrastText" }),
     ...(state === "failed" && { bgcolor: "error.main", color: "error.contrastText" }),
-    ...(state === "active" && { border: 2, borderColor: "primary.main", color: "primary.main" }),
+    ...(state === "active" && { border: 2, borderColor: UNDERSTAND_COLOR, color: UNDERSTAND_COLOR }),
     ...(state === "pending" && { border: 1, borderColor: "divider", color: "text.secondary" })
   } as const;
 
   if (state === "active") {
     return (
       <motion.div
-        animate={{ boxShadow: ["0 0 0 0 rgba(10,10,10,0.15)", "0 0 0 6px rgba(10,10,10,0)", "0 0 0 0 rgba(10,10,10,0)"] }}
+        animate={{ boxShadow: ["0 0 0 0 rgba(129,140,248,0.35)", "0 0 0 6px rgba(129,140,248,0)", "0 0 0 0 rgba(129,140,248,0)"] }}
         transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
         style={{ borderRadius: "50%" }}
       >
