@@ -39,6 +39,21 @@ def test_course_outline_validation_rejects_budget_out_of_range() -> None:
         validate_course_outline(outline, "source-hash", 13, 14)
 
 
+def test_course_outline_validation_rejects_one_topic_for_normal_course_lengths() -> None:
+    outline = CourseOutline.model_validate(_outline(modules=[
+        {"id": "jwt", "title": "JWT", "focus": "JWT fundamentals and validation.", "lesson_count": 8},
+    ]))
+    with pytest.raises(ValueError, match="at least two distinct modules"):
+        validate_course_outline(outline, "source-hash", 8, 10)
+
+
+def test_course_outline_validation_keeps_one_topic_available_for_short_courses() -> None:
+    outline = CourseOutline.model_validate(_outline(modules=[
+        {"id": "jwt", "title": "JWT", "focus": "JWT fundamentals.", "lesson_count": 6},
+    ]))
+    validate_course_outline(outline, "source-hash", 6, 7)
+
+
 def test_course_outline_rejects_duplicate_module_ids() -> None:
     with pytest.raises(ValueError, match="unique"):
         CourseOutline.model_validate(

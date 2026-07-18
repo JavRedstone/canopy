@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 SourceStatus = Literal["uploading", "uploaded", "ingesting", "ready", "failed"]
@@ -46,10 +46,22 @@ class CreateCourseRequest(BaseModel):
 
 
 class UpdateCourseRequest(BaseModel):
-    """Fields safe to change without invalidating already-generated content."""
+    """Fields safe to change without invalidating already-generated content. lesson_min/max
+    are the exception in spirit -- they don't retroactively touch existing lessons, but do
+    change what the next regeneration targets."""
 
     title: str | None = Field(default=None, min_length=1, max_length=120)
     quiz_max_attempts: int | None = Field(default=None, ge=1, le=10)
+    lesson_min: int | None = Field(default=None, ge=6, le=24)
+    lesson_max: int | None = Field(default=None, ge=6, le=24)
+
+    @model_validator(mode="after")
+    def lesson_range_is_complete_and_ordered(self) -> "UpdateCourseRequest":
+        if (self.lesson_min is None) != (self.lesson_max is None):
+            raise ValueError("lesson_min and lesson_max must be set together.")
+        if self.lesson_min is not None and self.lesson_max is not None and self.lesson_min > self.lesson_max:
+            raise ValueError("Minimum lessons cannot exceed maximum lessons.")
+        return self
 
 
 class CourseSummary(BaseModel):
@@ -60,6 +72,8 @@ class CourseSummary(BaseModel):
     active_version: int
     updated_at: datetime
     quiz_max_attempts: int = 3
+    lesson_min: int = 12
+    lesson_max: int = 20
     lessons_completed: int = 0
     lessons_total: int = 0
 

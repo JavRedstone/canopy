@@ -134,6 +134,8 @@ class CourseRecord:
     active_version: int
     updated_at: datetime
     quiz_max_attempts: int = 3
+    lesson_min: int = 12
+    lesson_max: int = 20
 
 
 class MemoryCourseRepository:
@@ -184,6 +186,8 @@ class MemoryCourseRepository:
             active_version=1,
             updated_at=now,
             quiz_max_attempts=request.quiz_max_attempts,
+            lesson_min=request.lesson_min,
+            lesson_max=request.lesson_max,
         )
         return self._summary(self.courses[course_id])
 
@@ -200,6 +204,10 @@ class MemoryCourseRepository:
             course.title = request.title
         if request.quiz_max_attempts is not None:
             course.quiz_max_attempts = request.quiz_max_attempts
+        if request.lesson_min is not None:
+            course.lesson_min = request.lesson_min
+        if request.lesson_max is not None:
+            course.lesson_max = request.lesson_max
         course.updated_at = datetime.now(UTC)
         return self._summary(course)
 
@@ -327,6 +335,8 @@ class MemoryCourseRepository:
             active_version=course.active_version,
             updated_at=course.updated_at,
             quiz_max_attempts=course.quiz_max_attempts,
+            lesson_min=course.lesson_min,
+            lesson_max=course.lesson_max,
         )
 
 
@@ -492,12 +502,14 @@ class SupabaseCourseRepository:
             active_version=1,
             updated_at=self._timestamp(course_row["updated_at"]),
             quiz_max_attempts=course_row["quiz_max_attempts"],
+            lesson_min=course_row["lesson_min"],
+            lesson_max=course_row["lesson_max"],
         )
 
     def list_courses(self, owner_id: UUID) -> list[CourseSummary]:
         courses = self._data(
             self.client.table("courses")
-            .select("id,title,goal,status,active_version_id,updated_at,quiz_max_attempts")
+            .select("id,title,goal,status,active_version_id,updated_at,quiz_max_attempts,lesson_min,lesson_max")
             .eq("owner_id", str(owner_id))
             .order("updated_at", desc=True),
             "list courses",
@@ -519,6 +531,10 @@ class SupabaseCourseRepository:
             payload["title"] = request.title
         if request.quiz_max_attempts is not None:
             payload["quiz_max_attempts"] = request.quiz_max_attempts
+        if request.lesson_min is not None:
+            payload["lesson_min"] = request.lesson_min
+        if request.lesson_max is not None:
+            payload["lesson_max"] = request.lesson_max
         if payload:
             payload["updated_at"] = datetime.now(UTC).isoformat()
             self._data(
@@ -1373,7 +1389,7 @@ class SupabaseCourseRepository:
         return self._one(
             self._data(
                 self.client.table("courses")
-                .select("id,title,goal,status,active_version_id,updated_at,quiz_max_attempts")
+                .select("id,title,goal,status,active_version_id,updated_at,quiz_max_attempts,lesson_min,lesson_max")
                 .eq("id", str(course_id))
                 .eq("owner_id", str(owner_id)),
                 "load course",
@@ -1537,6 +1553,8 @@ class SupabaseCourseRepository:
             active_version=versions[active_version_id],
             updated_at=SupabaseCourseRepository._timestamp(row["updated_at"]),
             quiz_max_attempts=row["quiz_max_attempts"],
+            lesson_min=row["lesson_min"],
+            lesson_max=row["lesson_max"],
             lessons_completed=completed,
             lessons_total=total,
         )

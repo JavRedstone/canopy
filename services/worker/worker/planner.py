@@ -79,6 +79,13 @@ def validate_course_outline(outline: CourseOutline, source_set_hash: str, lesson
             f"{lesson_min} and {lesson_max} lessons. Adjust the number of modules or their "
             f"lesson_count values so the total lands in that range."
         )
+    # Once a learner asks for an eight-or-more-activity course, a single module
+    # becomes a catch-all "topic" rather than a useful course roadmap. Keep the
+    # one-topic option for genuinely short courses (the UI's six-activity end).
+    if lesson_max >= 8 and len(outline.modules) < 2:
+        raise ValueError(
+            "Courses with a maximum budget of 8 or more activities must contain at least two distinct modules."
+        )
 
 
 def validate_module_concepts(

@@ -6,6 +6,8 @@ export interface CourseSummary {
   active_version: number;
   updated_at: string;
   quiz_max_attempts: number;
+  lesson_min: number;
+  lesson_max: number;
   lessons_completed: number;
   lessons_total: number;
 }
@@ -158,6 +160,8 @@ export async function getConceptPrerequisites(courseId: string, slug: string, ac
 export interface UpdateCourseRequest {
   title?: string;
   quiz_max_attempts?: number;
+  lesson_min?: number;
+  lesson_max?: number;
 }
 
 export async function updateCourse(courseId: string, request: UpdateCourseRequest, accessToken: string): Promise<CourseSummary> {

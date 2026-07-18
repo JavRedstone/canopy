@@ -13,7 +13,11 @@ import { CourseProgressResponse } from "@/lib/api";
 import { useStallDetector } from "@/lib/use-stall-detector";
 import { UNDERSTAND_COLOR } from "@/lib/palette";
 
-const stallThresholdMs = 45_000;
+// A lesson build can include an LLM call, a sandbox run, and a repair pass. The
+// generation queue keeps its claim for five minutes, so showing Resume after
+// only 45 seconds creates a misleading "stalled" state while normal work is
+// still in progress.
+const stallThresholdMs = 6 * 60_000;
 
 type StepState = "done" | "active" | "pending" | "failed";
 

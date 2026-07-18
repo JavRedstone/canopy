@@ -44,8 +44,10 @@ OUTLINE_SYSTEM_PROMPT = (
     "activities that topic will contain. A module ideally mixes a short lecture or two, a focused coding lab, "
     "and an assessment checkpoint, but this is guidance, not a quota: size each module's lesson_count to its "
     "actual scope. The hard constraint is that lesson_count values across all modules MUST sum to between "
-    "{lesson_min} and {lesson_max}, the learner's requested course length -- if that budget is small, prefer "
-    "fewer modules or smaller ones over padding any module past what its focus needs. Order modules so each "
+    "{lesson_min} and {lesson_max}, the learner's requested course length. Unless the goal is explicitly a "
+    "single, narrowly-scoped topic with a very small budget, create at least two distinct modules; an "
+    "introductory course must not be one large catch-all topic. If the budget is small, use smaller focused "
+    "modules rather than padding a single module past what its focus needs. Order modules so each "
     "builds on earlier ones, give each a scope proportional to its lesson_count, and avoid overlap between "
     "modules. Concepts for each module are generated separately afterward."
 )
