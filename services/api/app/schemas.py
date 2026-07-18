@@ -274,6 +274,14 @@ class ConceptDetailResponse(BaseModel):
     lesson: LessonPreview | None = None
 
 
+class CitationExcerptResponse(BaseModel):
+    id: UUID
+    filename: str
+    section: str | None
+    page_number: int | None
+    content: str
+
+
 class LessonHelperRequest(BaseModel):
     question: str = Field(min_length=1, max_length=1200)
     selected_text: str | None = Field(default=None, max_length=6000)

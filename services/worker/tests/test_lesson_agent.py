@@ -1,7 +1,7 @@
 import json
 from types import SimpleNamespace
 
-from worker.lesson_agent import repair_bundle
+from worker.lesson_agent import repair_bundle, strip_starter_solution
 from worker.sandbox import SandboxRunResult
 
 
@@ -50,6 +50,7 @@ def test_loop_exits_once_model_stops_calling_tools() -> None:
         model="test-model",
         sandbox=sandbox,
         files=files,
+        writable_paths={"solution.py"},
         failing_result=FAILING,
         max_tool_turns=5,
     )
@@ -77,6 +78,7 @@ def test_write_file_mutation_is_visible_to_a_later_run_tests() -> None:
         model="test-model",
         sandbox=sandbox,
         files=files,
+        writable_paths={"solution.py"},
         failing_result=FAILING,
         max_tool_turns=5,
     )
@@ -96,6 +98,7 @@ def test_loop_is_capped_at_max_tool_turns() -> None:
         model="test-model",
         sandbox=sandbox,
         files=files,
+        writable_paths={"solution.py"},
         failing_result=FAILING,
         max_tool_turns=3,
     )
@@ -121,9 +124,86 @@ def test_result_always_comes_from_sandbox_never_inferred_from_model_text() -> No
         model="test-model",
         sandbox=sandbox,
         files=files,
+        writable_paths={"solution.py"},
         failing_result=FAILING,
         max_tool_turns=5,
     )
 
     assert len(sandbox.runs) == 2  # the mid-loop run_tests call, plus the final re-verification
+    assert result is PASSING
+
+
+def test_write_file_outside_writable_paths_is_rejected_not_applied() -> None:
+    # The model tries to "fix" a failing reference solution by rewriting the hidden test
+    # instead -- this must be rejected, not silently written, so a lesson can never ship
+    # "validated" with a test that was weakened to make a wrong solution pass.
+    responses = FakeResponses(
+        outputs=[
+            [_call("write_file", "c1", path="test_solution.py", content="def test_it():\n    assert True\n")],
+            [_call("write_file", "c2", path="solution.py", content="def f(): return 1\n")],
+            [],
+        ]
+    )
+    sandbox = FakeSandbox(results=[PASSING])
+    files = {"solution.py": "def f(): return 0\n", "test_solution.py": "def test_it():\n    assert f() == 1\n"}
+
+    final_files, _ = repair_bundle(
+        openai_client=SimpleNamespace(responses=responses),
+        model="test-model",
+        sandbox=sandbox,
+        files=files,
+        writable_paths={"solution.py"},
+        failing_result=FAILING,
+        max_tool_turns=5,
+    )
+
+    assert final_files["test_solution.py"] == "def test_it():\n    assert f() == 1\n"  # unchanged
+    assert final_files["solution.py"] == "def f(): return 1\n"  # the legitimate write still applied
+
+
+def test_strip_starter_solution_removes_the_working_implementation() -> None:
+    responses = FakeResponses(
+        outputs=[
+            [_call("write_file", "c1", path="solution.py", content="def f():\n    ...\n")],
+            [],
+        ]
+    )
+    sandbox = FakeSandbox(results=[FAILING])  # stub now correctly fails
+    files = {"solution.py": "def f(): return 1\n", "test_solution.py": "def test_it():\n    assert f() == 1\n"}
+
+    final_files, result = strip_starter_solution(
+        openai_client=SimpleNamespace(responses=responses),
+        model="test-model",
+        sandbox=sandbox,
+        files=files,
+        writable_paths={"solution.py"},
+        passing_result=PASSING,
+        max_tool_turns=5,
+    )
+
+    assert final_files["solution.py"] == "def f():\n    ...\n"
+    assert result is FAILING
+
+
+def test_strip_starter_solution_cannot_write_a_test_file() -> None:
+    responses = FakeResponses(
+        outputs=[
+            [_call("write_file", "c1", path="test_solution.py", content="def test_it():\n    pass\n")],
+            [],
+        ]
+    )
+    sandbox = FakeSandbox(results=[PASSING])  # nothing legitimate changed, so it still passes
+    files = {"solution.py": "def f(): return 1\n", "test_solution.py": "def test_it():\n    assert f() == 1\n"}
+
+    final_files, result = strip_starter_solution(
+        openai_client=SimpleNamespace(responses=responses),
+        model="test-model",
+        sandbox=sandbox,
+        files=files,
+        writable_paths={"solution.py"},
+        passing_result=PASSING,
+        max_tool_turns=5,
+    )
+
+    assert final_files["test_solution.py"] == "def test_it():\n    assert f() == 1\n"  # unchanged
     assert result is PASSING

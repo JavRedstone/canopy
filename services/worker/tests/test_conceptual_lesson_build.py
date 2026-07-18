@@ -1,12 +1,11 @@
 from types import SimpleNamespace
 
 from worker.lesson_build import LessonBuilder
-from worker.lesson_schema import LessonBundle
+from worker.lesson_schema import LessonContentBundle
 
 
-def _conceptual_bundle_dict(**content_overrides: object) -> dict:
+def _conceptual_content_dict(**content_overrides: object) -> dict:
     return {
-        "schema_version": 2,
         "lesson_content": {
             "title": "Why tokens expire",
             "explanation_markdown": "Expiry bounds the damage of a leaked token.",
@@ -14,38 +13,20 @@ def _conceptual_bundle_dict(**content_overrides: object) -> dict:
             "worked_examples": [],
             **content_overrides,
         },
-        "workspace": None,
-        "assessment": {
-            "visible_tests": [],
-            "hidden_tests": [],
-            "quiz_items": [
-                {
-                    "id": "expiry-check",
-                    "kind": "fill",
-                    "prompt_markdown": "A token past its exp claim is ____.",
-                    "options": [],
-                    "correct_option_index": None,
-                    "correct_answers": ["rejected"],
-                    "explanation_markdown": "Expiry is a hard boundary.",
-                    "citations": [],
-                }
-            ],
-            "hints": [],
-            "reference_solution_files": [],
-        },
+        "quiz_items": [
+            {
+                "id": "expiry-check",
+                "kind": "fill",
+                "prompt_markdown": "A token past its exp claim is ____.",
+                "options": [],
+                "correct_option_index": None,
+                "correct_answers": ["rejected"],
+                "explanation_markdown": "Expiry is a hard boundary.",
+                "citations": [],
+            }
+        ],
+        "hints": [],
     }
-
-
-def _coding_shaped_bundle_dict() -> dict:
-    bundle = _conceptual_bundle_dict()
-    bundle["workspace"] = {
-        "environment_id": "python-basic",
-        "files": [{"path": "solution.py", "content": "def f():\n    ...\n", "visibility": "visible", "editable_regions": None}],
-    }
-    bundle["assessment"]["visible_tests"] = [{"path": "test_a.py", "content": "def test_a():\n    assert True\n"}]
-    bundle["assessment"]["hidden_tests"] = [{"path": "test_b.py", "content": "def test_b():\n    assert True\n"}]
-    bundle["assessment"]["reference_solution_files"] = [{"path": "solution.py", "content": "def f():\n    return 1\n"}]
-    return bundle
 
 
 class FakeRequest:
@@ -108,7 +89,7 @@ def _builder(responses: FakeResponses) -> LessonBuilder:
 
 
 def test_conceptual_lesson_builds_without_sandbox_and_stores_validated_bundle() -> None:
-    responses = FakeResponses([LessonBundle.model_validate(_conceptual_bundle_dict())])
+    responses = FakeResponses([LessonContentBundle.model_validate(_conceptual_content_dict())])
     builder = _builder(responses)
 
     builder.build_lesson("lesson-id")
@@ -120,11 +101,14 @@ def test_conceptual_lesson_builds_without_sandbox_and_stores_validated_bundle() 
     assert applied["p_bundle"]["assessment"]["quiz_items"][0]["id"] == "expiry-check"
 
 
-def test_conceptual_bundle_with_workspace_is_regenerated_with_feedback() -> None:
+def test_conceptual_content_with_out_of_context_citation_is_regenerated_with_feedback() -> None:
+    # A workspace can no longer slip into conceptual content by mistake -- LessonContentBundle
+    # has no such field -- so the retry-with-feedback path is exercised via an out-of-context
+    # citation instead, the other real failure mode content generation can still hit.
     responses = FakeResponses(
         [
-            LessonBundle.model_validate(_coding_shaped_bundle_dict()),
-            LessonBundle.model_validate(_conceptual_bundle_dict()),
+            LessonContentBundle.model_validate(_conceptual_content_dict(citations=["chunk-outside-context"])),
+            LessonContentBundle.model_validate(_conceptual_content_dict()),
         ]
     )
     builder = _builder(responses)
@@ -134,7 +118,7 @@ def test_conceptual_bundle_with_workspace_is_regenerated_with_feedback() -> None
     assert len(responses.calls) == 2
     feedback_message = responses.calls[1]["input"][-1]
     assert feedback_message["role"] == "user"
-    assert "must not include a workspace" in feedback_message["content"]
+    assert "cites a chunk outside" in feedback_message["content"]
     applied = dict(builder.client.rpc_calls)["apply_lesson_bundle"]
     assert applied["p_validation_status"] == "validated"
     assert applied["p_bundle"]["workspace"] is None

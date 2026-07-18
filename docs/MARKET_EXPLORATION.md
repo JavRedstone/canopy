@@ -1,376 +1,376 @@
-# Canopy: Market Exploration and Product Positioning
+# Market Exploration and Product Positioning
 
-**Prepared:** July 17, 2026  
-**Scope:** Business case, intended users, use cases, competitor landscape, positioning, and risks for the Canopy product described in [`IDEA.md`](./IDEA.md).
+**Prepared:** July 17–18, 2026. **Scope:** business case, market map, target customers,
+competitive landscape, positioning, and risks for the Canopy product described in
+[`IDEA.md`](./IDEA.md).
+
+> This consolidates three earlier, independently-written explorations
+> (`MARKET_EXPLORATION.md`, `_2`, `_3`) that were kept separate as deliberately
+> independent takes for triangulation. All three converged on the same conclusion, so
+> keeping them separate cost more in confusion than it added in perspective — this is
+> the single synthesized version.
 
 ## Executive conclusion
 
-Canopy can solve a real problem, but the strongest business is **not** a general-purpose AI learning app for everyone. Its most promising wedge is **technical enablement from proprietary materials**: turning a company's internal technical documentation into source-cited, hands-on training that demonstrates whether a learner can apply the material.
-
-The plan combines three elements:
+Canopy can solve a real problem, but the strongest business is **not** a general-purpose
+AI course generator for everyone. That category — document in, passive study aids or a
+generic course out — is crowded and shallow (NotebookLM, Coursebox, X-Pilot, OmniLearn).
+Canopy's defensible wedge is **technical enablement from proprietary material**: turning
+a company's own internal documentation, code, and change history into source-cited,
+hands-on, hidden-test-graded practice with per-concept mastery tracking — something no
+competitor does, because it requires both "generated from *your* material" and
+"executable, auto-graded practice" at once.
 
 ```text
-Customer documentation -> validated technical practice -> evidence of applied competence
+Proprietary engineering context -> validated, hands-on practice -> evidence of applied competence
 ```
 
-The first element is now common. The second is available in polished public-course platforms. The defensible opportunity is the combination: source-grounded content, safe runnable labs, and transparent adaptation driven by observed work rather than course completion.
+The narrower, testable claim to make publicly:
 
-The product should therefore avoid the broad claim that no other product sits at this intersection. The category is crowded. It should instead make a narrower, testable claim:
+> Canopy turns internal technical documentation into validated, hands-on onboarding, so
+> developers can prove they can use a system rather than merely say they read about it.
 
-> Canopy turns internal technical documentation into validated, hands-on onboarding, so developers can prove they can use a platform rather than merely say they completed the reading.
+The demo-friendly story (a lone learner uploading a PDF) and the durable business
+(B2B developer enablement) are **not the same thing** — see [§4](#4-who-should-use-it--ranked).
+Build the demo around the former; build the company around the latter.
 
-## What the plan proposes
+## 1. What the product actually is (grounded, not the pitch)
 
-The Canopy plan describes a system that:
+Stripped to what the code does today: upload PDF/Markdown/text sources → chunk and embed
+into Supabase pgvector → a planner emits a versioned concept graph (concepts,
+prerequisite edges, modules) → a lesson-generation pipeline produces a structured bundle
+per lesson (explanation, worked examples, starter files, visible/hidden tests,
+concept-tagged quiz items, hints, a reference solution) → a sandbox runs the learner's
+code (Run vs. Submit) and grades it for real.
 
-- accepts a learner goal and optional technical source materials;
-- produces a versioned concept graph and canonical course spine;
-- generates explanations, quizzes, code exercises, hints, tests, and reference solutions;
-- validates generated coding exercises before release;
-- separates free `Run` feedback from assessed `Submit` evaluation;
-- tracks conceptual understanding separately from applied implementation;
-- uses learner evidence to recommend remediation, prerequisite refreshers, or acceleration; and
-- retains source citations, course versions, and a visible adaptation history.
+Live today: dual-track mastery (`p(understand)`/`p(apply)` via BKT), a self-repairing
+generation loop (generate → run → diagnose → patch → re-verify in the sandbox, never
+trusting the model's self-report), real citation grounding back to source excerpts, and
+a multi-language sandbox (Python/JavaScript/Go) proving the execution layer isn't
+hard-locked to one toolchain. Not yet built: the LLM diagnosis-and-remediation layer
+surfaced to learners, just-ahead-of-time generation caching, and org/team course
+assignment (see [`USE_CASES.md`](./USE_CASES.md) for exactly which use cases that gap
+blocks today).
 
-The important distinction is that the plan is not merely "chat with a PDF." It intends to take someone from material comprehension to an evaluated, runnable task. In the current project, some of these capabilities are a vertical slice or roadmap rather than an established production product; the business case should label them accordingly.
+The framing that survives scrutiny:
 
-## Who benefits most
+> **Codecademy, but for material that will never have a Codecademy course — and it
+> grades you against hidden tests, not completion.**
 
-### 1. Engineering enablement and platform teams (primary customer)
+## 2. The market map
 
-**Job to be done:** Get developers productive on an internal API, SDK, data platform, cloud environment, or deployment workflow without relying on long reading lists and repeated support requests.
+Two axes decide almost everything: where the content comes from, and whether you
+actually execute code.
 
-Typical examples:
+| | Passive content (read / watch / quiz) | Executable, auto-graded practice |
+|---|---|---|
+| **Fixed, human-built catalog** | Coursera, Udemy, YouTube | Codecademy, DataCamp, educative, boot.dev, Codio |
+| **Generated from *your* material** | NotebookLM, Coursebox, X-Pilot, OmniLearn, Sana | **← Canopy (empty quadrant)** |
 
-- A new engineer learns the company identity API, including token expiry, retries, and error handling.
-- A platform team rolls out a new deployment or observability workflow.
-- A data team trains analysts on an internal semantic layer, data-quality rules, and approved query patterns.
-- A security team trains developers on a secure internal library or standard.
+- **Document → passive study aids (crowded, shallow).** NotebookLM, Coursebox, OmniLearn,
+  LearningStudioAI, Coassemble, X-Pilot all ingest your documents and output slides,
+  video, MCQ quizzes, flashcards, or narrated summaries. None generate a running sandbox
+  where code gets written and graded.
+- **Fixed-catalog interactive coding (deep, locked).** Codecademy, DataCamp, educative,
+  boot.dev, Codio have the editor + terminal + hidden-test autograding — but only for a
+  human-authored catalog. None can build a lab from your internal SDK's docs.
+- **The empty cell** is generated-from-your-materials *and* executable-and-graded. The
+  nearest neighbor, ScratchBox ("agentic AI builds labs from a prompt"), targets
+  instructors authoring courseware, not learners self-serving from their own material,
+  and has no textbook or mastery layer.
 
-**Why it matters:** Public catalogs can teach generic Python or Kubernetes, but they do not inherently teach *this company's* wrapper library, conventions, incident runbook, or infrastructure constraints. A source-grounded lab can be valuable if it is current, correct, and safe.
+## 3. Competitive landscape, by category
 
-**Likely economic buyer:** VP/Director of Engineering, developer productivity, platform engineering, technical enablement, or L&D.  
-**Likely champion:** An engineering manager, developer advocate, staff engineer, or onboarding lead.  
-**End user:** A new hire, internal developer, support engineer, partner engineer, or analyst.
+**Document → passive study aids**
+- **NotebookLM (Google, free)** — the biggest threat to the *conceptual* half. Quizzes,
+  flashcards, mind maps, audio overviews, a Socratic "Learning Guide" with citations and
+  mastery tracking. No code execution, no graded practice, free and improving fast.
+- **Coursebox / OmniLearn / LearningStudioAI / Coassemble** — doc/prompt → structured
+  course (lessons, MCQ quizzes, sometimes a tutor chatbot), aimed at L&D teams and course
+  sellers. Passive output, no executable labs.
+- **X-Pilot** — document → chapter-aligned video course. Deterministic rendering, not
+  interactive.
 
-### 2. Developer relations and technical product education
+**Fixed-catalog interactive coding**
+- **Codecademy** — the reference point: editor + terminal + checkpoints, plus an AI
+  Learning Assistant and "AI Builder." The AI wraps a human-built catalog; it does not
+  manufacture a graded course from *your* document.
+- **DataCamp / educative / boot.dev** — in-browser sandboxes, strong catalogs, same
+  limitation: you consume their content, you don't generate your own.
 
-**Job to be done:** Turn a new release, SDK documentation set, or integration guide into an interactive training path for customers and partners.
+**Autograder / sandbox infrastructure (tooling layer, not a direct competitor)**
+- **ScratchBox** — closest to the generation idea, but instructor-facing.
+- **Codio / CodeGrade / uCertify** — auto-grading pipelines for institutions; a human
+  still authors the exercise.
+- **E2B / Modal / Koyeb** — raw sandbox execution infra; a build-vs-buy option for
+  Canopy's own sandbox layer, not a competitor.
 
-This is useful when a product team has documentation but lacks time to manually build labs for every new release. The citation and versioning elements are particularly valuable: learners should be able to see which documentation version supported an explanation or exercise.
+**Trusted-tutor / codebase-chat benchmarks**
+- **ChatGPT Study Mode / Khanmigo** — flexible tutoring from uploaded material, guides
+  rather than answers. No versioned curriculum, no controlled execution environment.
+- **GitHub Copilot / Sourcegraph Cody** — help a developer search and understand a
+  codebase *in the flow of work*. Valuable for "what does this file do right now," but
+  produce no curriculum, no active-recall practice, and no evidence of understanding —
+  see [§5](#5-what-makes-this-different-from-codebase-chat).
+- **GitHub Skills** — real GitHub-workflow learning (Issues/Actions/Codespaces), but for
+  public GitHub skills, not an org's proprietary internal systems.
 
-### 3. Instructors teaching niche or rapidly changing technical material
+BKT and its successors are mostly research/enterprise adaptive-learning plumbing, not a
+consumer product — Canopy's dual-track mastery is a real differentiator once the
+diagnosis-and-remediation layer is fully live end to end.
 
-**Job to be done:** Create practice-oriented instruction from a lab manual, paper, course reader, custom framework, or internal research tool.
+## 4. Who should use it — ranked
 
-Canopy has more potential for a niche computational course than for a generic introductory programming course. A standard catalog is strongest where a topic is mature and broadly taught; custom source materials matter more when an instructor is teaching something that is not in that catalog.
+The demo hero and the durable customer are not the same user.
 
-### 4. Advanced self-directed learners (secondary market)
+### 1. Internal engineering onboarding (B2B) — where it really lives
 
-**Job to be done:** Learn a specialised library, research technique, or technical domain from papers and documentation.
+Every company with a non-trivial codebase has this problem: internal SDKs, proprietary
+frameworks, service architectures, and runbooks scattered across Confluence/Markdown/PDF
+— and there is no Codecademy course for "Acme's internal payments SDK." New hires read
+stale docs and learn by breaking staging.
 
-This audience may appreciate Canopy, but it is not the best first market. Many self-directed learners will accept the lower-friction substitute of NotebookLM, ChatGPT, or an ordinary coding assistant unless Canopy's labs and feedback visibly improve learning.
+- **Economic buyer:** VP Engineering/CTO, platform engineering, developer productivity.
+- **Champion:** staff engineer, engineering manager, onboarding lead.
+- **Learner:** new hire, engineer transferring teams, contractor with bounded access.
+- **Proof of value:** faster first independently-accepted change, fewer predictable
+  review errors, less senior-engineer interruption.
+- **Why it's the strongest fit:** budget exists and is CFO-legible ("cut ramp from 3
+  months to 6 weeks"); the shared-content architecture (canonical cached bundles, cohort
+  mastery tracking) only pays off when many learners share the same content — a
+  200-engineer org onboarding onto shared internal material is exactly that shape, one
+  learner with one PDF is not; and there is no incumbent — Codecademy for Business sells
+  the fixed catalog and cannot touch a proprietary stack.
 
-## Best use cases
+### 2. Developer relations / API & SDK companies (B2B, second wedge)
 
-### Internal API or SDK onboarding
+The Stripe/Twilio/Datadog pattern: a company shipping an API wants interactive "learn
+our product" labs that stay in sync with the docs, instead of hand-building labs that rot
+as the API changes. Shorter sales cycle than internal-onboarding enterprise deals, so a
+reasonable beachhead before expanding into wedge #1 once generation quality is proven.
 
-Upload approved documentation for an internal SDK. Canopy creates a simulated environment where developers authenticate, make requests, handle failures, and pass robustness tests. The first pilot should focus on a compact, high-support-burden workflow rather than trying to cover an entire architecture.
+### 3. Bootcamps, instructors, niche/rapidly-changing courses (SMB/prosumer)
 
-### Framework or platform migration
+Have teaching material (a course reader, paper set, lab manual), want interactive labs
+without building sandbox infra. Real, but a knife-fight — ScratchBox, Codio, and
+CodeGrade already contest it. Best where the *topic itself* isn't in any standard
+catalog (a custom research tool, a niche framework) rather than mainstream CS.
 
-Use release notes, migration guides, and deprecation documentation to create labs that teach the new workflow and test common errors. This is more valuable than a summary because learners must modify code and see why the previous approach fails.
+### 4. Individual self-directed learner (the demo hero, weakest business)
 
-### Data and analytics enablement
+The grad student with a course reader; the engineer learning a niche library that has
+docs but no course. The best hackathon demo and the most emotionally resonant story, and
+— per [`USE_CASES.md`](./USE_CASES.md) — the single best-supported use case in the
+codebase *today*. But as a business it's weakest: uncertain willingness-to-pay, and the
+conceptual half is already "good enough for free" via NotebookLM or a chatbot with code
+execution. **Build the demo around this user; don't build the company around them.**
 
-Use a governed data dictionary and sample data to teach analysts correct metrics definitions, SQL patterns, data-quality checks, and safe use of a semantic layer. This requires careful handling of proprietary data; production data should not be used in a learner sandbox.
-
-### Technical partner certification preparation
-
-Create labs around the supported integration path for a partner API. This can reduce solutions-engineering time if the source materials, exercises, and environment are maintained as part of the product release process.
-
-### Computational graduate courses or research labs
-
-Turn a course reader, paper set, or methodology guide into short explanatory sections and reproducible exercises. This is attractive only where instructors review the generated material and have the rights to use the underlying sources.
-
-## Where Canopy should not compete initially
-
-Canopy should be deliberately narrow. It is not the best choice for every learning problem.
+### Where Canopy should not compete initially
 
 | Learner need | Better default today | Why |
 |---|---|---|
-| Learn standard Python, SQL, web development, data science, or certification material | Codecademy or DataCamp | Mature, expert-authored course catalogs and polished public learning experiences. |
-| Understand a PDF, create notes, flashcards, or a practice quiz | NotebookLM | Low-friction source-grounded study support with citations and generated study artifacts. |
-| Get tutoring or homework help across many subjects | ChatGPT Study Mode or Khanmigo | Strong general conversational guidance; no course setup required. |
-| Turn documents into a general LMS course, slides, videos, and quizzes | Coursebox or another course-authoring LMS | The authoring workflow and distribution model are already the core product. |
-| Teach GitHub workflows through a real GitHub repository | GitHub Skills | Exercises occur inside GitHub's real Issues, Actions, and Codespaces workflow. |
-| Deliver broad compliance, leadership, or non-technical corporate training | A conventional LMS | Those markets need admin, reporting, content governance, and course-authoring features more than code sandboxing. |
+| Standard Python/SQL/web dev, certification material | Codecademy, DataCamp | Mature, expert-authored catalogs |
+| Notes, flashcards, a practice quiz from a PDF | NotebookLM | Lower-friction, free, citations included |
+| Tutoring across many subjects | ChatGPT Study Mode, Khanmigo | No course setup required |
+| Public GitHub-workflow skills | GitHub Skills | Real GitHub Issues/Actions/Codespaces |
+| Broad compliance/leadership/non-technical corporate training | A conventional LMS | Needs admin, reporting, content governance more than code sandboxing |
 
-The product must also avoid presenting mastery estimates as grades, hiring credentials, or high-stakes certification results at launch. The planned mastery model is more credible as a learning-support and routing signal until it has been validated against genuine transfer tasks.
+## 5. What makes this different from codebase chat
 
-## Current landscape and implications
+A general chatbot or codebase-search agent can already answer "what does this file do."
+Canopy adds four things that kind of tool does not naturally create:
 
-### NotebookLM: the strongest consumer substitute for source-grounded study
+1. **A coherent curriculum** — a visible course outline with a decided prerequisite
+   order, not isolated answers.
+2. **Active recall and transfer** — the learner explains, traces, debugs, and changes a
+   small realistic example instead of only consuming an answer.
+3. **Evidence of understanding** — completion means a runnable task or assessment was
+   completed, not that a chat was opened.
+4. **Reusable team enablement** — a staff engineer reviews a generated path once; every
+   new teammate or release cohort reuses it.
 
-Google positions NotebookLM as a source-grounded workspace that can use uploaded class notes, slides, and readings to create study guides, flashcards, practice quizzes, explanations, and inline citations. Its broader student feature set also includes source-based learning artifacts and quiz explanations.
+## 6. What must be true (product differentiation requirements)
 
-**What it solves well:** Understanding and revising source material quickly.
+The positioning only holds if Canopy reliably delivers all of:
 
-**What it does not establish for Canopy's core use case:** A persistent, validated coding curriculum with safe practice environments, controlled visible and hidden tests, and a record of applied performance.
+1. **Source fidelity** — explanations and exercises trace back to approved source
+   sections; the product identifies a gap rather than inventing authority when sources
+   are incomplete or contradictory; courses stay versioned as sources change.
+2. **Real applied practice** — the sandbox resembles the actual task closely enough to
+   transfer, handles intentional failures and edge cases (not just a happy-path stub),
+   and separates visible-feedback iteration from hidden-evaluation robustness.
+3. **Quality assurance before learner exposure** — a reference solution passes the
+   generated tests before an exercise ships, and validation includes more than "the code
+   ran" — a technically-passing lab can still teach the wrong abstraction.
+4. **Evidence-based adaptation** — recommendations come from assessed evidence, not
+   typing speed or time-on-task; learners can see and decline a recommendation;
+   conceptual and applied-skill signals stay separate.
+5. **Enterprise trust** — proprietary material and learner code get clear isolation,
+   access controls, retention policy, and auditability (see [`SECURITY.md`](./SECURITY.md)
+   for current state); customers can see the source of a generated claim and edit or
+   approve content before assigning it broadly.
 
-**Implication:** Do not compete with NotebookLM on summary quality, flashcards, or basic source citations. Canopy must show that it produces a better outcome when a learner needs to *perform a technical task*.
+## 7. A practical early wedge
 
-Sources: [Google for Education: NotebookLM](https://edu.google.com/ai-notebooklm/) and [Google: student learning features](https://blog.google/innovation-and-ai/models-and-research/google-labs/notebooklm-student-features/).
+Start with approved, deliberately bounded source packets rather than promising full
+autonomous repository comprehension on day one: a README/architecture doc, a small
+selected set of code files and tests, an ADR, a PR description, an SME-approved example
+task. Preserve citations back to those sources; state uncertainty when sources conflict;
+let an expert edit or approve material before it's assigned — especially important for
+code, where an explanation can be syntactically plausible yet teach the wrong invariant.
 
-### ChatGPT Study Mode: the general-purpose tutoring substitute
+**Worked example — "How our authorization pipeline works"** (this is the scenario
+[`DEMO.md`](./DEMO.md)'s live demo is built around):
 
-ChatGPT Study Mode offers step-by-step guidance, questions instead of only answers, practice questions, flashcard-style review, and work with uploaded course materials such as PDFs, slides, and textbook excerpts. It is available across ChatGPT plans.
+1. Three short activities tracing the request lifecycle, data model, and idempotency
+   contract.
+2. Two labs: identify a missing validation branch, then implement a related edge case
+   against safe fixtures.
+3. A short scenario assessment: choose where a new check belongs and explain the failure
+   mode it prevents.
 
-**What it solves well:** Immediate, personalised support without the effort of constructing a course.
+### Roadmap that matches the claim
 
-**What it does not establish for Canopy's core use case:** A versioned curriculum, a controlled learner environment, reliable technical assessments over time, or validation that an exercise itself is functional and fairly scored.
+| Phase | Scope | Why it matters |
+|---|---|---|
+| 1. Reviewed source packets | Docs, selected code, hand-curated change context → short learning paths and labs | Proves learning value without broad repo access or unsafe automation |
+| 2. Engineering integrations | Git provider, docs, and PR metadata provide governed source selection and version awareness | Makes paths easier to maintain as systems evolve |
+| 3. Change learning | A merged change or release produces an optional, reviewable "what changed and why" path | Turns change management into understanding, not just notification |
+| 4. Measured transfer | Independent task outcomes improve recommendations and flag weak content | Validates Canopy improves real capability, not just engagement |
 
-**Implication:** "You can upload a file to ChatGPT" is the most obvious objection. The response cannot be that Canopy has a better prompt. The response must be that Canopy provides a **repeatable workflow from internal material to supervised practice and observed application**.
+Repository-wide ingestion, PR-aware learning, and automatic updates are roadmap items,
+not current claims, until they're reliable, permission-safe, and reviewable — see
+[`USE_CASES.md`](./USE_CASES.md)'s "structural gaps" section for the current, honest
+state of source ingestion.
 
-Source: [OpenAI Help: Using Study Mode in ChatGPT](https://help.openai.com/en/articles/11780217//).
+Canopy should explicitly **not** claim to be: an autonomous code author or merge agent, a
+PR-review replacement, a generic course marketplace, a documentation replacement, or an
+employee-performance/hiring score.
 
-### Codecademy: the strongest public coding-learning benchmark
+## 8. Risks and required responses
 
-Codecademy already offers integrated browser-based coding practice, quizzes, projects, assessments, and an AI Learning Assistant that can use the learner's current exercise and code for feedback. Its AI Builder goes further: a user can prompt for an app, then receive a personalised learning path that explains the concepts behind the resulting project.
+| Risk | Response |
+|---|---|
+| **Foundation models eating the middle.** A general chatbot with code execution, plus free NotebookLM, already covers "explain this doc and quiz me." | The defense is *only* the executable graded sandbox and per-concept mastery — the parts a chat interface structurally omits. Sell the end-to-end organizational outcome (maintainable training, safe practice, source provenance, evidence people can perform the job), not "you can ask questions about a file." |
+| **Generated-lab correctness (the trust story).** A self-repair loop that produces a broken or hallucinated exercise breaks the product on first contact. | Build human review for first releases and high-impact material; track source coverage, SME edits, validation failures, and (later) transfer-task outcomes. This is also the strongest evidence of real agentic engineering in the system — foreground it, don't hide it. |
+| **The mastery score overclaims certainty.** New concepts have no historic learner data; a BKT probability is an estimate, not ground truth. | Treat mastery as a transparent support signal validated by independent transfer exercises. Don't market it as a credential until evidence supports that use. |
+| **Customers won't upload confidential documents.** The best target customer is also the most sensitive to IP/privacy. | Make data handling a first-class feature: isolation, model-provider data controls, retention, tenant boundaries, access logs, a private-deployment option where needed. |
+| **"An ordinary chat product is good enough."** Many prospects can paste a PDF into ChatGPT or NotebookLM in minutes. | Sell the organizational outcome: maintainable training, a safe practice environment, source provenance, assignment-ready material, evidence of performance — not "a better prompt." |
+| **Source material ownership/licensing.** A student uploading a commercial textbook and an enterprise uploading licensed internal material carry different legal risk. | Require the uploader to confirm rights, keep provenance visible, provide deletion controls, prioritize customer-owned documentation for the initial business model. |
+| **B2B sales motion vs. hackathon speed.** The strongest market is an enterprise sale with a real cycle; the consumer wedge is faster to reach but monetizes worse. | Acknowledge the split rather than pretending one funnel serves both — DevRel (§4.2) is the faster-cycle beachhead into the durable market (§4.1). |
 
-For teams, Codecademy offers curated technical training, assignment tools, progress reporting, and a broad library of public content.
+## 9. Positioning language
 
-**What it solves well:** High-quality public curriculum, polished learning environments, and career-oriented technical learning.
-
-**What it does not establish for Canopy's core use case:** Automatically turning a customer's versioned, proprietary source documents into a source-cited course and lab sequence that reflects their unique technical stack.
-
-**Implication:** The original plan's statement that Codecademy only offers fixed content is no longer sufficient. Codecademy now has meaningful AI-personalisation features. Canopy must differentiate on **proprietary source grounding, validation, and evidence-based remediation**, not simply on "personalised learning."
-
-Sources: [Codecademy AI Builder FAQ](https://help.codecademy.com/hc/en-us/articles/44437136852123-AI-Builder-FAQ), [Codecademy AI features](https://help.codecademy.com/hc/en-us/articles/23400751016859-AI-Features-available-on-Codecademy), and [Codecademy for Business](https://www.codecademy.com/business).
-
-### DataCamp: the enterprise data-skilling benchmark
-
-DataCamp provides hands-on data and AI training and lets business customers package DataCamp material or their own content into private custom learning tracks. Its current AI Tutor experience is also available within DataCamp for Business plans.
-
-**What it solves well:** Organisation-wide data skills programmes, curated training, administration, and reporting.
-
-**What it does not establish for Canopy's core use case:** An automatic pipeline from an internal technical document to a validated runnable course.
-
-**Implication:** Data and AI enablement is a possible later vertical, but Canopy should not attempt to beat DataCamp's broad catalog. It should win only where the knowledge is organisation-specific and rapidly changing.
-
-Sources: [DataCamp custom curriculum](https://www.datacamp.com/business/custom-curriculum) and [DataCamp AI Tutor](https://support.datacamp.com/hc/en-us/articles/39383576495255-AI-Tutor-Getting-Started).
-
-### Coursebox: the most direct document-to-course competitor
-
-Coursebox directly markets the ability to upload documents, URLs, and video, then create structured course content with lessons, quizzes, images, videos, and an AI tutor. Its enterprise materials position the product as an AI engine for online training with LMS integrations and export options.
-
-**What it solves well:** Fast course authoring and distribution from source material.
-
-**What it does not establish for Canopy's core use case:** A technical learner environment where generated code exercises are sandboxed, validated, evaluated for robustness, and used as structured evidence for remediation.
-
-**Implication:** This invalidates any broad "we turn documents into courses" claim as a unique innovation. Canopy needs an explicit product category: **source-grounded technical practice**, not generic AI course generation.
-
-Sources: [Coursebox document-to-course](https://www.coursebox.ai/document-to-course) and [Coursebox enterprise](https://support.coursebox.ai/article/coursebox-enterprise-ai-engine-for-online-training).
-
-### Khanmigo: the trusted-tutor benchmark
-
-Khanmigo provides guided tutoring, writing support, and code review across JavaScript, HTML, Python, and SQL, while emphasising that it guides learners instead of simply supplying answers.
-
-**What it solves well:** Pedagogically framed tutoring with a recognisable education brand.
-
-**What it does not establish for Canopy's core use case:** Technical course generation from a customer's materials and a deployment-ready sandboxed practice environment.
-
-**Implication:** Canopy's learner experience should borrow the safety principle: do not optimise for handing over the answer. It should optimise for supported, observable work.
-
-Source: [Khanmigo for learners](https://www.khanmigo.ai/learners).
-
-### GitHub Skills: the real-workflow learning benchmark
-
-GitHub Skills offers interactive courses in real GitHub contexts: Issues, Actions, and Codespaces. It also offers tooling for authors to create Actions-powered courses.
-
-**What it solves well:** Learning GitHub through actual GitHub workflows.
-
-**Implication:** Canopy should not rebuild this experience for public GitHub skills. Its opportunity is the custom technical environment: internal APIs, internal tooling, domain-specific examples, and customer-owned documentation.
-
-Source: [GitHub Skills](https://github.com/skills).
-
-## Product differentiation: what must be true
-
-The proposed differentiation only holds if Canopy reliably delivers all of the following:
-
-1. **Source fidelity**
-   - Explanations and exercises trace back to approved source sections.
-   - When the source is incomplete or contradictory, the product identifies the gap rather than inventing authority.
-   - Courses remain versioned as documents and technologies change.
-
-2. **Real applied practice**
-   - Learners work in a safe environment that resembles the actual task closely enough to transfer.
-   - The sandbox handles intentional failures and edge cases, not only a happy-path function stub.
-   - Visible feedback supports iteration while hidden evaluation tests robustness.
-
-3. **Quality assurance before learner exposure**
-   - A reference solution passes the generated tests before an exercise appears.
-   - Exercise validation must include instructional review, not merely "the code ran." A technically passing lab can still teach the wrong abstraction.
-
-4. **Evidence-based adaptation**
-   - Recommendations are based primarily on assessed quiz or code evidence, not on speculative interpretations of typing speed or time on task.
-   - Learners can see what changed and why, and can decline or defer the recommendation.
-   - Conceptual understanding and ability to apply a concept remain separate signals.
-
-5. **Enterprise trust**
-   - Proprietary materials and learner code are handled with clear isolation, access controls, retention policy, auditability, and deployment options.
-   - Customers can see the source of generated claims and accept or edit content before assigning it broadly.
-
-## Suggested positioning hierarchy
-
-### Primary message
+**Primary:**
 
 > Turn internal technical documentation into validated, hands-on onboarding.
 
-### Proof points
+**For internal engineering:**
 
-- Learners practise in a sandbox rather than only reading or chatting.
-- Every generated exercise is checked before release.
-- Explanations can point back to the organisation's approved sources.
-- Adaptation is based on what a learner demonstrates, not simply what they have completed.
+> Give every engineer a guided path from "I can find the code" to "I understand the
+> system and can make the next change."
 
-### What not to lead with
+**For DevRel and platforms:**
 
-- "Any document becomes a course." This is already a crowded claim.
-- "AI personalisation." Competitors also market this.
-- "BKT" or other implementation details. This is useful for technical credibility, but it is not a buyer's first reason to purchase.
-- "Replace instructors." The credible message is that Canopy reduces repetitive enablement work and gives instructors better evidence, while preserving review and control.
+> Turn product documentation and release context into practice developers can complete,
+> not just pages they skim.
 
-## Important risks and how to address them
+**Proof points:** learners practice in a sandbox, not only reading or chatting; every
+generated exercise is checked before release; explanations point back to approved
+sources; adaptation is based on what a learner demonstrates, not what they completed.
 
-### Risk: generated content is not trustworthy enough
+**What not to lead with:** "Any document becomes a course" (crowded claim). "AI
+personalization" (competitors market this too — Codecademy's AI Builder is real).
+"BKT"/implementation details (technical credibility, not a buyer's first reason to
+purchase). "Replace instructors" (the credible message is reduced repetitive enablement
+work plus better evidence, not replacement). "AI-generated courses" generally — that
+phrase describes an implementation and invites comparison with generic course
+generators; lead with the learner outcome instead.
 
-**Challenge:** A source citation does not guarantee the exercise is accurate, relevant, or pedagogically useful. Self-validation only proves that a reference solution passes a test suite; it does not prove that the test suite measures the intended concept.
+### Difficult questions to prepare for
 
-**Required response:** Build a human review workflow for first releases and high-impact material. Track source coverage, SME edits, validation failures, learner confusion patterns, and later transfer-task outcomes.
+- **"Why not just use NotebookLM?"** NotebookLM is a strong source-grounded study tool.
+  Canopy is justified only when the outcome is not "understand this document" but
+  "reliably perform this technical workflow" — proven by a validated lab and a transfer
+  task, not a prettier summary.
+- **"Why not ChatGPT Study Mode?"** Choose Canopy only when an organization needs a
+  maintained, versioned, assignment-ready course with controlled execution and a shared
+  record of practical evidence.
+- **"Codecademy can already personalize learning — what's new here?"** The claim isn't
+  that public curricula can't personalize; it's that a company can't wait for a public
+  curriculum team to create and maintain hands-on training for its own APIs,
+  frameworks, and release cadence.
+- **"How do you know a learner mastered the skill vs. learned the test?"** Not from a
+  single checkpoint — the answer is an independent, hint-free transfer exercise in a new
+  context plus separated conceptual/applied evidence. Still needs pilot validation.
+- **"What's the moat if every model vendor can generate lessons?"** Not generic
+  generation — a trusted workflow around proprietary sources: source/version
+  provenance, safe environments, validated exercise templates, customer-specific course
+  history, and outcome data that improves quality over time.
 
-### Risk: the mastery score overclaims certainty
+## 10. Go-to-market experiment
 
-**Challenge:** Generated courses create a permanent cold-start problem: new concepts initially have no historic learner data. A BKT probability is an interpretable estimate, not ground truth.
+Run one design-partner pilot: one internal service or SDK, 5–10 developers new to it.
 
-**Required response:** Treat mastery as a transparent support signal. Use transfer exercises and independent tasks to validate whether the signal predicts actual capability. Do not market it as a credential until evidence supports that use.
-
-### Risk: customers will not upload confidential documents
-
-**Challenge:** The best target customer is also the most sensitive to privacy, IP, and security.
-
-**Required response:** Make data handling a first-class product feature. Clearly specify isolation, model-provider data controls, retention, tenant boundaries, encryption, access logs, and an option for private deployment where necessary.
-
-### Risk: generated labs are expensive or operationally difficult
-
-**Challenge:** Sandboxes create real cost, security, and reliability requirements. The product must prevent arbitrary network access, resource abuse, package-install drift, and long startup times.
-
-**Required response:** Start with a narrow environment catalog and a limited set of supported languages. Measure validation-pass rate, sandbox start time, execution cost, repair-loop frequency, and support incidents before expanding environments.
-
-### Risk: an ordinary chat product is "good enough"
-
-**Challenge:** Many prospective users can upload a PDF to ChatGPT or NotebookLM in minutes.
-
-**Required response:** Sell the end-to-end organisational outcome, not the ability to ask questions about a file: maintainable training, a safe technical practice environment, source provenance, assignment-ready materials, and evidence that people can perform the job.
-
-### Risk: source material has ownership or licensing restrictions
-
-**Challenge:** A student uploading a commercial textbook and an enterprise uploading internally licensed material present different legal and contractual risks.
-
-**Required response:** Require the uploader to confirm they have the necessary rights, make source provenance visible, provide content deletion controls, and prioritise customer-owned documentation for the initial business model.
-
-## Difficult questions to prepare for
-
-### "Why would I not just use NotebookLM?"
-
-Because NotebookLM is a strong source-grounded study tool. Canopy is only justified when the desired outcome is not "understand this document" but "reliably perform this technical workflow." The proof must be a validated lab and a transfer task, not a prettier summary.
-
-### "Why would I not just use ChatGPT Study Mode?"
-
-ChatGPT provides flexible tutoring from uploaded material. Canopy should be chosen only when an organisation needs a maintained, versioned, assignment-ready course with controlled execution and a shared record of practical evidence.
-
-### "Codecademy can already personalise learning. What is new here?"
-
-Codecademy is the standard for public technical curricula. The product thesis is not that public curricula cannot personalise; it is that a company cannot wait for a public curriculum team to create and maintain hands-on training for its own APIs, frameworks, operational knowledge, and release cadence.
-
-### "How do you know a learner mastered the skill rather than learned the test?"
-
-You do not know from a single checkpoint. The plan's strongest answer is an independent, hint-free transfer exercise in a new context plus separation of conceptual and applied evidence. This claim still needs pilot validation.
-
-### "Does a passing generated exercise prove the course is high quality?"
-
-No. It proves a narrow technical property: the reference solution and tests are internally consistent. Quality also requires source fidelity checks, SME review, learner evidence, and measurement against real task performance.
-
-### "What is the moat if every model vendor can generate lessons?"
-
-Not generic generation. The possible moat is a trusted workflow around proprietary technical sources: integrations, source/version provenance, safe environments, validated exercise templates, customer-specific course history, and outcome data that improves quality over time.
-
-### "How will you handle confidential code and documents?"
-
-This must be answered before a serious enterprise pilot. Security architecture, isolation, access control, retention, audit logs, and model-provider data handling should be concrete product requirements, not marketing promises.
-
-## Recommended first pilot
-
-Choose one internal technical workflow with all of the following properties:
-
-- It has approved current documentation.
-- It causes recurring onboarding questions or support requests.
-- It can be simulated safely without production credentials or sensitive data.
-- It has a small, observable real-world task at the end.
-- An SME is available to review the initial course and evaluation task.
-
-Examples include an internal authentication SDK, deployment CLI, observability instrumentation library, or data-access API.
-
-### Pilot design
-
-1. Establish the baseline: current onboarding time, common questions, current materials, and a small transfer task.
-2. Build one focused Canopy course from the approved source material.
-3. Validate every lab with the SME and reference solution before the cohort begins.
-4. Have a small cohort use the course, then complete an independent transfer task.
-5. Compare the result with the baseline and collect learner/SME feedback.
-
-### Metrics worth measuring
+1. Choose a workflow with current documentation, a clear owner, and a safe
+   representative task.
+2. Have the owner approve one Canopy path built from a small source packet.
+3. Compare it with existing onboarding material.
+4. Give both cohorts a novel, hint-free transfer task.
+5. Measure: time to a correct independent solution, review iterations, help requests,
+   learner confidence, and the owner's content-editing burden. Completion rate alone is
+   not enough — set success thresholds with the pilot customer before it begins.
 
 | Outcome | Example measure |
 |---|---|
 | Faster path to usefulness | Time to complete an independent, representative task |
 | Real capability | Success rate on a hint-free transfer exercise |
-| Content quality | SME approval rate, source corrections, and learner-reported confusion |
-| Operational reliability | Sandbox startup time, validation-pass rate, repair-loop frequency, and execution cost |
-| Reduced enablement burden | Repeated support questions or office-hour demand before and after the pilot |
-| Learner value | Course activation, lab completion, return rate, and self-reported confidence paired with actual task performance |
+| Content quality | SME approval rate, source corrections, learner-reported confusion |
+| Operational reliability | Sandbox startup time, validation-pass rate, repair-loop frequency, execution cost |
+| Reduced enablement burden | Repeated support questions/office-hours demand before vs. after |
+| Learner value | Activation, lab completion, return rate, self-reported confidence paired with actual task performance |
 
-Set success thresholds with the pilot customer before the pilot begins. Do not rely on completion rate alone; the central claim is improved application of the material.
+## 11. Hackathon framing (OpenAI Build Week)
 
-## Bottom line
+- **Track:** Education is the natural home; Developer Tools is defensible given the
+  developer-enablement thesis and the agentic generation pipeline.
+- **Demo:** run the emotional consumer story end to end — upload a source packet, watch
+  a working graded lab appear, fail it, watch the system diagnose and help remediate,
+  with the mastery number moving. See [`DEMO.md`](./DEMO.md) for the full script.
+- **Codex-usage narrative:** the generate → run → diagnose → patch → re-verify loop
+  (never trusting the model's self-report, always re-checking in the sandbox) is exactly
+  the "autonomous multi-step engineering workflow" judges are told to look for —
+  foreground it. It is both the product's trust guarantee and the strongest evidence of
+  meaningful agentic integration in the system.
+- **Writeup:** demo the individual learner; sell the organization.
 
-Canopy has a worthwhile opportunity if it becomes an **enterprise technical enablement product** rather than another generic AI course generator. Its best customer has proprietary technical knowledge, a recurring onboarding problem, documentation that changes faster than a conventional course can be authored, and a need to see whether people can perform a workflow safely.
+## Sources
 
-The product will be compelling only if it proves this chain:
-
-```text
-Approved source material
-  -> accurate, reviewed, runnable practice
-  -> independent transfer task success
-  -> lower onboarding and support burden
-```
-
-If the product cannot demonstrate better transfer-task performance or faster time to independent work, then NotebookLM, ChatGPT, Codecademy, DataCamp, or a course-authoring platform will remain simpler and more credible alternatives.
-
-## Research sources
-
-All market claims above are based on product materials accessed July 17, 2026.
+All market claims are based on product materials accessed July 17–18, 2026.
 
 1. [Canopy product plan (internal)](./IDEA.md)
 2. [Google for Education: NotebookLM](https://edu.google.com/ai-notebooklm/)
-3. [Google: Six NotebookLM features to help students learn](https://blog.google/innovation-and-ai/models-and-research/google-labs/notebooklm-student-features/)
-4. [OpenAI Help: Using Study Mode in ChatGPT](https://help.openai.com/en/articles/11780217//)
-5. [Codecademy: AI Builder FAQ](https://help.codecademy.com/hc/en-us/articles/44437136852123-AI-Builder-FAQ)
-6. [Codecademy: AI features available](https://help.codecademy.com/hc/en-us/articles/23400751016859-AI-Features-available-on-Codecademy)
-7. [Codecademy for Business](https://www.codecademy.com/business)
-8. [DataCamp: Custom data and AI curriculum](https://www.datacamp.com/business/custom-curriculum)
-9. [DataCamp: AI Tutor getting started](https://support.datacamp.com/hc/en-us/articles/39383576495255-AI-Tutor-Getting-Started)
-10. [Coursebox: Create a course from documents](https://www.coursebox.ai/document-to-course)
-11. [Coursebox Enterprise](https://support.coursebox.ai/article/coursebox-enterprise-ai-engine-for-online-training)
-12. [Khanmigo for learners](https://www.khanmigo.ai/learners)
-13. [GitHub Skills](https://github.com/skills)
+3. [Google: NotebookLM quizzes & flashcards](https://blog.google/innovation-and-ai/models-and-research/google-labs/notebooklm-app-quizzes-flashcards/)
+4. [Google: NotebookLM student learning features](https://blog.google/innovation-and-ai/models-and-research/google-labs/notebooklm-student-features/)
+5. [OpenAI Help: Using Study Mode in ChatGPT](https://help.openai.com/en/articles/11780217//)
+6. [Codecademy: AI Builder FAQ](https://help.codecademy.com/hc/en-us/articles/44437136852123-AI-Builder-FAQ)
+7. [Codecademy: AI features](https://help.codecademy.com/hc/en-us/articles/23400751016859-AI-Features-available-on-Codecademy)
+8. [Codecademy for Business](https://www.codecademy.com/business)
+9. [Codecademy: AI Builder for "Vibe Learning"](https://www.codecademy.com/resources/blog/why-the-future-of-learning-starts-with-building)
+10. [DataCamp: Custom data and AI curriculum](https://www.datacamp.com/business/custom-curriculum)
+11. [DataCamp: AI Tutor](https://support.datacamp.com/hc/en-us/articles/39383576495255-AI-Tutor-Getting-Started)
+12. [DataCamp: interactive learning & sandbox](https://www.datacamp.com/interactive-learning)
+13. [Coursebox: document-to-course](https://www.coursebox.ai/document-to-course)
+14. [Coursebox Enterprise](https://support.coursebox.ai/article/coursebox-enterprise-ai-engine-for-online-training)
+15. [X-Pilot — document → video course](https://www.x-pilot.ai/)
+16. [OmniLearn — AI course generator](https://www.omnilearn.academy/ai-course-generator)
+17. [Khanmigo for learners](https://www.khanmigo.ai/learners)
+18. [GitHub Skills](https://github.com/skills)
+19. [GitHub Copilot: Explore a codebase](https://docs.github.com/en/enterprise-cloud%40latest/copilot/tutorials/explore-a-codebase)
+20. [Visual Studio Code: Workspace context for coding agents](https://code.visualstudio.com/docs/agents/reference/workspace-context)
+21. [Sourcegraph Cody: Context](https://sourcegraph.com/docs/cody/core-concepts/context)
+22. [ScratchBox — AI code testing & sandbox](https://scratchbox.app/)
+23. [Codio — auto-grading](https://www.codio.com/features/auto-grading)
+24. [CodeGrade — autograder](https://www.codegrade.com/)
+25. [Koyeb — sandbox code-execution platforms 2026](https://www.koyeb.com/blog/top-sandbox-code-execution-platforms-for-ai-code-execution-2026)
+26. [boot.dev](https://www.boot.dev/)

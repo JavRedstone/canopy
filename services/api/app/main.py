@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.repository import get_repository
-from app.routers import courses, sources
+from app.routers import courses, playground, sources
 from app.schemas import HealthResponse
 from app.settings import get_settings
 
@@ -25,3 +25,4 @@ def health() -> HealthResponse:
 
 app.include_router(sources.router, prefix="/api/v1")
 app.include_router(courses.router, prefix="/api/v1")
+app.include_router(playground.router, prefix="/api/v1")

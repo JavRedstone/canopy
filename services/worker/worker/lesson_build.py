@@ -1,9 +1,18 @@
 """Lesson building: generate, validate, and store the lesson bundle for one concept.
 
-Coding lessons are sandbox-validated (the reference solution must pass every test, with
-an agentic repair loop on failure). Conceptual lessons carry no workspace, so they only
-go through generation and schema/citation validation. Both kinds are stored as
-lesson_revisions through apply_lesson_bundle.
+Generation is split into two phases so a failure in one doesn't force regenerating the
+other: lesson content (prose, worked examples, quiz items, hints) is generated and
+citation-validated first, then checkpointed (`pending_content_json`) so a worker restart
+mid-build doesn't re-pay for it; for coding lessons, the coding artifacts (workspace,
+tests, reference solution) are generated second, grounded in the finalized explanation.
+Both the starter-too-complete case and the reference-solution-fails case go through a
+real, sandbox-verified, path-restricted repair loop (never blind regeneration, and never
+able to "fix" a failure by rewriting a test instead of the code). The two content/
+artifact pieces are composed into the same LessonBundle shape that was always stored, so
+nothing downstream of this module changes. Conceptual lessons carry no workspace, so they
+only go through content generation and citation validation. Both kinds are stored as
+lesson_revisions through apply_lesson_bundle, which also records the failure reason (if
+any) on the lesson_definitions row.
 """
 
 import logging
@@ -13,8 +22,8 @@ from supabase import Client
 
 from worker.context import citation_chunks
 from worker.errors import RETRYABLE_ERRORS
-from worker.lesson_agent import generate_assessment_bundle, generate_conceptual_bundle, generate_lesson_bundle, repair_bundle
-from worker.lesson_schema import LessonBundle, WorkspaceFile, reference_workspace, starter_workspace, validate_lesson_bundle
+from worker.lesson_agent import generate_assessment_content, generate_coding_artifacts, generate_conceptual_content, generate_lesson_content, repair_bundle, strip_starter_solution
+from worker.lesson_schema import Assessment, CodingArtifactsBundle, LessonBundle, LessonContentBundle, WorkspaceFile, reference_workspace, starter_workspace, validate_lesson_content
 from worker.llm import LLMGatewayClient
 from worker.sandbox import SandboxFile, SandboxRunnerClient
 from worker.settings import WorkerSettings
@@ -22,8 +31,8 @@ from worker.settings import WorkerSettings
 
 logger = logging.getLogger(__name__)
 
-# How many times a lesson bundle may be regenerated with validation feedback
-# before the build is declared failed.
+# How many times lesson content, the starter stub, or the reference solution may be
+# regenerated/repaired with feedback before the build is declared failed.
 BUNDLE_VALIDATION_ATTEMPTS = 3
 
 
@@ -48,9 +57,9 @@ class LessonBuilder:
         claimed = claim[0]
         try:
             if self._concept_kind(claimed) != "coding":
-                bundle, status = self._conceptual_bundle(lesson_definition_id, claimed)
+                bundle, status, build_error = self._conceptual_bundle(lesson_definition_id, claimed)
             else:
-                bundle, status = self._coding_bundle(lesson_definition_id, claimed)
+                bundle, status, build_error = self._coding_bundle(lesson_definition_id, claimed)
             self.client.rpc(
                 "apply_lesson_bundle",
                 {
@@ -58,6 +67,7 @@ class LessonBuilder:
                     "p_revision": claimed["next_revision"],
                     "p_bundle": bundle.model_dump(mode="json"),
                     "p_validation_status": status,
+                    "p_build_error": build_error,
                 },
             ).execute()
             if status == "failed":
@@ -68,8 +78,10 @@ class LessonBuilder:
         except RETRYABLE_ERRORS:
             self.client.table("lesson_definitions").update({"build_status": "pending"}).eq("id", lesson_definition_id).execute()
             raise
-        except Exception:
-            self.client.table("lesson_definitions").update({"build_status": "failed"}).eq("id", lesson_definition_id).execute()
+        except Exception as exc:
+            self.client.table("lesson_definitions").update(
+                {"build_status": "failed", "build_error": str(exc)[:2000]}
+            ).eq("id", lesson_definition_id).execute()
             raise
         return True
 
@@ -86,40 +98,46 @@ class LessonBuilder:
         rows = self.client.table("concepts").select("kind").eq("id", claimed["concept_id"]).execute().data or []
         return rows[0]["kind"] if rows else "coding"
 
-    def _coding_bundle(self, lesson_definition_id: str, claimed: dict[str, Any]) -> tuple[LessonBundle, str]:
-        # A starter that already passes every test leaves the learner nothing to do —
-        # the classic failure being the model copying the reference solution into the
-        # visible workspace files. Verify the starter FAILS before accepting the bundle.
-        starter_feedback: str | None = None
-        for _ in range(BUNDLE_VALIDATION_ATTEMPTS):
-            bundle = self._generate_validated(
-                generate_lesson_bundle,
-                self.settings.builder_model,
-                claimed,
-                lesson_definition_id,
-                initial_feedback=starter_feedback,
-                require_workspace=True,
-            )
-            starter_result = self.sandbox.run_pytest(
-                [SandboxFile(file.path, file.content) for file in starter_workspace(bundle)]
-            )
-            if not starter_result.passed:
-                break
-            starter_feedback = (
-                "The visible workspace files already pass every test, so the learner has nothing to implement. "
-                "Rewrite the visible files as stubs or deliberate gaps that fail the tests until completed; "
-                "keep the full implementation only in reference_solution_files."
-            )
+    def _coding_bundle(self, lesson_definition_id: str, claimed: dict[str, Any]) -> tuple[LessonBundle, str, str | None]:
+        content = self._content_from_checkpoint_or_generate(generate_lesson_content, self.settings.builder_model, claimed, lesson_definition_id)
+
+        artifacts = generate_coding_artifacts(
+            self.openai,
+            self.settings.builder_model,
+            concept_title=claimed["concept_title"],
+            concept_summary=claimed["summary_markdown"],
+            lesson_explanation=content.lesson_content.explanation_markdown,
+        )
+        bundle = _compose_bundle(content, artifacts)
+
+        # A starter that already passes every test leaves the learner nothing to do — the
+        # classic failure being the model copying the reference solution into the visible
+        # workspace files. Strip it back to a stub with a targeted, sandbox-verified repair
+        # loop instead of blindly regenerating the whole artifacts bundle.
+        starter_files = {file.path: file.content for file in starter_workspace(bundle)}
+        starter_result = self.sandbox.run_pytest([SandboxFile(path, file_content) for path, file_content in starter_files.items()])
+        starter_attempts = 1
+        while starter_result.passed and starter_attempts < self.settings.lesson_build_max_attempts:
             logger.warning(
-                "Starter workspace already passes the tests; regenerating with feedback",
+                "Starter workspace already passes the tests; stripping it back to a stub",
                 extra={"lesson_definition_id": lesson_definition_id},
             )
-        else:
-            raise ValueError(
-                f"Lesson starter still passed every test after {BUNDLE_VALIDATION_ATTEMPTS} attempts."
+            starter_files, starter_result = strip_starter_solution(
+                self.openai,
+                self.settings.builder_model,
+                self.sandbox,
+                starter_files,
+                artifacts.workspace.visible_paths,
+                starter_result,
+                self.settings.lesson_build_max_tool_calls,
             )
+            starter_attempts += 1
+        if starter_result.passed:
+            raise ValueError(f"Lesson starter still passed every test after {starter_attempts} targeted repair attempts.")
+        bundle = _patch_starter_files(bundle, starter_files)
+
         files = {file.path: file.content for file in reference_workspace(bundle)}
-        result = self.sandbox.run_pytest([SandboxFile(path, content) for path, content in files.items()])
+        result = self.sandbox.run_pytest([SandboxFile(path, file_content) for path, file_content in files.items()])
 
         attempts = 1
         while not result.passed and attempts < self.settings.lesson_build_max_attempts:
@@ -128,37 +146,48 @@ class LessonBuilder:
                 self.settings.builder_model,
                 self.sandbox,
                 files,
+                {file.path for file in bundle.assessment.reference_solution_files},
                 result,
                 self.settings.lesson_build_max_tool_calls,
             )
             bundle = _patch_reference_solution(bundle, files)
             attempts += 1
 
-        return bundle, "validated" if result.passed else "failed"
+        build_error = None if result.passed else result.output[-2000:]
+        return bundle, "validated" if result.passed else "failed", build_error
 
-    def _conceptual_bundle(self, lesson_definition_id: str, claimed: dict[str, Any]) -> tuple[LessonBundle, str]:
-        generator = generate_assessment_bundle if self._concept_kind(claimed) == "assessment" else generate_conceptual_bundle
-        bundle = self._generate_validated(
-            generator,
-            self.settings.conceptual_builder_model,
-            claimed,
-            lesson_definition_id,
-            forbid_workspace=True,
-        )
-        return bundle, "validated"
+    def _conceptual_bundle(self, lesson_definition_id: str, claimed: dict[str, Any]) -> tuple[LessonBundle, str, str | None]:
+        generator = generate_assessment_content if self._concept_kind(claimed) == "assessment" else generate_conceptual_content
+        content = self._content_from_checkpoint_or_generate(generator, self.settings.conceptual_builder_model, claimed, lesson_definition_id)
+        return _compose_bundle(content, artifacts=None), "validated", None
 
-    def _generate_validated(
+    def _content_from_checkpoint_or_generate(
         self,
         generate: Any,
         model: str,
         claimed: dict[str, Any],
         lesson_definition_id: str,
-        initial_feedback: str | None = None,
-        **workspace_rule: bool,
-    ) -> LessonBundle:
-        feedback: str | None = initial_feedback
+    ) -> LessonContentBundle:
+        pending = claimed.get("pending_content_json")
+        if pending:
+            return LessonContentBundle.model_validate(pending)
+        content = self._generate_content_validated(generate, model, claimed, lesson_definition_id)
+        self.client.rpc(
+            "save_lesson_content_checkpoint",
+            {"p_lesson_definition_id": lesson_definition_id, "p_content": content.model_dump(mode="json")},
+        ).execute()
+        return content
+
+    def _generate_content_validated(
+        self,
+        generate: Any,
+        model: str,
+        claimed: dict[str, Any],
+        lesson_definition_id: str,
+    ) -> LessonContentBundle:
+        feedback: str | None = None
         for _ in range(BUNDLE_VALIDATION_ATTEMPTS):
-            bundle = generate(
+            content = generate(
                 self.openai,
                 model,
                 concept_title=claimed["concept_title"],
@@ -167,33 +196,43 @@ class LessonBuilder:
                 feedback=feedback,
             )
             try:
-                validate_lesson_bundle(bundle, claimed["citations_json"], **workspace_rule)
-                return bundle
+                validate_lesson_content(content, claimed["citations_json"])
+                return content
             except ValueError as exc:
                 feedback = str(exc)
                 logger.warning(
-                    "Lesson bundle failed validation; regenerating with feedback: %s",
+                    "Lesson content failed validation; regenerating with feedback: %s",
                     feedback,
                     extra={"lesson_definition_id": lesson_definition_id},
                 )
-        raise ValueError(f"Lesson bundle failed validation after {BUNDLE_VALIDATION_ATTEMPTS} attempts: {feedback}")
+        raise ValueError(f"Lesson content failed validation after {BUNDLE_VALIDATION_ATTEMPTS} attempts: {feedback}")
+
+
+def _compose_bundle(content: LessonContentBundle, artifacts: CodingArtifactsBundle | None) -> LessonBundle:
+    return LessonBundle(
+        lesson_content=content.lesson_content,
+        workspace=artifacts.workspace if artifacts else None,
+        assessment=Assessment(
+            visible_tests=artifacts.visible_tests if artifacts else [],
+            hidden_tests=artifacts.hidden_tests if artifacts else [],
+            quiz_items=content.quiz_items,
+            hints=content.hints,
+            reference_solution_files=artifacts.reference_solution_files if artifacts else [],
+        ),
+    )
 
 
 def _patch_reference_solution(bundle: LessonBundle, files: dict[str, str]) -> LessonBundle:
-    """Fold repair-loop file writes back into the bundle. Visible workspace files are
-    untouched — they're deliberately supposed to have the gap the student fills in."""
+    """Fold the repair loop's writes back into the bundle. write_file is restricted to
+    reference_solution_files paths, so tests and the starter are guaranteed unchanged."""
+    patched = [file.model_copy(update={"content": files.get(file.path, file.content)}) for file in bundle.assessment.reference_solution_files]
+    return bundle.model_copy(update={"assessment": bundle.assessment.model_copy(update={"reference_solution_files": patched})})
 
-    def patched(group: list[WorkspaceFile]) -> list[WorkspaceFile]:
-        return [WorkspaceFile(path=file.path, content=files.get(file.path, file.content)) for file in group]
 
-    return bundle.model_copy(
-        update={
-            "assessment": bundle.assessment.model_copy(
-                update={
-                    "reference_solution_files": patched(bundle.assessment.reference_solution_files),
-                    "visible_tests": patched(bundle.assessment.visible_tests),
-                    "hidden_tests": patched(bundle.assessment.hidden_tests),
-                }
-            )
-        }
-    )
+def _patch_starter_files(bundle: LessonBundle, files: dict[str, str]) -> LessonBundle:
+    """Fold the targeted starter-repair loop's writes back into the bundle's workspace.
+    write_file is restricted to the starter's own paths, so tests and the reference
+    solution are guaranteed unchanged."""
+    assert bundle.workspace is not None
+    patched_files = [file.model_copy(update={"content": files.get(file.path, file.content)}) for file in bundle.workspace.files]
+    return bundle.model_copy(update={"workspace": bundle.workspace.model_copy(update={"files": patched_files})})

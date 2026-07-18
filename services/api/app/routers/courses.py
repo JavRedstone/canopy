@@ -9,7 +9,7 @@ from app.llm import LLMGatewayClient, LLMGatewayError
 from app.quiz import grade_quiz_answer, withhold_answer
 from app.repository import CourseRepository, get_repository
 from app.sandbox import SandboxError, SandboxFile, SandboxRunnerClient
-from app.schemas import ConceptDetailResponse, CoursePointsResponse, CourseMapResponse, CourseMasteryResponse, CourseProgressResponse, CourseSummary, CreateCourseRequest, LessonHelperRequest, LessonHelperResponse, LessonWorkspaceFile, PrerequisiteReviewResponse, QuizAnswerRequest, QuizGradeResponse, RunLessonRequest, RunLessonResponse, RunScriptRequest, RunScriptResponse, UpdateCourseRequest
+from app.schemas import CitationExcerptResponse, ConceptDetailResponse, CoursePointsResponse, CourseMapResponse, CourseMasteryResponse, CourseProgressResponse, CourseSummary, CreateCourseRequest, LessonHelperRequest, LessonHelperResponse, LessonWorkspaceFile, PrerequisiteReviewResponse, QuizAnswerRequest, QuizGradeResponse, RunLessonRequest, RunLessonResponse, RunScriptRequest, RunScriptResponse, UpdateCourseRequest
 from app.settings import get_settings
 
 router = APIRouter(prefix="/courses", tags=["courses"])
@@ -123,6 +123,11 @@ def get_concept_detail(course_id: UUID, slug: str, current_user: CurrentUser, re
 @router.get("/{course_id}/concepts/{slug}/prerequisites", response_model=PrerequisiteReviewResponse)
 def get_concept_prerequisites(course_id: UUID, slug: str, current_user: CurrentUser, repository: Repository) -> PrerequisiteReviewResponse:
     return repository.concept_prerequisites(current_user, course_id, slug)
+
+
+@router.get("/{course_id}/citations/{citation_id}", response_model=CitationExcerptResponse)
+def get_citation_excerpt(course_id: UUID, citation_id: UUID, current_user: CurrentUser, repository: Repository) -> CitationExcerptResponse:
+    return repository.citation_excerpt(current_user, course_id, citation_id)
 
 
 def _validated_submission(request: RunLessonRequest, starter_files: list[LessonWorkspaceFile]) -> dict[str, str]:

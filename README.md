@@ -20,7 +20,10 @@ With `.venv` active in each terminal, from the repo root:
 
 ## Reference documents
 
+Full index: [docs/README.md](./docs/README.md).
+
 - [Product idea](./docs/IDEA.md)
 - [Architecture](./docs/ARCHITECTURE.md)
+- [Security](./docs/SECURITY.md)
 - [Demo plan](./docs/DEMO.md)
-- [Market exploration 3](./docs/MARKET_EXPLORATION_3.md)
+- [Market exploration](./docs/MARKET_EXPLORATION.md)

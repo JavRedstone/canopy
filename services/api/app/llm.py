@@ -6,17 +6,20 @@ generation call validated against a Pydantic model, with one feedback retry.
 """
 
 import json
+import logging
 from typing import Any, TypeVar
 
 import httpx
 from pydantic import BaseModel, ValidationError
+
+logger = logging.getLogger(__name__)
 
 
 class LLMGatewayError(Exception):
     """The private LLM gateway could not accept or complete a model request."""
 
 
-_STRUCTURED_ATTEMPTS = 2
+_STRUCTURED_ATTEMPTS = 3
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -37,7 +40,7 @@ class LLMGatewayClient:
     def structured(self, *, task: str, input: list[dict[str, Any]], output_model: type[T]) -> T:
         items = list(input)
         last_error: ValidationError | None = None
-        for _ in range(_STRUCTURED_ATTEMPTS):
+        for attempt in range(1, _STRUCTURED_ATTEMPTS + 1):
             payload = {
                 "task": task,
                 "input": items,
@@ -57,8 +60,13 @@ class LLMGatewayClient:
                 return output_model.model_validate(data["output"])
             except ValidationError as exc:
                 last_error = exc
+                logger.warning(
+                    "Structured output for task %s failed validation (attempt %d/%d): %s",
+                    task, attempt, _STRUCTURED_ATTEMPTS, exc,
+                )
                 items = items + [
                     {"role": "assistant", "content": json.dumps(data["output"])},
                     {"role": "user", "content": f"Your previous response was rejected by validation:\n{exc}\nReturn a corrected response."},
                 ]
+        logger.warning("Structured output for task %s still failed validation after %d attempts.", task, _STRUCTURED_ATTEMPTS)
         raise LLMGatewayError("The model output failed validation repeatedly.") from last_error

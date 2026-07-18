@@ -7,7 +7,9 @@ import docker
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 from pydantic import BaseModel, Field, model_validator
 
-from sandbox_runner.runner import DockerSandboxRunner, SandboxError, SandboxFile, SandboxRunResult, validate_workspace_file
+from sandbox_runner.runner import DockerSandboxRunner, SandboxError, SandboxFile, SandboxRunResult, get_environment, validate_file_suffix, validate_workspace_file
+
+EnvironmentId = Literal["python-basic", "javascript-basic", "go-basic"]
 from sandbox_runner.settings import SandboxRunnerSettings, get_settings
 
 
@@ -41,13 +43,22 @@ class RunFile(BaseModel):
 
 class RunRequest(BaseModel):
     profile: Literal["content_validation", "learner_visible"]
-    environment_id: Literal["python-basic"]
+    environment_id: EnvironmentId
     files: list[RunFile] = Field(min_length=1, max_length=20)
 
     @model_validator(mode="after")
     def file_paths_are_unique(self) -> "RunRequest":
         if len({file.path for file in self.files}) != len(self.files):
             raise ValueError("Sandbox file paths must be unique.")
+        return self
+
+    @model_validator(mode="after")
+    def files_match_the_environment(self) -> "RunRequest":
+        environment = get_environment(self.environment_id)
+        if environment is None:
+            raise ValueError("The requested sandbox environment is not registered.")
+        for file in self.files:
+            validate_file_suffix(SandboxFile(path=file.path, content=file.content), environment)
         return self
 
 
@@ -59,7 +70,7 @@ class RunResponse(BaseModel):
 
 
 class RunScriptRequest(BaseModel):
-    environment_id: Literal["python-basic"]
+    environment_id: EnvironmentId
     entry_path: str = Field(min_length=1, max_length=255)
     files: list[RunFile] = Field(min_length=1, max_length=20)
 
@@ -70,6 +81,15 @@ class RunScriptRequest(BaseModel):
             raise ValueError("Sandbox file paths must be unique.")
         if self.entry_path not in paths:
             raise ValueError("The script entry path must be one of the submitted files.")
+        return self
+
+    @model_validator(mode="after")
+    def files_match_the_environment(self) -> "RunScriptRequest":
+        environment = get_environment(self.environment_id)
+        if environment is None:
+            raise ValueError("The requested sandbox environment is not registered.")
+        for file in self.files:
+            validate_file_suffix(SandboxFile(path=file.path, content=file.content), environment)
         return self
 
 

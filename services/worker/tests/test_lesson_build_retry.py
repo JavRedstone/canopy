@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 
 from httpx import HTTPError
@@ -108,41 +109,44 @@ class ClaimingClient(FakeClient):
         )
 
 
-def _valid_coding_bundle() -> dict:
+def _valid_content() -> dict:
     return {
-        "schema_version": 2,
         "lesson_content": {
             "title": "Reject expired tokens",
             "explanation_markdown": "Tokens carry an expiry claim that must be checked.",
             "citations": ["chunk-a"],
             "worked_examples": [],
         },
+        "quiz_items": [],
+        "hints": [],
+    }
+
+
+def _valid_artifacts() -> dict:
+    return {
         "workspace": {
             "environment_id": "python-basic",
             "files": [
                 {"path": "solution.py", "content": "def is_expired(token):\n    ...\n", "visibility": "visible", "editable_regions": None}
             ],
         },
-        "assessment": {
-            "visible_tests": [
-                {"path": "test_basic.py", "content": "from solution import is_expired\n\ndef test_it():\n    assert is_expired({'exp': 0})\n"}
-            ],
-            "hidden_tests": [
-                {"path": "test_more.py", "content": "from solution import is_expired\n\ndef test_more():\n    assert is_expired({'exp': 0})\n"}
-            ],
-            "quiz_items": [],
-            "hints": [],
-            "reference_solution_files": [
-                {"path": "solution.py", "content": "def is_expired(token):\n    return token['exp'] < 1\n"}
-            ],
-        },
+        "visible_tests": [
+            {"path": "test_basic.py", "content": "from solution import is_expired\n\ndef test_it():\n    assert is_expired({'exp': 0})\n"}
+        ],
+        "hidden_tests": [
+            {"path": "test_more.py", "content": "from solution import is_expired\n\ndef test_more():\n    assert is_expired({'exp': 0})\n"}
+        ],
+        "reference_solution_files": [
+            {"path": "solution.py", "content": "def is_expired(token):\n    return token['exp'] < 1\n"}
+        ],
     }
 
 
 class BuildFlowClient(FakeClient):
-    def __init__(self) -> None:
+    def __init__(self, pending_content_json: dict | None = None) -> None:
         super().__init__()
         self.rpc_calls: list[tuple[str, dict]] = []
+        self.pending_content_json = pending_content_json
 
     def rpc(self, function: str, arguments: dict) -> SimpleNamespace:
         self.rpc_calls.append((function, arguments))
@@ -158,6 +162,7 @@ class BuildFlowClient(FakeClient):
                     "summary_markdown": "Tokens expire.",
                     "citations_json": ["chunk-a"],
                     "next_revision": 1,
+                    "pending_content_json": self.pending_content_json,
                 }
             ]
             if function == "claim_lesson_build"
@@ -178,37 +183,171 @@ class ScriptedSandbox:
         return SimpleNamespace(passed=self.verdicts.pop(0), exit_code=0, output="", timed_out=False)
 
 
-def test_solutioned_starter_is_regenerated_until_it_fails_the_tests(monkeypatch: object) -> None:
+def _tool_call(name: str, call_id: str, **arguments: object) -> SimpleNamespace:
+    return SimpleNamespace(type="function_call", name=name, call_id=call_id, arguments=json.dumps(arguments))
+
+
+class FakeToolResponses:
+    """Scripted responses for the strip_starter_solution tool loop specifically."""
+
+    def __init__(self, outputs: list[list[SimpleNamespace]]) -> None:
+        self._outputs = list(outputs)
+        self.calls = 0
+
+    def create(self, **_kwargs: object) -> SimpleNamespace:
+        self.calls += 1
+        output = self._outputs.pop(0) if self._outputs else []
+        return SimpleNamespace(output=output)
+
+
+def test_solutioned_starter_is_stripped_by_a_targeted_repair_loop(monkeypatch: object) -> None:
     import worker.lesson_build as lesson_build_module
-    from worker.lesson_schema import LessonBundle
+    from worker.lesson_schema import CodingArtifactsBundle, LessonContentBundle
 
-    generate_calls: list[str | None] = []
+    def fake_content(*_args: object, **_kwargs: object) -> LessonContentBundle:
+        return LessonContentBundle.model_validate(_valid_content())
 
-    def fake_generate(*_args: object, feedback: str | None = None, **_kwargs: object) -> LessonBundle:
-        generate_calls.append(feedback)
-        return LessonBundle.model_validate(_valid_coding_bundle())
+    def fake_artifacts(*_args: object, **_kwargs: object) -> CodingArtifactsBundle:
+        return CodingArtifactsBundle.model_validate(_valid_artifacts())
 
-    monkeypatch.setattr(lesson_build_module, "generate_lesson_bundle", fake_generate)
+    monkeypatch.setattr(lesson_build_module, "generate_lesson_content", fake_content)
+    monkeypatch.setattr(lesson_build_module, "generate_coding_artifacts", fake_artifacts)
+
+    tool_responses = FakeToolResponses(
+        outputs=[
+            [_tool_call("write_file", "c1", path="solution.py", content="def is_expired(token):\n    ...\n")],
+            [],  # model stops calling tools after one patch
+        ]
+    )
+
+    builder = LessonBuilder.__new__(LessonBuilder)
+    builder.settings = SimpleNamespace(
+        builder_model="test-model", lesson_build_max_attempts=3, lesson_build_max_tool_calls=8, queue_visibility_seconds=300
+    )
+    builder.openai = SimpleNamespace(responses=tool_responses)
+    # Starter passes on the generated artifacts (solutioned); the targeted strip loop's
+    # final re-verification then fails (correctly stubby again); the reference solution
+    # passes its own validation run with no repair needed.
+    builder.sandbox = ScriptedSandbox([True, False, True])
+    builder.client = BuildFlowClient()
+
+    builder.build_lesson("33333333-3333-3333-3333-333333333333")
+
+    assert tool_responses.calls == 2
+    assert builder.sandbox.calls == 3
+    applied = [arguments for function, arguments in builder.client.rpc_calls if function == "apply_lesson_bundle"]
+    assert len(applied) == 1
+    assert applied[0]["p_validation_status"] == "validated"
+    assert applied[0]["p_build_error"] is None
+
+
+def test_checkpointed_content_is_reused_without_regenerating(monkeypatch: object) -> None:
+    # Simulates resuming after a worker restart mid-build: the claim carries content
+    # generated (and checkpointed) by the previous, interrupted attempt.
+    import worker.lesson_build as lesson_build_module
+    from worker.lesson_schema import CodingArtifactsBundle, LessonContentBundle
+
+    content_calls = 0
+
+    def fake_content(*_args: object, **_kwargs: object) -> LessonContentBundle:
+        nonlocal content_calls
+        content_calls += 1
+        return LessonContentBundle.model_validate(_valid_content())
+
+    def fake_artifacts(*_args: object, **_kwargs: object) -> CodingArtifactsBundle:
+        return CodingArtifactsBundle.model_validate(_valid_artifacts())
+
+    monkeypatch.setattr(lesson_build_module, "generate_lesson_content", fake_content)
+    monkeypatch.setattr(lesson_build_module, "generate_coding_artifacts", fake_artifacts)
 
     builder = LessonBuilder.__new__(LessonBuilder)
     builder.settings = SimpleNamespace(
         builder_model="test-model", lesson_build_max_attempts=3, lesson_build_max_tool_calls=8, queue_visibility_seconds=300
     )
     builder.openai = SimpleNamespace()
-    # Starter passes on the first bundle (solutioned), fails on the regenerated one,
-    # then the reference solution passes its own validation run.
-    builder.sandbox = ScriptedSandbox([True, False, True])
+    builder.sandbox = ScriptedSandbox([False, True])  # starter correctly fails; reference solution passes
+    builder.client = BuildFlowClient(pending_content_json=_valid_content())
+
+    builder.build_lesson("55555555-5555-5555-5555-555555555555")
+
+    assert content_calls == 0  # the checkpoint was used instead of calling generate_lesson_content
+    checkpoint_saves = [f for f, _ in builder.client.rpc_calls if f == "save_lesson_content_checkpoint"]
+    assert checkpoint_saves == []  # re-saving an already-checkpointed value would be pointless
+    applied = [arguments for function, arguments in builder.client.rpc_calls if function == "apply_lesson_bundle"]
+    assert applied[0]["p_validation_status"] == "validated"
+
+
+def test_content_is_checkpointed_after_generating_when_no_checkpoint_exists(monkeypatch: object) -> None:
+    import worker.lesson_build as lesson_build_module
+    from worker.lesson_schema import CodingArtifactsBundle, LessonContentBundle
+
+    def fake_content(*_args: object, **_kwargs: object) -> LessonContentBundle:
+        return LessonContentBundle.model_validate(_valid_content())
+
+    def fake_artifacts(*_args: object, **_kwargs: object) -> CodingArtifactsBundle:
+        return CodingArtifactsBundle.model_validate(_valid_artifacts())
+
+    monkeypatch.setattr(lesson_build_module, "generate_lesson_content", fake_content)
+    monkeypatch.setattr(lesson_build_module, "generate_coding_artifacts", fake_artifacts)
+
+    builder = LessonBuilder.__new__(LessonBuilder)
+    builder.settings = SimpleNamespace(
+        builder_model="test-model", lesson_build_max_attempts=3, lesson_build_max_tool_calls=8, queue_visibility_seconds=300
+    )
+    builder.openai = SimpleNamespace()
+    builder.sandbox = ScriptedSandbox([False, True])  # starter correctly fails; reference solution passes
+    builder.client = BuildFlowClient()  # no pending_content_json
+
+    builder.build_lesson("66666666-6666-6666-6666-666666666666")
+
+    checkpoint_saves = [arguments for function, arguments in builder.client.rpc_calls if function == "save_lesson_content_checkpoint"]
+    assert len(checkpoint_saves) == 1
+    assert checkpoint_saves[0]["p_lesson_definition_id"] == "66666666-6666-6666-6666-666666666666"
+    assert checkpoint_saves[0]["p_content"]["lesson_content"]["title"] == _valid_content()["lesson_content"]["title"]
+
+
+def test_starter_strip_loop_cannot_touch_the_reference_solution_or_tests(monkeypatch: object) -> None:
+    # The model tries to cheat by rewriting the hidden test instead of the starter --
+    # the write must be rejected, and since nothing legitimate changed, the starter still
+    # passes after exhausting every attempt, so the build should raise rather than ship a
+    # lesson whose starter has nothing left to implement.
+    import worker.lesson_build as lesson_build_module
+    from worker.lesson_schema import CodingArtifactsBundle, LessonContentBundle
+
+    def fake_content(*_args: object, **_kwargs: object) -> LessonContentBundle:
+        return LessonContentBundle.model_validate(_valid_content())
+
+    def fake_artifacts(*_args: object, **_kwargs: object) -> CodingArtifactsBundle:
+        return CodingArtifactsBundle.model_validate(_valid_artifacts())
+
+    monkeypatch.setattr(lesson_build_module, "generate_lesson_content", fake_content)
+    monkeypatch.setattr(lesson_build_module, "generate_coding_artifacts", fake_artifacts)
+
+    cheat_attempt = [_tool_call("write_file", "c1", path="test_basic.py", content="def test_it():\n    pass\n")]
+    tool_responses = FakeToolResponses(outputs=[cheat_attempt, []] * 3)
+
+    builder = LessonBuilder.__new__(LessonBuilder)
+    builder.settings = SimpleNamespace(
+        builder_model="test-model", lesson_build_max_attempts=3, lesson_build_max_tool_calls=8, queue_visibility_seconds=300
+    )
+    builder.openai = SimpleNamespace(responses=tool_responses)
+    # Starter always passes: the generated artifacts pass once, and every re-verification
+    # after a rejected write still passes since nothing legitimate ever changed.
+    builder.sandbox = ScriptedSandbox([True, True, True])
     builder.client = BuildFlowClient()
 
-    builder.build_lesson("33333333-3333-3333-3333-333333333333")
+    try:
+        builder.build_lesson("44444444-4444-4444-4444-444444444444")
+        raised = False
+    except ValueError:
+        raised = True
 
-    assert len(generate_calls) == 2
-    assert generate_calls[0] is None
-    assert "already pass every test" in (generate_calls[1] or "")
-    assert builder.sandbox.calls == 3
+    assert raised
     applied = [arguments for function, arguments in builder.client.rpc_calls if function == "apply_lesson_bundle"]
-    assert len(applied) == 1
-    assert applied[0]["p_validation_status"] == "validated"
+    assert applied == []  # never reached storage -- the exception path handled it instead
+    failed_updates = [payload for table, payload in builder.client.update_calls if table == "lesson_definitions"]
+    assert failed_updates[-1]["build_status"] == "failed"
+    assert "targeted repair attempts" in failed_updates[-1]["build_error"]
 
 
 def test_build_lesson_resets_build_status_to_pending_on_retryable_error(monkeypatch: object) -> None:
@@ -223,7 +362,7 @@ def test_build_lesson_resets_build_status_to_pending_on_retryable_error(monkeypa
     def _raise_transient(*_args: object, **_kwargs: object) -> None:
         raise HTTPError("temporary outage")
 
-    monkeypatch.setattr(lesson_build_module, "generate_lesson_bundle", _raise_transient)
+    monkeypatch.setattr(lesson_build_module, "generate_lesson_content", _raise_transient)
 
     try:
         builder.build_lesson("lesson-id")

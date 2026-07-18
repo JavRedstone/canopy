@@ -311,6 +311,23 @@ export async function getConceptDetail(courseId: string, slug: string, accessTok
   return response.json();
 }
 
+export interface CitationExcerptResponse {
+  id: string;
+  filename: string;
+  section: string | null;
+  page_number: number | null;
+  content: string;
+}
+
+export async function getCitationExcerpt(courseId: string, citationId: string, accessToken: string): Promise<CitationExcerptResponse> {
+  const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/citations/${citationId}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: "no-store"
+  });
+  if (!response.ok) throw new Error(`Unable to load this source excerpt (HTTP ${response.status}).`);
+  return response.json();
+}
+
 export async function runLesson(courseId: string, slug: string, files: LessonWorkspaceFile[], accessToken: string): Promise<LessonRunResult> {
   const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/concepts/${slug}/run`, {
     method: "POST",
@@ -352,6 +369,20 @@ export async function runLessonScript(
     body: JSON.stringify({ files, script })
   });
   if (!response.ok) throw new Error(`Unable to run your script (HTTP ${response.status}).`);
+  return response.json();
+}
+
+export type PlaygroundEnvironmentId = "python-basic" | "javascript-basic" | "go-basic";
+
+// Each environment's test command auto-discovers test files by its own convention
+// (pytest: test_*.py, node --test: *.test.js, go test: *_test.go) -- no entry point needed.
+export async function runPlayground(environmentId: PlaygroundEnvironmentId, files: LessonWorkspaceFile[], accessToken: string): Promise<LessonRunResult> {
+  const response = await fetch(`${apiUrl}/api/v1/playground/run`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ environment_id: environmentId, files })
+  });
+  if (!response.ok) throw new Error(`Unable to run this code (HTTP ${response.status}).`);
   return response.json();
 }
 

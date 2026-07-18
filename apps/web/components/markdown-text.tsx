@@ -50,7 +50,14 @@ function findVisibleHighlight(text: string, selected: string, occurrence = 0): {
 
 /** Inline chunk citations ([uuid]) become numbered superscripts when the citation list is
  *  known, and disappear entirely when it is not; learners never see raw UUIDs. */
-function inline(text: string, citations?: string[], highlightText?: string, highlightFlash = false, highlightOccurrence = 0): ReactNode[] {
+function inline(
+  text: string,
+  citations?: string[],
+  highlightText?: string,
+  highlightFlash = false,
+  highlightOccurrence = 0,
+  onCitationClick?: (citationId: string) => void
+): ReactNode[] {
   const parts = text.split(CITATION_PATTERN);
   const nodes: ReactNode[] = [];
   for (let index = 0; index < parts.length; index += 1) {
@@ -94,9 +101,33 @@ function inline(text: string, citations?: string[], highlightText?: string, high
     }
     const citationNumber = citations ? citations.findIndex((id) => id.toLowerCase() === part.toLowerCase()) + 1 : 0;
     if (citationNumber > 0) {
+      const clickable = Boolean(onCitationClick);
       nodes.push(
-        <Tooltip title={`Source excerpt ${citationNumber}`} key={`c-${index}`}>
-          <Box component="sup" sx={{ color: "text.secondary", fontSize: "0.72em", fontWeight: 600, ml: "2px", whiteSpace: "nowrap", cursor: "default" }}>
+        <Tooltip title={clickable ? "View source excerpt" : `Source excerpt ${citationNumber}`} key={`c-${index}`}>
+          <Box
+            component="sup"
+            role={clickable ? "button" : undefined}
+            tabIndex={clickable ? 0 : undefined}
+            onClick={
+              clickable
+                ? (event) => {
+                    event.stopPropagation();
+                    onCitationClick?.(part);
+                  }
+                : undefined
+            }
+            onKeyDown={
+              clickable
+                ? (event) => {
+                    if (event.key !== "Enter" && event.key !== " ") return;
+                    event.stopPropagation();
+                    event.preventDefault();
+                    onCitationClick?.(part);
+                  }
+                : undefined
+            }
+            sx={{ color: "text.secondary", fontSize: "0.72em", fontWeight: 600, ml: "2px", whiteSpace: "nowrap", cursor: clickable ? "pointer" : "default" }}
+          >
             [{citationNumber}]
           </Box>
         </Tooltip>
@@ -116,7 +147,7 @@ const HEADING_STYLES = {
 };
 
 /** A deliberately small, safe Markdown renderer for LLM-authored lesson text. */
-export function MarkdownText({ children, citations, highlightText, highlightParagraphId, highlightOccurrence = 0, highlightFlash = false, paragraphGroup = "lesson" }: { children: string; citations?: string[]; highlightText?: string; highlightParagraphId?: string; highlightOccurrence?: number; highlightFlash?: boolean; paragraphGroup?: string }) {
+export function MarkdownText({ children, citations, highlightText, highlightParagraphId, highlightOccurrence = 0, highlightFlash = false, paragraphGroup = "lesson", onCitationClick }: { children: string; citations?: string[]; highlightText?: string; highlightParagraphId?: string; highlightOccurrence?: number; highlightFlash?: boolean; paragraphGroup?: string; onCitationClick?: (citationId: string) => void }) {
   // Some older generated lessons put list markers directly after a sentence. Make those readable too.
   const lines = children.replace(/(?<=\S)\s+- (?=\*\*|[A-Za-z0-9])/g, "\n- ").split("\n");
   const blocks: ReactNode[] = [];
@@ -130,14 +161,14 @@ export function MarkdownText({ children, citations, highlightText, highlightPara
       paragraphNumber += 1;
       const source = paragraph.join("\n");
       const paragraphId = `${paragraphGroup}-${paragraphNumber}`;
-      blocks.push(<Typography key={`p-${blocks.length}`} data-lesson-paragraph={paragraphId} data-lesson-source={source}>{inline(paragraph.join(" "), citations, paragraphId === highlightParagraphId ? highlightText : undefined, highlightFlash, highlightOccurrence)}</Typography>);
+      blocks.push(<Typography key={`p-${blocks.length}`} data-lesson-paragraph={paragraphId} data-lesson-source={source}>{inline(paragraph.join(" "), citations, paragraphId === highlightParagraphId ? highlightText : undefined, highlightFlash, highlightOccurrence, onCitationClick)}</Typography>);
     }
     paragraph = [];
   };
   const flushList = () => {
     if (!list) return;
     const items = list.items.map((item, index) => (
-      <Typography component="li" key={index}>{inline(item, citations, highlightText, highlightFlash)}</Typography>
+      <Typography component="li" key={index}>{inline(item, citations, highlightText, highlightFlash, 0, onCitationClick)}</Typography>
     ));
     const ListTag = list.ordered ? "ol" : "ul";
     paragraphNumber += 1;
@@ -181,7 +212,7 @@ export function MarkdownText({ children, citations, highlightText, highlightPara
       flushParagraph(); flushList();
       paragraphNumber += 1;
       const headingId = `${paragraphGroup}-${paragraphNumber}`;
-      const text = inline(heading[2], citations);
+      const text = inline(heading[2], citations, undefined, false, 0, onCitationClick);
       const style = HEADING_STYLES[heading[1].length as 1 | 2 | 3];
       blocks.push(
         <Typography

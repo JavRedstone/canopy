@@ -13,7 +13,10 @@ export default function CoursesPage() {
           <Typography variant="h4" sx={{ letterSpacing: "-0.02em", my: 0.25 }}>My courses</Typography>
           <Typography color="text.secondary">Each course has its own source set, route, and mastery record.</Typography>
         </Stack>
-        <LinkButton href="/courses/new" variant="contained">New course</LinkButton>
+        <Stack direction="row" sx={{ gap: 1.5 }}>
+          <LinkButton href="/playground" variant="outlined">Sandbox playground</LinkButton>
+          <LinkButton href="/courses/new" variant="contained">New course</LinkButton>
+        </Stack>
       </Stack>
       <CourseDashboard />
     </PageShell>

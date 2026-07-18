@@ -41,7 +41,7 @@ class SandboxRunnerClient:
         self.timeout_seconds = timeout_seconds
         self.http_client = http_client or httpx.Client(timeout=timeout_seconds + 5)
 
-    def run_pytest(self, files: list[SandboxFile]) -> SandboxRunResult:
+    def run_pytest(self, files: list[SandboxFile], *, environment_id: str = "python-basic") -> SandboxRunResult:
         headers = {"X-Internal-Service-Token": self.internal_service_token} if self.internal_service_token else {}
         try:
             response = self.http_client.post(
@@ -49,7 +49,7 @@ class SandboxRunnerClient:
                 headers=headers,
                 json={
                     "profile": "learner_visible",
-                    "environment_id": "python-basic",
+                    "environment_id": environment_id,
                     "files": [{"path": file.path, "content": file.content} for file in files],
                 },
             )
@@ -63,14 +63,14 @@ class SandboxRunnerClient:
         except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
             raise SandboxError("The sandbox runner request failed.") from exc
 
-    def run_script(self, files: list[SandboxFile], entry_path: str) -> SandboxRunResult:
+    def run_script(self, files: list[SandboxFile], entry_path: str, *, environment_id: str = "python-basic") -> SandboxRunResult:
         headers = {"X-Internal-Service-Token": self.internal_service_token} if self.internal_service_token else {}
         try:
             response = self.http_client.post(
                 f"{self.base_url}/internal/v1/scripts",
                 headers=headers,
                 json={
-                    "environment_id": "python-basic",
+                    "environment_id": environment_id,
                     "entry_path": entry_path,
                     "files": [{"path": file.path, "content": file.content} for file in files],
                 },

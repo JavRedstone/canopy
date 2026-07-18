@@ -24,7 +24,7 @@ from app.mastery import (
     MASTERY_THRESHOLD,
     REVIEW_THRESHOLD,
 )
-from app.schemas import ConceptDetailResponse, ConceptMastery, CoursePointsResponse, CourseMapConcept, CourseMapModule, CourseMapResponse, CourseMasteryResponse, CourseProgressResponse, CourseSummary, CreateCourseRequest, CreateSourceRequest, LessonPreview, LessonWorkspaceFile, PrerequisiteConcept, PrerequisiteReviewResponse, QuizAnswerRequest, QuizGradeResponse, QuizItemPreview, SourceSummary, SourceUploadTarget, UpdateCourseRequest
+from app.schemas import CitationExcerptResponse, ConceptDetailResponse, ConceptMastery, CoursePointsResponse, CourseMapConcept, CourseMapModule, CourseMapResponse, CourseMasteryResponse, CourseProgressResponse, CourseSummary, CreateCourseRequest, CreateSourceRequest, LessonPreview, LessonWorkspaceFile, PrerequisiteConcept, PrerequisiteReviewResponse, QuizAnswerRequest, QuizGradeResponse, QuizItemPreview, SourceSummary, SourceUploadTarget, UpdateCourseRequest
 from app.settings import get_settings
 from app.supabase import get_service_client
 
@@ -107,6 +107,10 @@ class CourseRepository(Protocol):
 
     def concept_prerequisites(self, owner_id: UUID, course_id: UUID, slug: str) -> PrerequisiteReviewResponse:
         """The concepts this one builds on, each with the learner's mastery and a review flag."""
+        ...
+
+    def citation_excerpt(self, owner_id: UUID, course_id: UUID, citation_id: UUID) -> CitationExcerptResponse:
+        """The source chunk text and filename behind a lesson citation marker."""
         ...
 
     def course_points(self, owner_id: UUID, course_id: UUID) -> CoursePointsResponse: ...
@@ -303,6 +307,11 @@ class MemoryCourseRepository:
             course_id=course.id, slug=slug, threshold=MASTERY_THRESHOLD,
             review_threshold=REVIEW_THRESHOLD, prerequisites=[], review_recommended=False,
         )
+
+    def citation_excerpt(self, owner_id: UUID, course_id: UUID, citation_id: UUID) -> CitationExcerptResponse:
+        self._course_for_owner(owner_id, course_id)
+        # concept_detail() always returns citations=[] in memory mode, so this is unreachable from the UI.
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Citation not found.")
 
     def course_points(self, owner_id: UUID, course_id: UUID) -> CoursePointsResponse:
         course = self._course_for_owner(owner_id, course_id)
@@ -1064,6 +1073,46 @@ class SupabaseCourseRepository:
             review_threshold=REVIEW_THRESHOLD,
             prerequisites=entries,
             review_recommended=any(entry.needs_review for entry in entries),
+        )
+
+    def citation_excerpt(self, owner_id: UUID, course_id: UUID, citation_id: UUID) -> CitationExcerptResponse:
+        self._course_for_owner(owner_id, course_id)
+        chunk = self._one(
+            self._data(
+                self.client.table("source_chunks")
+                .select("id,content,section,page_number,document_version_id")
+                .eq("id", str(citation_id)),
+                "load citation",
+            ),
+            "Citation",
+        )
+        version = self._one(
+            self._data(
+                self.client.table("source_document_versions")
+                .select("document_id")
+                .eq("id", chunk["document_version_id"]),
+                "load citation source",
+            ),
+            "Citation",
+        )
+        # The course_sources match (not just source_documents.owner_id) is what proves this
+        # citation belongs to *this* course, not merely to a source the caller owns elsewhere.
+        attachment = self._one(
+            self._data(
+                self.client.table("course_sources")
+                .select("source_documents(filename)")
+                .eq("course_id", str(course_id))
+                .eq("source_document_id", version["document_id"]),
+                "load citation source attachment",
+            ),
+            "Citation",
+        )
+        return CitationExcerptResponse(
+            id=citation_id,
+            filename=attachment["source_documents"]["filename"],
+            section=chunk["section"],
+            page_number=chunk["page_number"],
+            content=chunk["content"],
         )
 
     def course_points(self, owner_id: UUID, course_id: UUID) -> CoursePointsResponse:

@@ -137,6 +137,25 @@ class LessonContent(BaseModel):
     worked_examples: list[WorkedExample] = Field(default_factory=list, max_length=4)
 
 
+class LessonContentBundle(BaseModel):
+    """What one generation call produces for the reading/understanding half of a lesson:
+    prose, worked examples, quiz items, and hints. Generated and validated on its own so
+    a citation or quiz-shape mistake doesn't force regenerating a coding exercise too."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    lesson_content: LessonContent
+    quiz_items: list[QuizItem] = Field(default_factory=list, max_length=8)
+    hints: list[str] = Field(default_factory=list, max_length=5)
+
+    @model_validator(mode="after")
+    def quiz_ids_are_unique(self) -> "LessonContentBundle":
+        quiz_ids = [item.id for item in self.quiz_items]
+        if len(set(quiz_ids)) != len(quiz_ids):
+            raise ValueError("Quiz item identifiers must be unique within a lesson.")
+        return self
+
+
 class Workspace(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -166,6 +185,56 @@ class Assessment(BaseModel):
     quiz_items: list[QuizItem] = Field(default_factory=list, max_length=8)
     hints: list[str] = Field(default_factory=list, max_length=5)
     reference_solution_files: list[WorkspaceFile] = Field(default_factory=list, max_length=10)
+
+
+class CodingArtifactsBundle(BaseModel):
+    """What the second generation call produces for a coding lesson: the starter
+    workspace, its tests, and a reference solution. Kept separate from
+    LessonContentBundle because these are the sandbox-validated, actually-error-prone
+    fields -- a failure here shouldn't force regenerating the (usually fine) prose."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    workspace: Workspace
+    visible_tests: list[WorkspaceFile] = Field(default_factory=list, max_length=3)
+    hidden_tests: list[WorkspaceFile] = Field(default_factory=list, max_length=5)
+    reference_solution_files: list[WorkspaceFile] = Field(default_factory=list, max_length=10)
+
+    @model_validator(mode="after")
+    def artifacts_are_consistent(self) -> "CodingArtifactsBundle":
+        for group, name in ((self.visible_tests, "Visible test"), (self.hidden_tests, "Hidden test"), (self.reference_solution_files, "Reference solution")):
+            paths = [file.path for file in group]
+            if len(set(paths)) != len(paths):
+                raise ValueError(f"{name} file paths must be unique.")
+
+        if not self.visible_tests:
+            raise ValueError("A coding lesson needs at least one visible test file.")
+        if not self.hidden_tests:
+            raise ValueError("A coding lesson needs at least one hidden test file.")
+
+        workspace_paths = {file.path for file in self.workspace.files}
+        visible_test_paths = {file.path for file in self.visible_tests}
+        hidden_test_paths = {file.path for file in self.hidden_tests}
+        reference_paths = {file.path for file in self.reference_solution_files}
+
+        if reference_paths != self.workspace.visible_paths:
+            raise ValueError("Reference solution must cover exactly the visible (editable) workspace file paths.")
+        reference_by_path = {file.path: file.content for file in self.reference_solution_files}
+        for file in self.workspace.files:
+            if file.visibility == "visible" and reference_by_path.get(file.path, "").strip() == file.content.strip():
+                raise ValueError(
+                    f"Visible workspace file '{file.path}' is identical to the reference solution; the starter "
+                    "must leave the target behavior unimplemented (a stub or deliberate gap) for the learner."
+                )
+        if workspace_paths & (visible_test_paths | hidden_test_paths):
+            raise ValueError("Test files must not collide with workspace file paths.")
+        if visible_test_paths & hidden_test_paths:
+            raise ValueError("Visible and hidden test files must not share a path.")
+        if not all(_pytest_discoverable(path) for path in visible_test_paths):
+            raise ValueError("Every visible test file must be pytest-discoverable (test_*.py) since learners run them individually.")
+        if not any(_pytest_discoverable(path) for path in hidden_test_paths):
+            raise ValueError("At least one hidden test file must be pytest-discoverable (test_*.py).")
+        return self
 
 
 class LessonBundle(BaseModel):
@@ -221,6 +290,21 @@ class LessonBundle(BaseModel):
             raise ValueError("At least one hidden test file must be pytest-discoverable (test_*.py).")
 
         return self
+
+
+def bundle_content_citations(content: LessonContentBundle) -> set[str]:
+    """Every chunk ID a content bundle cites, across content, examples, and quiz items."""
+    citations = set(content.lesson_content.citations)
+    for example in content.lesson_content.worked_examples:
+        citations.update(example.citations)
+    for item in content.quiz_items:
+        citations.update(item.citations)
+    return citations
+
+
+def validate_lesson_content(content: LessonContentBundle, available_citations: Iterable[str]) -> None:
+    if not bundle_content_citations(content).issubset(set(available_citations)):
+        raise ValueError("Lesson content cites a chunk outside the concept's source context.")
 
 
 def bundle_citations(bundle: LessonBundle) -> set[str]:

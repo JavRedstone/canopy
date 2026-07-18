@@ -1,5 +1,9 @@
 # Scaffold status
 
+> **Archived — historical snapshot, not current state.** Written early in the project
+> (test counts, service list, and "not yet built" items below are all long superseded).
+> Kept for history only; see [`../README.md`](../README.md) for current docs.
+
 This document records the current application scaffold, what has been verified, and the work deliberately deferred from the first Supabase-backed vertical slice.
 
 ## Scope and decisions

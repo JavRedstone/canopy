@@ -1,5 +1,16 @@
 # Architecture Audit — 2026-07-16
 
+> **Archived — point-in-time audit, not current state.** Re-verified 2026-07-18: the
+> flagship P0 finding (hidden-test output returned to the learner) is **still accurate**
+> — `submit_lesson` (`services/api/app/routers/courses.py`) runs `public_test_files +
+> hidden_test_files` and returns the combined raw pytest `output` unfiltered, so a failing
+> hidden test's assertion/traceback still reaches the learner. Only `run_lesson` (visible
+> tests only) is separated. The sandbox environment catalog has also grown beyond what's
+> described here (Python/JS/Go now, not just `python-basic`). Don't assume any other
+> finding below is still open or resolved without checking current code — this file
+> wasn't kept up to date. See [`../SECURITY.md`](../SECURITY.md) for the current security
+> posture and [`../README.md`](../README.md) for current docs.
+
 **Status:** Current-state code audit
 
 **Scope:** Static review of the repository at this commit, its service boundaries, contracts, tests, and local Compose configuration. This is not a production penetration test and does not prove live provider, Supabase, or Docker behavior.

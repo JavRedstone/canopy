@@ -1,9 +1,12 @@
 import json
+import logging
 from types import SimpleNamespace
 from typing import Any
 
 import httpx
 from pydantic import BaseModel, ValidationError
+
+logger = logging.getLogger(__name__)
 
 
 class LLMGatewayError(Exception):
@@ -39,7 +42,7 @@ class _ResponsesClient:
     def parse(self, *, model: str, input: list[dict[str, Any]], text_format: type[BaseModel]) -> SimpleNamespace:
         items = list(input)
         last_error: ValidationError | None = None
-        for _ in range(_STRUCTURED_ATTEMPTS):
+        for attempt in range(1, _STRUCTURED_ATTEMPTS + 1):
             result = self.gateway._post(
                 "/internal/v1/structured",
                 {
@@ -55,6 +58,10 @@ class _ResponsesClient:
                 return SimpleNamespace(output_parsed=text_format.model_validate(result["output"]))
             except ValidationError as exc:
                 last_error = exc
+                logger.warning(
+                    "Structured output for task %s failed validation (attempt %d/%d): %s",
+                    model, attempt, _STRUCTURED_ATTEMPTS, exc,
+                )
                 items = items + [
                     {"role": "assistant", "content": json.dumps(result["output"])},
                     {
@@ -67,6 +74,7 @@ class _ResponsesClient:
                         ),
                     },
                 ]
+        logger.warning("Structured output for task %s still failed validation after %d attempts.", model, _STRUCTURED_ATTEMPTS)
         raise LLMValidationError(
             f"The model output still failed validation after {_STRUCTURED_ATTEMPTS} attempts."
         ) from last_error

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ConceptDetailResponse, ConceptMastery, CourseMapResponse, CourseMasteryResponse, CourseSummary, LessonRunResult, LessonWorkspaceFile, QuizItemPreview, ScriptRunResult, WorkedExamplePreview, askLessonHelper, getConceptDetail, getCourse, getCourseMap, getCourseMastery, regenerateLesson, runLesson, runLessonScript, submitLesson } from "@/lib/api";
 import { useFullBleed } from "@/components/app-shell";
 import { Breadcrumbs } from "@/components/breadcrumbs";
+import { CitationExcerptDialog } from "@/components/citation-excerpt-dialog";
 import { Icon } from "@/components/icon";
 import { MarkdownText } from "@/components/markdown-text";
 import { PageShell } from "@/components/page-shell";
@@ -92,22 +93,22 @@ function markerReferencedQuizIndexes(markdown: string): Set<number> {
   return referenced;
 }
 
-function WorkedExampleCard({ example, citations }: { example: WorkedExamplePreview; citations?: string[] }) {
+function WorkedExampleCard({ example, citations, onCitationClick }: { example: WorkedExamplePreview; citations?: string[]; onCitationClick?: (citationId: string) => void }) {
   return (
     <Alert severity="info" variant="outlined" icon={false} sx={{ display: "grid", gap: 0.75 }}>
       <Typography sx={{ fontWeight: 700 }}>{example.title}</Typography>
-      <MarkdownText citations={citations}>{example.body_markdown}</MarkdownText>
+      <MarkdownText citations={citations} onCitationClick={onCitationClick}>{example.body_markdown}</MarkdownText>
     </Alert>
   );
 }
 
-function WorkedExamples({ examples, citations }: { examples?: WorkedExamplePreview[]; citations?: string[] }) {
+function WorkedExamples({ examples, citations, onCitationClick }: { examples?: WorkedExamplePreview[]; citations?: string[]; onCitationClick?: (citationId: string) => void }) {
   if (!examples?.length) return null;
   return (
     <Stack sx={{ gap: 1.5 }}>
       <Divider textAlign="left"><Typography variant="overline" color="text.secondary">Worked examples</Typography></Divider>
       {examples.map((example) => (
-        <WorkedExampleCard example={example} citations={citations} key={example.title} />
+        <WorkedExampleCard example={example} citations={citations} onCitationClick={onCitationClick} key={example.title} />
       ))}
     </Stack>
   );
@@ -131,6 +132,7 @@ function LessonBody({
   highlightOccurrence,
   highlightFlash,
   paragraphGroup,
+  onCitationClick,
 }: {
   courseId: string;
   slug: string;
@@ -145,6 +147,7 @@ function LessonBody({
   highlightOccurrence?: number;
   highlightFlash?: boolean;
   paragraphGroup?: string;
+  onCitationClick?: (citationId: string) => void;
 }) {
   const blocks: ReactNode[] = [];
   const placedExamples = new Set<number>();
@@ -153,7 +156,7 @@ function LessonBody({
   let insideCodeFence = false;
   const flush = () => {
     const text = buffer.join("\n");
-    if (text.trim()) blocks.push(<MarkdownText citations={citations} highlightText={highlightText} highlightParagraphId={highlightParagraphId} highlightOccurrence={highlightOccurrence} highlightFlash={highlightFlash} paragraphGroup={`${paragraphGroup ?? "lesson"}-${blocks.length}`} key={`text-${blocks.length}`}>{text}</MarkdownText>);
+    if (text.trim()) blocks.push(<MarkdownText citations={citations} highlightText={highlightText} highlightParagraphId={highlightParagraphId} highlightOccurrence={highlightOccurrence} highlightFlash={highlightFlash} paragraphGroup={`${paragraphGroup ?? "lesson"}-${blocks.length}`} onCitationClick={onCitationClick} key={`text-${blocks.length}`}>{text}</MarkdownText>);
     buffer = [];
   };
   for (const line of markdown.split("\n")) {
@@ -167,7 +170,7 @@ function LessonBody({
     if (match[1] === "example" && examples[index] && !placedExamples.has(index)) {
       flush();
       placedExamples.add(index);
-      blocks.push(<WorkedExampleCard example={examples[index]} citations={citations} key={`example-${index}`} />);
+      blocks.push(<WorkedExampleCard example={examples[index]} citations={citations} onCitationClick={onCitationClick} key={`example-${index}`} />);
     } else if (match[1] === "quiz" && quizItems[index] && !placedQuiz.has(index)) {
       flush();
       placedQuiz.add(index);
@@ -183,7 +186,7 @@ function LessonBody({
   return (
     <Stack sx={{ gap: 1.5 }}>
       {blocks}
-      <WorkedExamples examples={leftoverExamples} citations={citations} />
+      <WorkedExamples examples={leftoverExamples} citations={citations} onCitationClick={onCitationClick} />
     </Stack>
   );
 }
@@ -448,6 +451,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
   const [consoleTab, setConsoleTab] = useState<"testcase" | "console" | "tests">("testcase");
   const [fullOutputOpen, setFullOutputOpen] = useState(false);
   const [expandedCases, setExpandedCases] = useState<Set<number>>(new Set());
+  const [selectedCitationId, setSelectedCitationId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -568,6 +572,10 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
       top: Math.max(8, rect.top - 44),
       left: Math.min(Math.max(8, rect.left + rect.width / 2), window.innerWidth - 60),
     });
+  }
+
+  function handleCitationClick(citationId: string) {
+    setSelectedCitationId(citationId);
   }
 
   function applyHelperRevision(replacement: string): boolean {
@@ -790,6 +798,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
       <PageShell maxWidth={{ xs: 1040, xl: helperOpen ? 1360 : 1040 }}>
         <LearningHelperSidebar courseId={courseId} slug={slug} selectedText={selectedText} selectedParagraph={selectedParagraph} open={helperOpen} onToggle={() => setHelperOpen((current) => !current)} onClearSelection={() => { setSelectedText(""); setSelectedRange(undefined); setSelectedParagraph(undefined); setBubbleRect(undefined); }} onApplyRevision={applyHelperRevision} />
         {bubbleRect ? <SelectionAskBubble rect={bubbleRect} onAsk={() => { setHelperOpen(true); setBubbleRect(undefined); }} /> : null}
+        <CitationExcerptDialog courseId={courseId} citationId={selectedCitationId} onOpenChange={(open) => { if (!open) setSelectedCitationId(null); }} />
         <Box sx={{ ml: { md: outlineCollapsed ? "56px" : "280px" }, mr: { xs: "56px", xl: helperOpen ? "360px" : "56px" } }}>
         {breadcrumbs}
         <Box sx={{ display: "flex", gap: 3, alignItems: "flex-start" }}>
@@ -808,7 +817,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
 
         <Stack sx={{ gap: 2 }}>
           <PrerequisiteReview courseId={courseId} slug={slug} />
-          <Box onMouseUp={captureSelection}><MarkdownText citations={concept.citations} paragraphGroup="summary">{concept.summary_markdown}</MarkdownText></Box>
+          <Box onMouseUp={captureSelection}><MarkdownText citations={concept.citations} paragraphGroup="summary" onCitationClick={handleCitationClick}>{concept.summary_markdown}</MarkdownText></Box>
           {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}
 
           {isBuildPending ? (
@@ -833,6 +842,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
                 quizMaxAttempts={concept.lesson.quiz_max_attempts}
                 onQuizAnswered={refreshProgress}
                 paragraphGroup="lesson"
+                onCitationClick={handleCitationClick}
               /></Box>
               <QuizSection
                 courseId={courseId}
@@ -863,6 +873,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
       <CourseOutlineSidebar courseId={courseId} map={courseMap} activeSlug={slug} collapsed={outlineCollapsed} onToggle={() => setOutlineCollapsed((current) => !current)} />
       <LearningHelperSidebar courseId={courseId} slug={slug} selectedText={selectedText} selectedParagraph={selectedParagraph} open={helperOpen} onToggle={() => setHelperOpen((current) => !current)} onClearSelection={() => { setSelectedText(""); setSelectedRange(undefined); setSelectedParagraph(undefined); setBubbleRect(undefined); }} onApplyRevision={applyHelperRevision} />
         {bubbleRect ? <SelectionAskBubble rect={bubbleRect} onAsk={() => { setHelperOpen(true); setBubbleRect(undefined); }} /> : null}
+      <CitationExcerptDialog courseId={courseId} citationId={selectedCitationId} onOpenChange={(open) => { if (!open) setSelectedCitationId(null); }} />
       <Dialog open={solutionConfirmOpen} onClose={() => setSolutionConfirmOpen(false)}>
         <DialogTitle>Unlock the reference solution?</DialogTitle>
         <DialogContent>
@@ -909,7 +920,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
             {instructionsTab === "lesson" ? (
               <Stack sx={{ gap: 2 }}>
                 <PrerequisiteReview courseId={courseId} slug={slug} />
-                <Box onMouseUp={captureSelection}><MarkdownText citations={concept.citations} paragraphGroup="summary">{concept.summary_markdown}</MarkdownText></Box>
+                <Box onMouseUp={captureSelection}><MarkdownText citations={concept.citations} paragraphGroup="summary" onCitationClick={handleCitationClick}>{concept.summary_markdown}</MarkdownText></Box>
 
                 {concept.lesson.explanation_markdown ? (
                   <Stack sx={{ gap: 1.5 }} onMouseUp={captureSelection}>
@@ -923,10 +934,11 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
                       quizItems={concept.lesson.quiz_items ?? []}
                       quizMaxAttempts={concept.lesson.quiz_max_attempts}
                       paragraphGroup="lesson"
+                      onCitationClick={handleCitationClick}
                     />
                   </Stack>
                 ) : (
-                  <WorkedExamples examples={concept.lesson.worked_examples} citations={concept.citations} />
+                  <WorkedExamples examples={concept.lesson.worked_examples} citations={concept.citations} onCitationClick={handleCitationClick} />
                 )}
 
                 {concept.lesson.hints.length > 0 ? (

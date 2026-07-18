@@ -80,7 +80,7 @@ learner-safe JSON response (passed/output/exit_code/timed_out)
 
 ### What's *not* production-hardened yet
 
-This is a working **development** sandbox, not a hardened one, and it's worth being explicit about that rather than letting the strong-sounding container flags above imply more than they deliver. Per the repository's own [`ARCHITECTURE_AUDIT_2026_07_16.md`](./ARCHITECTURE_AUDIT_2026_07_16.md) (the current authoritative source on this, worth reading in full):
+This is a working **development** sandbox, not a hardened one, and it's worth being explicit about that rather than letting the strong-sounding container flags above imply more than they deliver. Per the repository's own [`archive/ARCHITECTURE_AUDIT_2026_07_16.md`](./archive/ARCHITECTURE_AUDIT_2026_07_16.md) — archived as a point-in-time doc, but this specific finding was re-verified 2026-07-18 and is still accurate:
 
 - **Submit currently runs and exposes hidden tests to the learner.** The raw pytest output returned from `/run` includes hidden-test names, assertions, and tracebacks on failure — there's no separation between "you passed/failed" and "here's exactly what the hidden test checked." (P0 in the audit.)
 - **The container isn't a hostile-code-grade boundary.** It deliberately runs with `read_only=False` (Docker's archive-copy API rejects a read-only rootfs outright), and while it disables network/drops capabilities/limits resources, it's explicitly scoped as a local content-validation executor, not something meant to survive genuinely adversarial input in production. A production hardening pass would mean a rootless/microVM- or gVisor-class executor, a read-only image, seccomp/AppArmor policy, and distinct trust levels for learner-visible vs. hidden-evaluator runs.
