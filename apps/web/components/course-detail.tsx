@@ -10,6 +10,8 @@ import Typography from "@mui/material/Typography";
 import Accordion from "@mui/material/Accordion";
 import AccordionSummary from "@mui/material/AccordionSummary";
 import AccordionDetails from "@mui/material/AccordionDetails";
+import Tabs from "@mui/material/Tabs";
+import Tab from "@mui/material/Tab";
 import List from "@mui/material/List";
 import ListItemButton from "@mui/material/ListItemButton";
 import ListItemIcon from "@mui/material/ListItemIcon";
@@ -51,6 +53,7 @@ export function CourseDetail({ courseId }: { courseId: string }) {
   const [deleteError, setDeleteError] = useState<string>();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [detailTab, setDetailTab] = useState<"content" | "mastery">("content");
   const fullLoadRef = useRef<() => Promise<void>>(async () => {});
   const progressRefreshRef = useRef<() => Promise<void>>(async () => {});
   const pollCountRef = useRef(0);
@@ -231,9 +234,20 @@ export function CourseDetail({ courseId }: { courseId: string }) {
       {refreshError ? <Alert severity="error" sx={{ mb: 2 }}>{refreshError} Retrying automatically…</Alert> : null}
       {deleteError ? <Alert severity="error" sx={{ mb: 2 }}>{deleteError}</Alert> : null}
 
-      {progress.stage === "ready" && map.modules.length > 0 ? <MasteryDashboard courseId={courseId} /> : null}
+      {progress.stage === "ready" && map.modules.length > 0 ? (
+        <Tabs
+          value={detailTab}
+          onChange={(_event, value) => setDetailTab(value)}
+          sx={{ minHeight: 36, mb: 2, borderBottom: 1, borderColor: "divider" }}
+        >
+          <Tab value="content" icon={<Icon name="menu_book" />} iconPosition="start" label="Content" sx={{ minHeight: 36, py: 1, textTransform: "none" }} />
+          <Tab value="mastery" icon={<Icon name="insights" />} iconPosition="start" label="Mastery" sx={{ minHeight: 36, py: 1, textTransform: "none" }} />
+        </Tabs>
+      ) : null}
 
-      {map.modules.length === 0 ? (
+      {detailTab === "mastery" && progress.stage === "ready" && map.modules.length > 0 ? (
+        <MasteryDashboard courseId={courseId} />
+      ) : map.modules.length === 0 ? (
         progress.stage === "ready" ? <Typography color="text.secondary">This course has no modules yet.</Typography> : null
       ) : (
         <Stack sx={{ gap: 1.25 }}>

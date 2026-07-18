@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { motion } from "motion/react";
+import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import Card from "@mui/material/Card";
@@ -15,6 +16,7 @@ import CircularProgress from "@mui/material/CircularProgress";
 import Alert from "@mui/material/Alert";
 import { CourseSummary, getCourses } from "@/lib/api";
 import { CourseCategoryBadge } from "@/components/course-category-badge";
+import { Icon } from "@/components/icon";
 import { LinkButton } from "@/components/link-button";
 import { createClient } from "@/lib/supabase/client";
 
@@ -86,12 +88,34 @@ export function CourseDashboard() {
             <ListItemText primary={course.title} secondary={course.goal} sx={{ minWidth: 0 }} />
             {course.status === "draft" ? (
               <Chip size="small" icon={<CircularProgress size={12} sx={{ color: "inherit" }} />} label="Building…" />
+            ) : course.status === "ready" && course.lessons_total > 0 ? (
+              course.lessons_completed === course.lessons_total ? (
+                <Chip size="small" icon={<Icon name="check" />} label="Complete" color="success" />
+              ) : (
+                <Stack direction="row" sx={{ alignItems: "center", gap: 1, flexShrink: 0 }}>
+                  <Box sx={{ position: "relative", width: 64, height: 6, borderRadius: 999, bgcolor: "action.hover", overflow: "hidden" }}>
+                    <Box
+                      sx={{
+                        position: "absolute",
+                        insetBlock: 0,
+                        left: 0,
+                        width: `${Math.round((course.lessons_completed / course.lessons_total) * 100)}%`,
+                        borderRadius: 999,
+                        bgcolor: "primary.main",
+                      }}
+                    />
+                  </Box>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+                    {course.lessons_completed}/{course.lessons_total}
+                  </Typography>
+                </Stack>
+              )
             ) : (
               <Chip
                 size="small"
                 label={course.status}
-                color={course.status === "ready" ? "success" : "default"}
-                variant={course.status === "ready" ? "filled" : "outlined"}
+                color="default"
+                variant="outlined"
                 sx={{ textTransform: "capitalize" }}
               />
             )}

@@ -104,6 +104,7 @@ export function QuizQuestion({ courseId, slug, item, index, maxAttempts = DEFAUL
         p: 2,
         display: "grid",
         gap: 1.5,
+        bgcolor: (theme) => alpha(theme.palette.warning.main, 0.04),
         borderLeft: answered ? 3 : 1,
         borderLeftColor: answered ? (grade.correct ? "success.main" : "error.main") : "divider"
       }}
@@ -233,7 +234,7 @@ export function QuizQuestion({ courseId, slug, item, index, maxAttempts = DEFAUL
   );
 }
 
-export function QuizSection({ courseId, slug, items, maxAttempts = DEFAULT_MAX_ATTEMPTS, title = "Mastery check", onComplete, onAnswered }: { courseId: string; slug: string; items?: QuizItemPreview[]; maxAttempts?: number; title?: string; onComplete?: () => void; onAnswered?: () => void }) {
+export function QuizSection({ courseId, slug, items, maxAttempts = DEFAULT_MAX_ATTEMPTS, title = "Quick check", onComplete, onAnswered }: { courseId: string; slug: string; items?: QuizItemPreview[]; maxAttempts?: number; title?: string; onComplete?: () => void; onAnswered?: () => void }) {
   const questions = items ?? [];
   const [correctIds, setCorrectIds] = useState<Set<string>>(() => new Set(questions.filter((item) => item.previous_grade?.correct).map((item) => item.id)));
   if (!questions.length) return null;

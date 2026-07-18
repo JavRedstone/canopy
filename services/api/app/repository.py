@@ -495,8 +495,10 @@ class SupabaseCourseRepository:
             .order("updated_at", desc=True),
             "list courses",
         )
-        versions = self._versions_for([row["active_version_id"] for row in courses if row["active_version_id"]])
-        return [self._summary(row, versions) for row in courses]
+        version_ids = [row["active_version_id"] for row in courses if row["active_version_id"]]
+        versions = self._versions_for(version_ids)
+        progress = self._lesson_progress_for(owner_id, version_ids)
+        return [self._summary(row, versions, progress) for row in courses]
 
     def get_course(self, owner_id: UUID, course_id: UUID) -> CourseSummary:
         course = self._course_for_owner(owner_id, course_id)
@@ -1363,6 +1365,57 @@ class SupabaseCourseRepository:
         )
         return {row["id"]: row["version"] for row in rows}
 
+    def _lesson_progress_for(self, owner_id: UUID, version_ids: Sequence[str]) -> dict[str, tuple[int, int]]:
+        """{version_id: (lessons_completed, lessons_total)}, batched into 3 queries total
+        regardless of how many courses are being listed -- mirrors course_points()."""
+        if not version_ids:
+            return {}
+        definitions = self._data(
+            self.client.table("lesson_definitions")
+            .select("id,course_version_id")
+            .in_("course_version_id", list(version_ids))
+            .eq("kind", "lesson"),
+            "load lesson definitions for progress",
+        )
+        total_by_version: dict[str, int] = {}
+        version_by_definition: dict[str, str] = {}
+        for row in definitions:
+            version_by_definition[row["id"]] = row["course_version_id"]
+            total_by_version[row["course_version_id"]] = total_by_version.get(row["course_version_id"], 0) + 1
+
+        completed_by_version: dict[str, int] = {}
+        definition_ids = list(version_by_definition)
+        if definition_ids:
+            revisions = self._data(
+                self.client.table("lesson_revisions")
+                .select("id,lesson_definition_id")
+                .in_("lesson_definition_id", definition_ids),
+                "load lesson revisions for progress",
+            )
+            definition_by_revision = {row["id"]: row["lesson_definition_id"] for row in revisions}
+            if definition_by_revision:
+                completed = self._data(
+                    self.client.table("learner_lesson_assignments")
+                    .select("lesson_revision_id")
+                    .eq("user_id", str(owner_id))
+                    .eq("status", "completed")
+                    .in_("lesson_revision_id", list(definition_by_revision)),
+                    "load completed assignments for progress",
+                )
+                seen: set[str] = set()
+                for row in completed:
+                    definition_id = definition_by_revision.get(row["lesson_revision_id"])
+                    if not definition_id or definition_id in seen:
+                        continue
+                    seen.add(definition_id)
+                    version_id = version_by_definition[definition_id]
+                    completed_by_version[version_id] = completed_by_version.get(version_id, 0) + 1
+
+        return {
+            version_id: (completed_by_version.get(version_id, 0), total)
+            for version_id, total in total_by_version.items()
+        }
+
     def _summary_lookup(self, concept_ids: Sequence[str]) -> dict[str, str]:
         if not concept_ids:
             return {}
@@ -1446,10 +1499,11 @@ class SupabaseCourseRepository:
             return None
 
     @staticmethod
-    def _summary(row: dict[str, Any], versions: dict[str, int]) -> CourseSummary:
+    def _summary(row: dict[str, Any], versions: dict[str, int], progress: dict[str, tuple[int, int]] | None = None) -> CourseSummary:
         active_version_id = row.get("active_version_id")
         if not active_version_id or active_version_id not in versions:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Course version is unavailable.")
+        completed, total = (progress or {}).get(active_version_id, (0, 0))
         return CourseSummary(
             id=UUID(row["id"]),
             title=row["title"],
@@ -1458,6 +1512,8 @@ class SupabaseCourseRepository:
             active_version=versions[active_version_id],
             updated_at=SupabaseCourseRepository._timestamp(row["updated_at"]),
             quiz_max_attempts=row["quiz_max_attempts"],
+            lessons_completed=completed,
+            lessons_total=total,
         )
 
 

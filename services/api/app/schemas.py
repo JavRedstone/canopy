@@ -60,6 +60,8 @@ class CourseSummary(BaseModel):
     active_version: int
     updated_at: datetime
     quiz_max_attempts: int = 3
+    lessons_completed: int = 0
+    lessons_total: int = 0
 
 
 class CoursePointsResponse(BaseModel):

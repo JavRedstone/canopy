@@ -13,7 +13,9 @@ import type { ConceptMastery } from "@/lib/api";
 // A single BKT track rendered as a labelled bar with a marker at the mastery threshold, so
 // the learner sees both where they are and how far the 95% bar is. `p === null` means the
 // track has no observations yet -- shown as an empty bar with an em dash, never a false 0%.
-function TrackBar({ label, hint, p, opportunities, threshold }: { label: string; hint: string; p: number | null; opportunities: number; threshold: number }) {
+// Each track gets its own accent color (Understand = indigo, Apply = orange) so the two
+// signals read as distinct at a glance instead of collapsing into the same flat black bar.
+function TrackBar({ label, hint, p, opportunities, threshold, color }: { label: string; hint: string; p: number | null; opportunities: number; threshold: number; color: string }) {
   const hasData = p !== null;
   const pct = hasData ? Math.round(p * 100) : 0;
   const mastered = hasData && p >= threshold;
@@ -23,7 +25,7 @@ function TrackBar({ label, hint, p, opportunities, threshold }: { label: string;
         <Tooltip title={hint} placement="top-start">
           <Typography variant="caption" sx={{ color: "text.secondary", cursor: "help" }}>{label}</Typography>
         </Tooltip>
-        <Typography variant="caption" sx={{ fontWeight: 700, fontVariantNumeric: "tabular-nums", color: mastered ? "success.main" : hasData ? "text.primary" : "text.disabled" }}>
+        <Typography variant="caption" sx={{ fontWeight: 700, fontVariantNumeric: "tabular-nums", color: mastered ? "success.main" : hasData ? color : "text.disabled" }}>
           {hasData ? `${pct}%` : "—"}
         </Typography>
       </Stack>
@@ -35,7 +37,7 @@ function TrackBar({ label, hint, p, opportunities, threshold }: { label: string;
             left: 0,
             width: `${pct}%`,
             borderRadius: 999,
-            bgcolor: mastered ? "success.main" : "primary.main",
+            bgcolor: (theme) => (mastered ? theme.palette.success.main : color),
             transition: "width .5s cubic-bezier(.2,.8,.2,1)"
           }}
         />
@@ -51,6 +53,8 @@ function TrackBar({ label, hint, p, opportunities, threshold }: { label: string;
 
 const UNDERSTAND_HINT = "Recall & explanation, from quiz answers.";
 const APPLY_HINT = "Implementing it in code, from your submissions.";
+export const UNDERSTAND_COLOR = "#4f46e5";
+export const APPLY_COLOR = "#f97316";
 
 /** Whether each track is relevant for a concept: everything shows Understand; only coding
  *  labs show Apply. A coding lab that also quizzes still shows both. */
@@ -66,10 +70,10 @@ export function MasteryMeter({ concept, threshold }: { concept: ConceptMastery; 
   return (
     <Stack sx={{ gap: 1.25 }}>
       {tracks.understand ? (
-        <TrackBar label="Understand" hint={UNDERSTAND_HINT} p={concept.p_understand} opportunities={concept.understand_opportunities} threshold={threshold} />
+        <TrackBar label="Understand" hint={UNDERSTAND_HINT} p={concept.p_understand} opportunities={concept.understand_opportunities} threshold={threshold} color={UNDERSTAND_COLOR} />
       ) : null}
       {tracks.apply ? (
-        <TrackBar label="Apply" hint={APPLY_HINT} p={concept.p_apply} opportunities={concept.apply_opportunities} threshold={threshold} />
+        <TrackBar label="Apply" hint={APPLY_HINT} p={concept.p_apply} opportunities={concept.apply_opportunities} threshold={threshold} color={APPLY_COLOR} />
       ) : null}
     </Stack>
   );
@@ -79,10 +83,32 @@ export function MasteryMeter({ concept, threshold }: { concept: ConceptMastery; 
  *  the concept clears the bar on every track it's assessed on. */
 export function MasteryCard({ concept, threshold }: { concept: ConceptMastery; threshold: number }) {
   return (
-    <Paper variant="outlined" sx={{ p: 2, display: "grid", gap: 1.5, borderColor: concept.mastered ? "success.main" : "divider" }}>
+    <Paper
+      variant="outlined"
+      sx={{
+        p: 2,
+        display: "grid",
+        gap: 1.5,
+        bgcolor: (theme) => alpha(theme.palette.success.main, 0.03),
+        borderColor: concept.mastered ? "success.main" : "divider",
+      }}
+    >
       <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", gap: 1 }}>
-        <Stack direction="row" sx={{ alignItems: "center", gap: 0.75 }}>
-          <Icon name="insights" />
+        <Stack direction="row" sx={{ alignItems: "center", gap: 1 }}>
+          <Box
+            sx={{
+              width: 28,
+              height: 28,
+              borderRadius: "50%",
+              display: "grid",
+              placeItems: "center",
+              color: "#fff",
+              background: `linear-gradient(135deg, ${UNDERSTAND_COLOR}, ${APPLY_COLOR})`,
+              "& .material-symbol": { fontSize: "16px" },
+            }}
+          >
+            <Icon name="insights" />
+          </Box>
           <Typography variant="overline" color="text.secondary">Your mastery</Typography>
         </Stack>
         {concept.mastered ? <Chip size="small" color="success" variant="outlined" icon={<Icon name="verified" />} label="Mastered" /> : null}

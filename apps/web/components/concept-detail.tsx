@@ -272,7 +272,7 @@ function LessonComplete({ courseId, map, slug, title }: { courseId: string; map?
     <Alert severity="success" icon={<Icon name="celebration" />} sx={{ position: "relative", overflow: "hidden" }}>
       <ConfettiBurst />
       <Typography sx={{ fontWeight: 700 }}>{title} complete!</Typography>
-      <Typography variant="body2">Nice work — you&apos;re ready for the next activity.</Typography>
+      <Typography variant="body2">Nice work! You&apos;re ready for the next activity.</Typography>
       <LessonNavigation courseId={courseId} map={map} activeSlug={slug} />
     </Alert>
   );
@@ -1066,7 +1066,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
                   ) : testResult ? (
                     <>
                       <Typography variant="body2" color="text.secondary">
-                        Run checks the visible tests only. Submit swaps in the full suite — hidden checks included — and updates your Apply mastery.
+                        Run checks the visible tests only. Submit swaps in the full suite (hidden checks included) and updates your Apply mastery.
                       </Typography>
                       {(() => {
                         const cases = parsePytestCases(testResult.output);

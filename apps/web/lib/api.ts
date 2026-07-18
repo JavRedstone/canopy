@@ -6,6 +6,8 @@ export interface CourseSummary {
   active_version: number;
   updated_at: string;
   quiz_max_attempts: number;
+  lessons_completed: number;
+  lessons_total: number;
 }
 
 export interface CourseMapConcept {

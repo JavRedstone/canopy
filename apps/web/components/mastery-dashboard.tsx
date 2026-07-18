@@ -9,7 +9,7 @@ import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
 import { alpha } from "@mui/material/styles";
 import { CourseMasteryResponse, getCourseMastery } from "@/lib/api";
-import { MasteryMeter } from "@/components/mastery-meter";
+import { APPLY_COLOR, MasteryMeter, UNDERSTAND_COLOR } from "@/components/mastery-meter";
 import { Icon } from "@/components/icon";
 import { conceptKindIcon } from "@/lib/concept-kind";
 import { createClient } from "@/lib/supabase/client";
@@ -56,46 +56,71 @@ export function MasteryDashboard({ courseId, refreshKey }: { courseId: string; r
   const pct = total > 0 ? Math.round((mastered / total) * 100) : 0;
 
   return (
-    <Stack component="section" sx={{ gap: 2, mb: 3 }}>
-      <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", gap: 2, flexWrap: "wrap" }}>
-        <Stack direction="row" sx={{ alignItems: "center", gap: 1 }}>
-          <Icon name="insights" />
-          <Box>
-            <Typography sx={{ fontWeight: 700 }}>Mastery</Typography>
-            <Typography variant="body2" color="text.secondary">
-              Concept-level understanding vs. applied skill — tracked continuously, not just done/not-done.
-            </Typography>
-          </Box>
-        </Stack>
-        <Chip
-          icon={<Icon name="verified" />}
-          color={mastered === total ? "success" : "default"}
-          variant={mastered === total ? "filled" : "outlined"}
-          label={`${mastered} / ${total} mastered`}
-        />
-      </Stack>
-
-      <Box sx={{ position: "relative", height: 8, borderRadius: 999, bgcolor: "action.hover", overflow: "hidden" }}>
-        <Box sx={{ position: "absolute", insetBlock: 0, left: 0, width: `${pct}%`, borderRadius: 999, bgcolor: "success.main", transition: "width .5s cubic-bezier(.2,.8,.2,1)" }} />
-      </Box>
-
-      <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))" }}>
-        {mastery.concepts.map((concept) => (
-          <Paper
-            key={concept.slug}
-            variant="outlined"
-            sx={{ p: 1.75, display: "grid", gap: 1.25, borderColor: (theme) => (concept.mastered ? alpha(theme.palette.success.main, 0.6) : "divider") }}
-          >
-            <Stack direction="row" sx={{ alignItems: "center", gap: 1, minWidth: 0 }}>
-              <Icon name={concept.mastered ? "verified" : conceptKindIcon(concept.kind)} />
-              <Typography variant="body2" sx={{ fontWeight: 600, flex: 1, minWidth: 0 }} noWrap title={concept.title}>
-                {concept.title}
+    <Paper component="section" variant="outlined" sx={{ p: 2.5, borderRadius: 2, bgcolor: "background.default" }}>
+      <Stack sx={{ gap: 2 }}>
+        <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", gap: 2, flexWrap: "wrap" }}>
+          <Stack direction="row" sx={{ alignItems: "center", gap: 1.25 }}>
+            <Box
+              sx={{
+                width: 32,
+                height: 32,
+                borderRadius: "50%",
+                display: "grid",
+                placeItems: "center",
+                color: "#fff",
+                background: `linear-gradient(135deg, ${UNDERSTAND_COLOR}, ${APPLY_COLOR})`,
+                "& .material-symbol": { fontSize: "18px" },
+              }}
+            >
+              <Icon name="insights" />
+            </Box>
+            <Box>
+              <Typography sx={{ fontWeight: 700 }}>Mastery</Typography>
+              <Typography variant="body2" color="text.secondary">
+                Concept-level understanding vs. applied skill, tracked continuously, not just done/not-done.
               </Typography>
-            </Stack>
-            <MasteryMeter concept={concept} threshold={mastery.threshold} />
-          </Paper>
-        ))}
-      </Box>
-    </Stack>
+            </Box>
+          </Stack>
+          <Chip
+            icon={<Icon name="verified" />}
+            color={mastered === total ? "success" : "default"}
+            variant={mastered === total ? "filled" : "outlined"}
+            label={`${mastered} / ${total} mastered`}
+          />
+        </Stack>
+
+        <Box sx={{ position: "relative", height: 8, borderRadius: 999, bgcolor: "action.hover", overflow: "hidden" }}>
+          <Box
+            sx={{
+              position: "absolute",
+              insetBlock: 0,
+              left: 0,
+              width: `${pct}%`,
+              borderRadius: 999,
+              background: `linear-gradient(90deg, ${UNDERSTAND_COLOR}, ${APPLY_COLOR})`,
+              transition: "width .5s cubic-bezier(.2,.8,.2,1)",
+            }}
+          />
+        </Box>
+
+        <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))" }}>
+          {mastery.concepts.map((concept) => (
+            <Paper
+              key={concept.slug}
+              variant="outlined"
+              sx={{ p: 1.75, display: "grid", gap: 1.25, borderColor: (theme) => (concept.mastered ? alpha(theme.palette.success.main, 0.6) : "divider") }}
+            >
+              <Stack direction="row" sx={{ alignItems: "center", gap: 1, minWidth: 0 }}>
+                <Icon name={concept.mastered ? "verified" : conceptKindIcon(concept.kind)} />
+                <Typography variant="body2" sx={{ fontWeight: 600, flex: 1, minWidth: 0 }} noWrap title={concept.title}>
+                  {concept.title}
+                </Typography>
+              </Stack>
+              <MasteryMeter concept={concept} threshold={mastery.threshold} />
+            </Paper>
+          ))}
+        </Box>
+      </Stack>
+    </Paper>
   );
 }
