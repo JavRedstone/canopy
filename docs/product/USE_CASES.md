@@ -4,7 +4,7 @@
 checked against what the product can *actually do today* (2026-07-18) rather than
 what the plan describes. This is not a recommendation — see
 [`MARKET_EXPLORATION.md`](./MARKET_EXPLORATION.md) for the business case and
-[`DEMO.md`](./DEMO.md) for the one use case that's been scripted into a demo. This doc
+[`DEMO.md`](../demo/DEMO.md) for the one use case that's been scripted into a demo. This doc
 exists because several of these use cases share a persona and a pitch sentence but
 diverge hard on what they'd actually require from the current codebase.
 

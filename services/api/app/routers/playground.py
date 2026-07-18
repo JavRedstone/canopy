@@ -27,7 +27,7 @@ Sandbox = Annotated[SandboxRunnerClient, Depends(get_playground_sandbox)]
 class PlaygroundRunRequest(BaseModel):
     """Course-independent test execution -- nothing here is persisted. Exists to prove
     the sandbox's multi-language, multi-framework execution live in the product,
-    separate from the Python-only AI course-generation pipeline (see docs/SECURITY.md
+    separate from the Python-only AI course-generation pipeline (see docs/architecture/SECURITY.md
     and the sandbox runner's own curated environment registry for why languages are
     not arbitrary). Each environment's test command auto-discovers test files by its
     own convention (pytest: test_*.py, node --test: *.test.js, go test: *_test.go)."""

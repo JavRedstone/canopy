@@ -1,6 +1,6 @@
 """The lesson bundle contract (schema_version 2).
 
-One envelope for every lesson kind, per docs/ARCHITECTURE.md §7.2:
+One envelope for every lesson kind, per docs/architecture/ARCHITECTURE.md §7.2:
 
 - ``lesson_content``   — what the learner reads (explanation, worked examples, citations).
 - ``workspace``        — the coding manifest (files with visibility/editable regions);

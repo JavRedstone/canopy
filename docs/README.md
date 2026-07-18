@@ -1,29 +1,30 @@
 # Docs index
 
-## Product & positioning
+## [`product/`](./product/) — product & positioning
 
-- [`IDEA.md`](./IDEA.md) — the product plan; source of truth for product intent.
-- [`MARKET_EXPLORATION.md`](./MARKET_EXPLORATION.md) — business case, market map, target customers, competitive landscape, positioning, and risks. Consolidated from three earlier independent explorations that all converged on the same conclusion.
-- [`USE_CASES.md`](./USE_CASES.md) — candidate use cases compared against what the product can actually do today, not just the plan's intent.
-- [`SAMPLE_COURSES.md`](./SAMPLE_COURSES.md) — example course-creation inputs (goal text) and what they produce.
+- [`IDEA.md`](./product/IDEA.md) — the product plan; source of truth for product intent.
+- [`MARKET_EXPLORATION.md`](./product/MARKET_EXPLORATION.md) — business case, market map, target customers, competitive landscape, positioning, and risks. Consolidated from three earlier independent explorations that all converged on the same conclusion.
+- [`USE_CASES.md`](./product/USE_CASES.md) — candidate use cases compared against what the product can actually do today, not just the plan's intent.
+- [`SAMPLE_COURSES.md`](./product/SAMPLE_COURSES.md) — example course-creation inputs (goal text) and what they produce.
 
-## Architecture & security
+## [`architecture/`](./architecture/) — architecture & security
 
-- [`ARCHITECTURE.md`](./ARCHITECTURE.md) — the target system design. Treat as directional; it describes some capabilities (assignments, WebSockets, full adaptation) ahead of the current implementation.
-- [`SANDBOX_ARCHITECTURE.md`](./SANDBOX_ARCHITECTURE.md) — the code-execution sandbox's design rationale.
-- [`SECURITY.md`](./SECURITY.md) — current security posture across every service (auth, sandbox isolation, RLS, secrets). The most up to date source for anything security-related.
+- [`ARCHITECTURE.md`](./architecture/ARCHITECTURE.md) — the target system design. Treat as directional; it describes some capabilities (assignments, WebSockets, full adaptation) ahead of the current implementation.
+- [`SANDBOX_ARCHITECTURE.md`](./architecture/SANDBOX_ARCHITECTURE.md) — the code-execution sandbox's design rationale.
+- [`SECURITY.md`](./architecture/SECURITY.md) — current security posture across every service (auth, sandbox isolation, RLS, secrets). The most up to date source for anything security-related.
+- `architecture-diagram.drawio` — client → API → worker/sandbox diagram source.
 
-## Demo & hackathon
+## [`demo/`](./demo/) — demo & hackathon
 
-- [`DEMO.md`](./DEMO.md) — the planned live-demo flow, golden path, and reliability checklist.
-- [`HACKATHON.md`](./HACKATHON.md) — OpenAI Build Week submission rules and judging criteria.
+- [`DEMO.md`](./demo/DEMO.md) — the planned live-demo flow, golden path, and reliability checklist.
+- [`HACKATHON.md`](./demo/HACKATHON.md) — OpenAI Build Week submission rules and judging criteria.
 
-## Setup
+## [`setup/`](./setup/) — setup
 
-- [`SETUP.md`](./SETUP.md) — local environment setup, running all five services, and Supabase migrations (local vs. hosted).
+- [`SETUP.md`](./setup/SETUP.md) — local environment setup, running all five services (`npm run dev`), and Supabase migrations (local vs. hosted).
 
-## Archive
+## [`archive/`](./archive/)
 
-[`archive/`](./archive/) holds superseded, point-in-time documents kept for history —
-each has a banner explaining what replaced it. Not part of the current-docs reading
-path; skip unless you specifically want project history.
+Superseded, point-in-time documents kept for history — each has a banner explaining what
+replaced it. Not part of the current-docs reading path; skip unless you specifically want
+project history.

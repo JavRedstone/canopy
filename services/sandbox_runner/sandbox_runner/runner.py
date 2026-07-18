@@ -21,7 +21,7 @@ class SandboxFile:
 class SandboxEnvironment:
     """One registered, hardened execution environment. Every field here is curated by
     us at review time -- there is no path for a caller to run an unregistered image or
-    toolchain, which is the point (see docs/SECURITY.md on why arbitrary images are a
+    toolchain, which is the point (see docs/architecture/SECURITY.md on why arbitrary images are a
     real risk given this service's docker.sock access)."""
 
     image: str

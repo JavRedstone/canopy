@@ -73,15 +73,39 @@ This is unrelated to `APP_DATABASE_URL` in `.env`, which is a full Postgres conn
 
 ## 3. Run the services
 
-You need **all five** of the services below running at once, each in its own terminal with the virtual environment active. It's easy to start only the API and web app and think you're done — the app will load fine, but course generation will silently never progress, because nothing will be consuming the generation queue (see the Worker section below).
+You need **all five** of the services below running at once. It's easy to start only the
+API and web app and think you're done — the app will load fine, but course generation
+will silently never progress, because nothing will be consuming the generation queue (see
+the Worker section below).
 
-| Service | Command (zsh) | Port |
-|---|---|---|
-| API backend | `python -m uvicorn app.main:app --app-dir services/api --reload --reload-dir services/api --port 8000` | 8000 |
-| LLM gateway | `python -m uvicorn llm_gateway.main:app --app-dir services/llm_gateway --port 8010` | 8010 |
-| Sandbox runner | `python -m uvicorn sandbox_runner.main:app --app-dir services/sandbox_runner --port 8020` | 8020 |
-| Worker | `python -m worker.main` | — |
-| Web app | `npm run dev:web` | 3000 |
+### All five at once (recommended)
+
+```
+npm run dev
+```
+
+Starts every service below in one terminal, labeled and color-coded, using `.venv`'s
+Python directly — no manual activation, and no OS-specific command needed. If any one
+process dies, the rest are stopped too, since a partial set is worse than an obvious full
+stop (see the Worker warning above for why a silently-missing worker is easy to miss).
+Implemented in [`scripts/dev.js`](../../scripts/dev.js).
+
+### One service at a time (debugging, or a config change that needs a restart)
+
+| Service | npm script | Command (zsh) | Port |
+|---|---|---|---|
+| API backend | `npm run dev:api` | `python -m uvicorn app.main:app --app-dir services/api --reload --reload-dir services/api --port 8000` | 8000 |
+| LLM gateway | `npm run dev:gateway` | `python -m uvicorn llm_gateway.main:app --app-dir services/llm_gateway --port 8010` | 8010 |
+| Sandbox runner | `npm run dev:sandbox` | `python -m uvicorn sandbox_runner.main:app --app-dir services/sandbox_runner --port 8020` | 8020 |
+| Worker | `npm run dev:worker` | `python -m worker.main` | — |
+| Web app | `npm run dev:web` | `npm run dev:web` | 3000 |
+
+Only `npm run dev` resolves `.venv`'s Python itself and works on any OS. The individual
+`npm run dev:api`/`dev:gateway`/`dev:sandbox`/`dev:worker` shortcuts are a macOS/Linux
+convenience that assume `.venv/bin/python` (they're just the zsh commands below, saved as
+scripts) — on Windows, or with a different venv location, use the raw commands below
+instead, or activate the virtual environment and run the plain `python -m ...` commands
+directly.
 
 The API is the backend; the LLM gateway is a separate internal dependency used for generation, short-answer grading, and the learning helper.
 

@@ -136,14 +136,14 @@ the API's `learner_visible` profile, and AI-generated solutions/tests via the wo
   `pids_limit=64`, and a wall-clock timeout that kills and force-removes the container.
   Every container is single-use and removed in a `finally` block regardless of outcome.
 - **Architectural risk accepted by design**: the sandbox-runner container itself has
-  `/var/run/docker.sock` mounted (docker-outside-of-docker, [`docker-compose.yml`](docker-compose.yml))
+  `/var/run/docker.sock` mounted (docker-outside-of-docker, [`docker-compose.yml`](../../docker-compose.yml))
   so it can launch sibling containers. That gives the sandbox-runner *process* root-
   equivalent control of the host. No RCE path into that process was found in review
   (inputs are tightly validated, no shell/eval surface), but because a bug there would
   be catastrophic rather than merely contained, this service's own code surface should
   stay minimal and any change to it should get extra scrutiny. In any real deployment,
   `sandbox-runner` must sit on an internal-only network with no public port —
-  the local [`docker-compose.yml`](../docker-compose.yml) publishes `8020` to the host
+  the local [`docker-compose.yml`](../../docker-compose.yml) publishes `8020` to the host
   for dev convenience only.
 
 See [`SANDBOX_ARCHITECTURE.md`](SANDBOX_ARCHITECTURE.md) for the full design

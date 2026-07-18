@@ -8,12 +8,12 @@ A coding lesson's learner-submitted Python has to actually run — against the l
 
 ## Frontend: what the learner sees and does
 
-All of this lives in [`components/concept-detail.tsx`](../apps/web/components/concept-detail.tsx), specifically the `concept.kind === "coding"` branch (the "lab" layout, as opposed to the plain-prose lesson layout used for `concept.kind === "conceptual"`).
+All of this lives in [`components/concept-detail.tsx`](../../apps/web/components/concept-detail.tsx), specifically the `concept.kind === "coding"` branch (the "lab" layout, as opposed to the plain-prose lesson layout used for `concept.kind === "conceptual"`).
 
 ### The two-pane layout
 
 - **Left pane** ("Instructions"): tabs between **Lesson** (the explanation, worked examples, hints, and the mastery-check quiz) and **Solution** (see below), in a fixed-width, normally-themed column.
-- **Right pane** ("Workspace"): a nested dark [MUI theme](../apps/web/lib/theme.ts) (`labTheme`) scoped to just this pane, so it reads as a code-editor surface regardless of the app's light theme elsewhere. Contains:
+- **Right pane** ("Workspace"): a nested dark [MUI theme](../../apps/web/lib/theme.ts) (`labTheme`) scoped to just this pane, so it reads as a code-editor surface regardless of the app's light theme elsewhere. Contains:
   - A row of **file tabs** — one per editable starter file, plus any read-only public test files (lock icon) — backed by a single [Monaco](https://microsoft.github.io/monaco-editor/) instance (`@monaco-editor/react`, dynamically imported with `ssr: false` since Monaco needs a real DOM).
   - **Run** and **Submit** buttons.
   - A fixed-height **console panel** with three tabs: **Testcase**, **Console**, **Test Result**.
@@ -27,13 +27,13 @@ These are easy to conflate but hit different endpoints and mean different things
 | **Run** | `handleRunScript` | `POST /courses/{id}/concepts/{slug}/run-script` | The **Testcase** tab's scratch script (`scratch.py`, default: `from <module> import *`) as a plain Python script — no pytest, no grading | **Console** tab |
 | **Submit** | `handleRun` | `POST /courses/{id}/concepts/{slug}/run` | The **full pytest suite** (public *and* hidden test files) against the learner's files | **Test Result** tab |
 
-"Run" exists purely so a learner can `print()`-debug freely without it counting for anything. "Submit" is the graded action — on a pass, the API marks the lesson complete server-side (`repository.complete_coding_lesson`, in [`courses.py`](../services/api/app/routers/courses.py#L94-L118)).
+"Run" exists purely so a learner can `print()`-debug freely without it counting for anything. "Submit" is the graded action — on a pass, the API marks the lesson complete server-side (`repository.complete_coding_lesson`, in [`courses.py`](../../services/api/app/routers/courses.py#L94-L118)).
 
-The **Test Result** tab parses the raw pytest output (via [`lib/pytest-output.ts`](../apps/web/lib/pytest-output.ts)) into a per-test-case list with pass/fail/skip icons. Each failing case can be expanded individually to see just its own traceback (parsed out of pytest's `FAILURES`/`ERRORS` section); there's also a "Full raw output" toggle for the complete, unparsed pytest output as a fallback.
+The **Test Result** tab parses the raw pytest output (via [`lib/pytest-output.ts`](../../apps/web/lib/pytest-output.ts)) into a per-test-case list with pass/fail/skip icons. Each failing case can be expanded individually to see just its own traceback (parsed out of pytest's `FAILURES`/`ERRORS` section); there's also a "Full raw output" toggle for the complete, unparsed pytest output as a fallback.
 
 ### The file-set contract (and why it matters)
 
-Both `/run` and `/run-script` reject the request outright — `422 Unprocessable Content`, `"Submit exactly the lesson starter files."` — unless the submitted file paths are **exactly** the lesson's starter file paths, no more, no fewer (see `expected_paths` / `set(submitted) != expected_paths` in [`courses.py`](../services/api/app/routers/courses.py#L104-L107)). This is a real, enforced contract, not just a suggestion, and the frontend has to respect it: `concept-detail.tsx` keeps a `submittableFiles` list, filtered down to only the starter-file paths, and always sends *that* — never the raw editor `files` state — to `runLesson`/`runLessonScript`.
+Both `/run` and `/run-script` reject the request outright — `422 Unprocessable Content`, `"Submit exactly the lesson starter files."` — unless the submitted file paths are **exactly** the lesson's starter file paths, no more, no fewer (see `expected_paths` / `set(submitted) != expected_paths` in [`courses.py`](../../services/api/app/routers/courses.py#L104-L107)). This is a real, enforced contract, not just a suggestion, and the frontend has to respect it: `concept-detail.tsx` keeps a `submittableFiles` list, filtered down to only the starter-file paths, and always sends *that* — never the raw editor `files` state — to `runLesson`/`runLessonScript`.
 
 That filtering matters because of the next feature:
 
@@ -66,13 +66,13 @@ FastAPI API  --validates exact file-set, loads public+hidden tests-->  SandboxRu
 learner-safe JSON response (passed/output/exit_code/timed_out)
 ```
 
-1. **API validates and assembles the file set.** `run_lesson`/`run_script` in [`courses.py`](../services/api/app/routers/courses.py) check the exact-path contract above, then (for `/run` specifically) load `public_test_files` **and** `hidden_test_files` from the repository and append both to the submitted files before handing off to the sandbox.
-2. **`SandboxRunnerClient`** ([`services/api/app/sandbox.py`](../services/api/app/sandbox.py)) is a thin `httpx` client — the API process itself never touches Docker. It POSTs to `/internal/v1/runs` or `/internal/v1/scripts` on the sandbox runner, authenticated with an `X-Internal-Service-Token` header (in local development this header can be absent; production must set it — see the "not yet production-safe" section below).
-3. **`sandbox_runner`'s FastAPI app** ([`services/sandbox_runner/sandbox_runner/main.py`](../services/sandbox_runner/sandbox_runner/main.py)) validates the request shape with Pydantic (unique paths, size limits, `entry_path` must be one of the submitted files) and hands off to `DockerSandboxRunner`.
-4. **`DockerSandboxRunner`** ([`services/sandbox_runner/sandbox_runner/runner.py`](../services/sandbox_runner/sandbox_runner/runner.py)) does the actual execution:
-   - Creates a **fresh container** per run from the `canopy-lesson-sandbox:python-basic` image (built once from [`sandbox_image/Dockerfile`](../services/sandbox_runner/sandbox_image/Dockerfile): `python:3.13-slim` + `pytest`/`pytest-timeout`), building it lazily on first use if it doesn't exist yet.
+1. **API validates and assembles the file set.** `run_lesson`/`run_script` in [`courses.py`](../../services/api/app/routers/courses.py) check the exact-path contract above, then (for `/run` specifically) load `public_test_files` **and** `hidden_test_files` from the repository and append both to the submitted files before handing off to the sandbox.
+2. **`SandboxRunnerClient`** ([`services/api/app/sandbox.py`](../../services/api/app/sandbox.py)) is a thin `httpx` client — the API process itself never touches Docker. It POSTs to `/internal/v1/runs` or `/internal/v1/scripts` on the sandbox runner, authenticated with an `X-Internal-Service-Token` header (in local development this header can be absent; production must set it — see the "not yet production-safe" section below).
+3. **`sandbox_runner`'s FastAPI app** ([`services/sandbox_runner/sandbox_runner/main.py`](../../services/sandbox_runner/sandbox_runner/main.py)) validates the request shape with Pydantic (unique paths, size limits, `entry_path` must be one of the submitted files) and hands off to `DockerSandboxRunner`.
+4. **`DockerSandboxRunner`** ([`services/sandbox_runner/sandbox_runner/runner.py`](../../services/sandbox_runner/sandbox_runner/runner.py)) does the actual execution:
+   - Creates a **fresh container** per run from a curated `SandboxEnvironment` registry (`python-basic`, `javascript-basic`, `go-basic` — each its own Dockerfile under [`sandbox_image/`](../../services/sandbox_runner/sandbox_image/), e.g. `python-basic` is `python:3.13-slim` + `pytest`/`pytest-timeout`), building the requested one lazily on first use if it doesn't exist yet. There is no path to an unregistered/arbitrary image.
    - Copies the submitted files in via Docker's `put_archive` (a tar stream built in-memory — nothing touches the host filesystem).
-   - Runs either `pytest -v -p no:cacheprovider .` (Submit) or `python -u <entry_path>` (Run) as the container's command.
+   - Runs the environment's own test/script command (e.g. `pytest -v -p no:cacheprovider .` / `python -u <entry_path>` for `python-basic`; `node --test` / `node <entry_path>` for `javascript-basic`; `go test ./...` / `go run <entry_path>` for `go-basic`) as the container's command.
    - Applies real containment: `network_disabled=True` (no network at all), non-root user (`65534:65534`, i.e. `nobody`), `cap_drop=["ALL"]`, `no-new-privileges`, `mem_limit=256m`, one CPU (`nano_cpus=1_000_000_000`), `pids_limit=64`, and a wall-clock timeout (`container.wait(timeout=...)`, default from settings) that kills and marks the run `timed_out` if exceeded.
    - Captures combined stdout+stderr (`container.logs(...)`, truncated to the last 16,000 characters) as the `output` field, and the process exit code.
    - **Always force-removes the container** in a `finally` block — every run is single-use and disposable, pass or fail.
@@ -80,7 +80,7 @@ learner-safe JSON response (passed/output/exit_code/timed_out)
 
 ### What's *not* production-hardened yet
 
-This is a working **development** sandbox, not a hardened one, and it's worth being explicit about that rather than letting the strong-sounding container flags above imply more than they deliver. Per the repository's own [`archive/ARCHITECTURE_AUDIT_2026_07_16.md`](./archive/ARCHITECTURE_AUDIT_2026_07_16.md) — archived as a point-in-time doc, but this specific finding was re-verified 2026-07-18 and is still accurate:
+This is a working **development** sandbox, not a hardened one, and it's worth being explicit about that rather than letting the strong-sounding container flags above imply more than they deliver. Per the repository's own [`archive/ARCHITECTURE_AUDIT_2026_07_16.md`](../archive/ARCHITECTURE_AUDIT_2026_07_16.md) — archived as a point-in-time doc, but this specific finding was re-verified 2026-07-18 and is still accurate:
 
 - **Submit currently runs and exposes hidden tests to the learner.** The raw pytest output returned from `/run` includes hidden-test names, assertions, and tracebacks on failure — there's no separation between "you passed/failed" and "here's exactly what the hidden test checked." (P0 in the audit.)
 - **The container isn't a hostile-code-grade boundary.** It deliberately runs with `read_only=False` (Docker's archive-copy API rejects a read-only rootfs outright), and while it disables network/drops capabilities/limits resources, it's explicitly scoped as a local content-validation executor, not something meant to survive genuinely adversarial input in production. A production hardening pass would mean a rootless/microVM- or gVisor-class executor, a read-only image, seccomp/AppArmor policy, and distinct trust levels for learner-visible vs. hidden-evaluator runs.

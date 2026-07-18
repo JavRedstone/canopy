@@ -7,6 +7,11 @@
     "packages/*"
   ],
   "scripts": {
+    "dev": "node scripts/dev.js",
+    "dev:api": ".venv/bin/python -m uvicorn app.main:app --app-dir services/api --reload --reload-dir services/api --port 8000",
+    "dev:gateway": ".venv/bin/python -m uvicorn llm_gateway.main:app --app-dir services/llm_gateway --port 8010",
+    "dev:sandbox": ".venv/bin/python -m uvicorn sandbox_runner.main:app --app-dir services/sandbox_runner --port 8020",
+    "dev:worker": ".venv/bin/python -m worker.main",
     "dev:web": "npm --workspace @adaptive-learning/web run dev",
     "build:web": "npm --workspace @adaptive-learning/web run build",
     "typecheck:web": "npm --workspace @adaptive-learning/web run typecheck",
@@ -20,6 +25,7 @@
     "dompurify": "3.4.12"
   },
   "devDependencies": {
+    "concurrently": "^10.0.3",
     "supabase": "^2.109.1"
   }
 }

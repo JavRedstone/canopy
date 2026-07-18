@@ -2,7 +2,7 @@
 
 **Status:** Draft for implementation
 **Audience:** Product and engineering team
-**Source of truth for product intent:** [`IDEA.md`](./IDEA.md)
+**Source of truth for product intent:** [`IDEA.md`](../product/IDEA.md)
 
 ## 1. Purpose
 
@@ -139,7 +139,7 @@ The first implementation supports public PyPI packages required by a course. Pac
 
 ### 4.5 Lesson sandbox builder
 
-The Docker sandbox's first and primary role is not isolating untrusted learner code (that is the separate, later-built evaluator sandbox in §4.1's `SandboxAdapter`). It is giving the **content-generation agent itself** a real place to write files, execute them, and observe results — so a coding lesson's exercise proves itself before any learner ever sees it, matching the self-repair guarantee described in `docs/IDEA.md`.
+The Docker sandbox's first and primary role is not isolating untrusted learner code (that is the separate, later-built evaluator sandbox in §4.1's `SandboxAdapter`). It is giving the **content-generation agent itself** a real place to write files, execute them, and observe results — so a coding lesson's exercise proves itself before any learner ever sees it, matching the self-repair guarantee described in `docs/product/IDEA.md`.
 
 The worker (`services/worker/worker/`) runs this as a background job per coding-concept lesson slot, triggered automatically the moment a course finishes planning:
 

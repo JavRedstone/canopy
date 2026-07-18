@@ -206,7 +206,7 @@ The positioning only holds if Canopy reliably delivers all of:
    typing speed or time-on-task; learners can see and decline a recommendation;
    conceptual and applied-skill signals stay separate.
 5. **Enterprise trust** — proprietary material and learner code get clear isolation,
-   access controls, retention policy, and auditability (see [`SECURITY.md`](./SECURITY.md)
+   access controls, retention policy, and auditability (see [`SECURITY.md`](../architecture/SECURITY.md)
    for current state); customers can see the source of a generated claim and edit or
    approve content before assigning it broadly.
 
@@ -220,7 +220,7 @@ let an expert edit or approve material before it's assigned — especially impor
 code, where an explanation can be syntactically plausible yet teach the wrong invariant.
 
 **Worked example — "How our authorization pipeline works"** (this is the scenario
-[`DEMO.md`](./DEMO.md)'s live demo is built around):
+[`DEMO.md`](../demo/DEMO.md)'s live demo is built around):
 
 1. Three short activities tracing the request lifecycle, data model, and idempotency
    contract.
@@ -336,7 +336,7 @@ Run one design-partner pilot: one internal service or SDK, 5–10 developers new
   developer-enablement thesis and the agentic generation pipeline.
 - **Demo:** run the emotional consumer story end to end — upload a source packet, watch
   a working graded lab appear, fail it, watch the system diagnose and help remediate,
-  with the mastery number moving. See [`DEMO.md`](./DEMO.md) for the full script.
+  with the mastery number moving. See [`DEMO.md`](../demo/DEMO.md) for the full script.
 - **Codex-usage narrative:** the generate → run → diagnose → patch → re-verify loop
   (never trusting the model's self-report, always re-checking in the sandbox) is exactly
   the "autonomous multi-step engineering workflow" judges are told to look for —

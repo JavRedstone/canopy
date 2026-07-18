@@ -8,7 +8,7 @@
 > tests only) is separated. The sandbox environment catalog has also grown beyond what's
 > described here (Python/JS/Go now, not just `python-basic`). Don't assume any other
 > finding below is still open or resolved without checking current code — this file
-> wasn't kept up to date. See [`../SECURITY.md`](../SECURITY.md) for the current security
+> wasn't kept up to date. See [`../architecture/SECURITY.md`](../architecture/SECURITY.md) for the current security
 > posture and [`../README.md`](../README.md) for current docs.
 
 **Status:** Current-state code audit
@@ -62,7 +62,7 @@ FastAPI API ---------------------> Supabase (Auth, Postgres, Storage, PGMQ)
 
 ### P0 — Hidden tests are executed and exposed through the learner run endpoint
 
-`POST /courses/{course_id}/concepts/{slug}/run` loads public and hidden test files, sends both to the sandbox, then returns the raw pytest output to the learner. See [`courses.py`](../services/api/app/routers/courses.py#L73-L88).
+`POST /courses/{course_id}/concepts/{slug}/run` loads public and hidden test files, sends both to the sandbox, then returns the raw pytest output to the learner. See [`courses.py`](../../services/api/app/routers/courses.py#L73-L88).
 
 This violates the architecture's required learning/evaluator separation. A failing hidden test can reveal its name, assertion, file path, data, and source line through pytest output. It also makes a free learner run equivalent to hidden evaluation.
 
@@ -77,7 +77,7 @@ This violates the architecture's required learning/evaluator separation. A faili
 
 The execution container correctly disables network access, runs as a non-root UID, drops Linux capabilities, limits memory/CPU/PIDs, bounds runtime, and force-removes the container. Those are strong baseline controls.
 
-However, the runner deliberately creates the execution container with `read_only=False`; its own comment explains why the Docker archive workflow needs it. See [`runner.py`](../services/sandbox_runner/sandbox_runner/runner.py#L85-L116). The service also receives the Docker socket in Compose ([`docker-compose.yml`](../docker-compose.yml#L64-L71)). This is appropriate only as a tightly controlled development executor.
+However, the runner deliberately creates the execution container with `read_only=False`; its own comment explains why the Docker archive workflow needs it. See [`runner.py`](../../services/sandbox_runner/sandbox_runner/runner.py#L85-L116). The service also receives the Docker socket in Compose ([`docker-compose.yml`](../../docker-compose.yml#L64-L71)). This is appropriate only as a tightly controlled development executor.
 
 The `content_validation` and `learner_visible` profiles are request labels today; they do not select different runtime policies. A future hidden evaluator would therefore not yet have a distinct trust boundary.
 
@@ -89,7 +89,7 @@ The `content_validation` and `learner_visible` profiles are request labels today
 
 ### P1 — Private services are host-published and development authentication is optional
 
-Compose publishes the LLM gateway on `8010` and the sandbox runner on `8020`. In `development`, an absent internal token is accepted by both services. See [`docker-compose.yml`](../docker-compose.yml#L36-L71) and the `*_internal_request_allowed` guards.
+Compose publishes the LLM gateway on `8010` and the sandbox runner on `8020`. In `development`, an absent internal token is accepted by both services. See [`docker-compose.yml`](../../docker-compose.yml#L36-L71) and the `*_internal_request_allowed` guards.
 
 This is convenient locally, but it must not become a deployment default—especially for the sandbox runner.
 
@@ -97,27 +97,27 @@ This is convenient locally, but it must not become a deployment default—especi
 
 ### P1 — Sandbox contracts have drifted from the runtime API
 
-[`sandbox-runner.schema.json`](../packages/contracts/schemas/sandbox-runner.schema.json) describes only `/runs` with a maximum of 15 files. The runtime permits 20 files and also exposes `/scripts`, which has no corresponding shared contract. The public API schema accepts general `LessonWorkspaceFile` values; invalid script paths are discovered by the downstream runner and become a generic `503` because the client maps all non-2xx responses to `SandboxError`.
+[`sandbox-runner.schema.json`](../../packages/contracts/schemas/sandbox-runner.schema.json) describes only `/runs` with a maximum of 15 files. The runtime permits 20 files and also exposes `/scripts`, which has no corresponding shared contract. The public API schema accepts general `LessonWorkspaceFile` values; invalid script paths are discovered by the downstream runner and become a generic `503` because the client maps all non-2xx responses to `SandboxError`.
 
 **Required path:** make the versioned contract cover every runner endpoint and generate or validate both client and server models from it. Preserve caller errors as `422`, and reserve `503` for unavailable runner infrastructure.
 
 ### P2 — The course repository owns too many unrelated responsibilities
 
-[`SupabaseCourseRepository`](../services/api/app/repository.py#L208) currently handles course reads/writes, source metadata, signed upload issuance, Storage verification, PGMQ enqueueing, lesson projection, and HTTP error translation. It is an effective vertical-slice implementation but is becoming a high-coupling boundary.
+[`SupabaseCourseRepository`](../../services/api/app/repository.py#L208) currently handles course reads/writes, source metadata, signed upload issuance, Storage verification, PGMQ enqueueing, lesson projection, and HTTP error translation. It is an effective vertical-slice implementation but is becoming a high-coupling boundary.
 
 **Required path:** separate application services (`SourceService`, `CourseService`, `LessonService`) from persistence repositories, a `SourceArtifactStore`, and a typed `JobPublisher`. Keep Supabase as the first implementation behind those ports.
 
 ### P2 — Queue and ingestion durability are incomplete
 
-`QueueAdapter` directly encodes PGMQ function names in the worker ([`ingestion.py`](../services/worker/worker/ingestion.py#L37-L64)). Retryable work relies on the queue visibility timeout, with no explicit attempt count, backoff policy, dead-letter workflow, operator view, or idempotency ledger.
+`QueueAdapter` directly encodes PGMQ function names in the worker ([`ingestion.py`](../../services/worker/worker/ingestion.py#L37-L64)). Retryable work relies on the queue visibility timeout, with no explicit attempt count, backoff policy, dead-letter workflow, operator view, or idempotency ledger.
 
-The worker also deletes prior parser-version rows in `_replace_document_version` ([`ingestion.py`](../services/worker/worker/ingestion.py#L452-L469)), which conflicts with the architecture's stated immutable source-version history.
+The worker also deletes prior parser-version rows in `_replace_document_version` ([`ingestion.py`](../../services/worker/worker/ingestion.py#L452-L469)), which conflicts with the architecture's stated immutable source-version history.
 
 **Required path:** introduce typed jobs with a retry budget and DLQ, emit queue-age/attempt metrics, retain parsed versions, and atomically mark all document-version artifacts as ready or failed.
 
 ### P2 — Retrieval is ordered chunk selection, not semantic retrieval
 
-`_course_context` selects the most recent document versions and then takes the first configured chunk limit in creation order ([`ingestion.py`](../services/worker/worker/ingestion.py#L508-L541)). It does not perform vector similarity search against the learner goal or current concept.
+`_course_context` selects the most recent document versions and then takes the first configured chunk limit in creation order ([`ingestion.py`](../../services/worker/worker/ingestion.py#L508-L541)). It does not perform vector similarity search against the learner goal or current concept.
 
 This will work for short sources but weakens grounding as source sets grow. It also increases prompt cost because context relevance is not optimized.
 
@@ -125,7 +125,7 @@ This will work for short sources but weakens grounding as source sets grow. It a
 
 ### P2 — The LLM gateway has a solid provider seam but lacks operational policy
 
-The gateway supports structured output, repair tool turns, embeddings, and provider selection. The worker validates structured output locally and asks for correction up to three times ([`llm.py`](../services/worker/worker/llm.py#L22-L71)), which is a good quality safeguard.
+The gateway supports structured output, repair tool turns, embeddings, and provider selection. The worker validates structured output locally and asks for correction up to three times ([`llm.py`](../../services/worker/worker/llm.py#L22-L71)), which is a good quality safeguard.
 
 It does not yet enforce per-task input/output token budgets, tenant quotas, concurrency/rate limits, idempotency keys, cost/usage records, request correlation, or prompt/version registry. The runtime request model also accepts every gateway task at `/structured`, while the checked-in JSON contract limits that operation to planning and lesson-build tasks.
 
@@ -133,7 +133,7 @@ It does not yet enforce per-task input/output token budgets, tenant quotas, conc
 
 ### P3 — The canonical architecture document remains aspirational in several areas
 
-[`ARCHITECTURE.md`](./ARCHITECTURE.md) describes assignments, hidden evaluation, WebSockets, submissions, mastery/BKT, adaptation, package provisioning, and a broader `packages/domain`/`packages/adapters` layout. Those capabilities are not present in the current API/worker implementation.
+[`ARCHITECTURE.md`](../architecture/ARCHITECTURE.md) describes assignments, hidden evaluation, WebSockets, submissions, mastery/BKT, adaptation, package provisioning, and a broader `packages/domain`/`packages/adapters` layout. Those capabilities are not present in the current API/worker implementation.
 
 The current code supports sources, planning, generated lessons, public test files, sandboxed runs, and regeneration. Treat the architecture document as a target design; this audit and `SCAFFOLD_STATUS.md` should be the current-state references until the missing services exist.
 
