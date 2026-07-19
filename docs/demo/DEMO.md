@@ -97,9 +97,10 @@ without waiting on a live model call.
 
 ### 3. Source to demonstrated skill — 45s
 
-Show the generated progression: **Paper thesis and Transformer fundamentals**, **Core
-Transformer components**, **Training the translation model**, and **Experiments,
-ablations, and reproduction**.
+Show the generated progression.
+
+> "The learner starts with the paper thesis and Transformer fundamentals, moves into the
+> core components and training details, then reaches experiments and reproduction."
 
 Open **Scaled dot-product attention**. Click its inline citation marker to open the
 source reference. Answer a quiz question (mcq or fill-in-blank; Markdown and math render
@@ -166,9 +167,10 @@ Then show one real repository diff, test result, or recorded Codex session.
 > capability. Canopy creates the bridge between learning something and being able to do
 > something."
 
-End on a five-second final slide that shows the memorable loop:
+End on a five-second final slide, then say:
 
-> **Source → Course → Practice → Evidence → Adaptation**
+> "Canopy takes a learner from a source, to a course, to practice, to evidence of mastery,
+> and then to the next concept they need to review."
 
 ### 8. Follow-up features, outside the primary cut
 

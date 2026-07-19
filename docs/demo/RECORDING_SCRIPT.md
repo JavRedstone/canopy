@@ -49,13 +49,10 @@ Transformer block implementation lab.
 > A learner starts with a difficult source and a goal. Canopy breaks it into the concepts,
 > practice, and assessments needed to reach mastery.
 
-Show the actual progression:
+Show the actual progression.
 
-> Paper thesis and Transformer fundamentals. Core Transformer components. Training the
-> translation model. Experiments, ablations, and reproduction.
-
-> The learner first understands why the authors introduced the Transformer, then learns
-> the mechanisms behind it, implements the system, and finally works toward reproduction.
+> The learner starts with the paper thesis and Transformer fundamentals, moves into the
+> core components and training details, then reaches experiments and reproduction.
 
 Open **Scaled dot-product attention** and its source reference.
 
@@ -117,7 +114,8 @@ or test result.
 
 **Screen:** Final slide.
 
-> **Source → Course → Practice → Evidence → Adaptation**
+> Canopy takes a learner from a source, to a course, to practice, to evidence of mastery,
+> and then to the next concept they need to review.
 
 > Technical knowledge is everywhere. The missing layer is turning knowledge into
 > capability. Canopy creates the bridge between learning something and being able to do
