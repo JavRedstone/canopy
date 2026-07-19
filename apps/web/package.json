@@ -20,12 +20,14 @@
     "@mui/material-nextjs": "^9.1.1",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.0.0",
+    "katex": "^0.16.47",
     "motion": "^12.42.2",
     "next": "^16.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@types/katex": "^0.16.8",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

@@ -156,3 +156,40 @@ def test_course_map_rejects_a_malformed_course_id() -> None:
     response = client.get("/api/v1/courses/not-a-uuid/map")
 
     assert response.status_code == 422
+
+
+def test_import_shared_course_gates_on_sharing_and_clones_to_importer() -> None:
+    client = TestClient(app)
+    owner = {"X-Demo-User-Id": "00000000-0000-0000-0000-000000000001"}
+    other = {"X-Demo-User-Id": "00000000-0000-0000-0000-000000000002"}
+
+    course = client.post(
+        "/api/v1/courses",
+        headers=owner,
+        json={"title": "Sharing 101", "goal": "Hand a course to a friend"},
+    )
+    assert course.status_code == 201
+    course_id = course.json()["id"]
+    assert course.json()["is_shared"] is False
+
+    # Not shared yet -> indistinguishable from a course that does not exist.
+    blocked = client.post("/api/v1/courses/import", headers=other, json={"course_id": course_id})
+    assert blocked.status_code == 404
+
+    shared = client.patch(f"/api/v1/courses/{course_id}", headers=owner, json={"is_shared": True})
+    assert shared.status_code == 200
+    assert shared.json()["is_shared"] is True
+
+    imported = client.post("/api/v1/courses/import", headers=other, json={"course_id": course_id})
+    assert imported.status_code == 201
+    body = imported.json()
+    assert body["title"] == "Sharing 101"
+    assert body["id"] != course_id
+    # The importer's copy is private by default -- sharing does not cascade.
+    assert body["is_shared"] is False
+
+    # The copy lands in the importer's library, and not in the owner's.
+    other_ids = [row["id"] for row in client.get("/api/v1/courses", headers=other).json()]
+    assert other_ids == [body["id"]]
+    owner_ids = [row["id"] for row in client.get("/api/v1/courses", headers=owner).json()]
+    assert body["id"] not in owner_ids

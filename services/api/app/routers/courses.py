@@ -11,7 +11,7 @@ from app.llm import LLMGatewayClient, LLMGatewayError
 from app.quiz import grade_quiz_answer, withhold_answer
 from app.repository import CourseRepository, get_repository
 from app.sandbox import SandboxError, SandboxFile, SandboxRunnerClient
-from app.schemas import CitationExcerptResponse, ConceptDetailResponse, CoursePointsResponse, CourseMapResponse, CourseMasteryResponse, CourseProgressResponse, CourseSourceSummary, CourseSummary, CreateCourseRequest, LessonHelperRequest, LessonHelperResponse, LessonWorkspaceFile, PrerequisiteReviewResponse, QuizAnswerRequest, QuizGradeResponse, RecommendationDecisionRequest, RecommendationsResponse, RunLessonRequest, RunLessonResponse, RunScriptRequest, RunScriptResponse, SourceDownloadResponse, UpdateCourseRequest
+from app.schemas import CitationExcerptResponse, ConceptDetailResponse, CoursePointsResponse, CourseMapResponse, CourseMasteryResponse, CourseProgressResponse, CourseSourceSummary, CourseSummary, CreateCourseRequest, ImportCourseRequest, LessonHelperRequest, LessonHelperResponse, LessonWorkspaceFile, PrerequisiteReviewResponse, QuizAnswerRequest, QuizGradeResponse, RecommendationDecisionRequest, RecommendationsResponse, RunLessonRequest, RunLessonResponse, RunScriptRequest, RunScriptResponse, SourceDownloadResponse, UpdateCourseRequest
 from app.settings import get_settings
 from app.textbook_pdf import render_textbook_pdf
 
@@ -76,6 +76,13 @@ def list_courses(current_user: CurrentUser, repository: Repository) -> list[Cour
 @router.post("", response_model=CourseSummary, status_code=status.HTTP_201_CREATED)
 def create_course(request: CreateCourseRequest, current_user: CurrentUser, repository: Repository) -> CourseSummary:
     return repository.create_course(current_user, request)
+
+
+@router.post("/import", response_model=CourseSummary, status_code=status.HTTP_201_CREATED)
+def import_course(request: ImportCourseRequest, current_user: CurrentUser, repository: Repository) -> CourseSummary:
+    """Clone a shared course's content into the caller's account by its id. The id is the
+    share token: only courses whose owner turned on sharing can be imported."""
+    return repository.import_course(current_user, request.course_id)
 
 
 @router.get("/{course_id}", response_model=CourseSummary)

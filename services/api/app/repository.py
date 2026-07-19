@@ -104,6 +104,11 @@ class CourseRepository(Protocol):
 
     def update_course(self, owner_id: UUID, course_id: UUID, request: UpdateCourseRequest) -> CourseSummary: ...
 
+    def import_course(self, owner_id: UUID, source_course_id: UUID) -> CourseSummary:
+        """Clone a shared course's content (not progress) into the caller's account and
+        return the new course. Raises 404 if the source is missing or not shared."""
+        ...
+
     def course_map(self, owner_id: UUID, course_id: UUID) -> CourseMapResponse: ...
 
     def course_progress(self, owner_id: UUID, course_id: UUID) -> CourseProgressResponse: ...
@@ -208,6 +213,7 @@ class CourseRecord:
     lesson_min: int = 12
     lesson_max: int = 20
     language: str = "python"
+    is_shared: bool = False
 
 
 class MemoryCourseRepository:
@@ -281,8 +287,32 @@ class MemoryCourseRepository:
             course.lesson_min = request.lesson_min
         if request.lesson_max is not None:
             course.lesson_max = request.lesson_max
+        if request.is_shared is not None:
+            course.is_shared = request.is_shared
         course.updated_at = datetime.now(UTC)
         return self._summary(course)
+
+    def import_course(self, owner_id: UUID, source_course_id: UUID) -> CourseSummary:
+        source = self.courses.get(source_course_id)
+        if source is None or not source.is_shared:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shared course not found.")
+        new_id = uuid4()
+        self.courses[new_id] = CourseRecord(
+            id=new_id,
+            owner_id=owner_id,
+            title=source.title,
+            goal=source.goal,
+            source_ids=list(source.source_ids),
+            status="ready",
+            active_version=1,
+            updated_at=datetime.now(UTC),
+            quiz_max_attempts=source.quiz_max_attempts,
+            lesson_min=source.lesson_min,
+            lesson_max=source.lesson_max,
+            language=source.language,
+            is_shared=False,
+        )
+        return self._summary(self.courses[new_id])
 
     def course_map(self, owner_id: UUID, course_id: UUID) -> CourseMapResponse:
         course = self._course_for_owner(owner_id, course_id)
@@ -454,6 +484,7 @@ class MemoryCourseRepository:
             lesson_min=course.lesson_min,
             lesson_max=course.lesson_max,
             language=course.language,
+            is_shared=course.is_shared,
         )
 
 
@@ -627,7 +658,7 @@ class SupabaseCourseRepository:
     def list_courses(self, owner_id: UUID) -> list[CourseSummary]:
         courses = self._data(
             self.client.table("courses")
-            .select("id,title,goal,status,active_version_id,updated_at,quiz_max_attempts,lesson_min,lesson_max,language")
+            .select("id,title,goal,status,active_version_id,updated_at,quiz_max_attempts,lesson_min,lesson_max,language,is_shared")
             .eq("owner_id", str(owner_id))
             .order("updated_at", desc=True),
             "list courses",
@@ -653,6 +684,8 @@ class SupabaseCourseRepository:
             payload["lesson_min"] = request.lesson_min
         if request.lesson_max is not None:
             payload["lesson_max"] = request.lesson_max
+        if request.is_shared is not None:
+            payload["is_shared"] = request.is_shared
         if payload:
             payload["updated_at"] = datetime.now(UTC).isoformat()
             self._data(
@@ -660,6 +693,36 @@ class SupabaseCourseRepository:
                 "update course",
             )
         return self.get_course(owner_id, course_id)
+
+    def import_course(self, owner_id: UUID, source_course_id: UUID) -> CourseSummary:
+        try:
+            result = self.client.rpc(
+                "import_shared_course",
+                {"p_source_course_id": str(source_course_id), "p_new_owner_id": str(owner_id)},
+            ).execute()
+        except (APIError, HTTPError) as exc:
+            # P0002: the source is missing or not shared -- deliberately indistinguishable, so
+            # an unshared id leaks nothing. P0001: it exists but is not finished building.
+            code = getattr(exc, "code", None)
+            if code == "P0002":
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shared course not found.") from exc
+            if code == "P0001":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="That course is still being built and cannot be imported yet.",
+                ) from exc
+            logger.exception("Supabase request failed while attempting to import a shared course")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="The course service is temporarily unavailable.",
+            ) from exc
+
+        new_course_id = result.data
+        if isinstance(new_course_id, list):
+            new_course_id = new_course_id[0] if new_course_id else None
+        if not new_course_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shared course not found.")
+        return self.get_course(owner_id, UUID(str(new_course_id)))
 
     def course_map(self, owner_id: UUID, course_id: UUID) -> CourseMapResponse:
         course = self._course_for_owner(owner_id, course_id)
@@ -1787,7 +1850,7 @@ class SupabaseCourseRepository:
         return self._one(
             self._data(
                 self.client.table("courses")
-                .select("id,title,goal,status,active_version_id,updated_at,quiz_max_attempts,lesson_min,lesson_max,language")
+                .select("id,title,goal,status,active_version_id,updated_at,quiz_max_attempts,lesson_min,lesson_max,language,is_shared")
                 .eq("id", str(course_id))
                 .eq("owner_id", str(owner_id)),
                 "load course",
@@ -1956,6 +2019,7 @@ class SupabaseCourseRepository:
             lessons_completed=completed,
             lessons_total=total,
             language=row.get("language", "python"),
+            is_shared=row.get("is_shared", False),
         )
 
 

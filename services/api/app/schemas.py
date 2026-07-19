@@ -61,6 +61,8 @@ class UpdateCourseRequest(BaseModel):
     quiz_max_attempts: int | None = Field(default=None, ge=1, le=10)
     lesson_min: int | None = Field(default=None, ge=6, le=24)
     lesson_max: int | None = Field(default=None, ge=6, le=24)
+    # Google-Docs-style link sharing: on means anyone with the course id can import a copy.
+    is_shared: bool | None = None
 
     @model_validator(mode="after")
     def lesson_range_is_complete_and_ordered(self) -> "UpdateCourseRequest":
@@ -84,6 +86,14 @@ class CourseSummary(BaseModel):
     lessons_completed: int = 0
     lessons_total: int = 0
     language: CourseLanguage = "python"
+    # True when the owner has turned on link sharing for this course.
+    is_shared: bool = False
+
+
+class ImportCourseRequest(BaseModel):
+    """Import a copy of a shared course's content by its id (its share token)."""
+
+    course_id: UUID
 
 
 class CoursePointsResponse(BaseModel):

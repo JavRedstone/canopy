@@ -14,6 +14,7 @@
 
 - [`ARCHITECTURE.md`](./architecture/ARCHITECTURE.md) — the target system design. Treat as directional; it describes some capabilities (assignments, WebSockets, full adaptation) ahead of the current implementation.
 - [`SANDBOX_ARCHITECTURE.md`](./architecture/SANDBOX_ARCHITECTURE.md) — the code-execution sandbox's design rationale.
+- [`PRACTICE_QUESTION_POOL.md`](./architecture/PRACTICE_QUESTION_POOL.md) — design/build doc for the per-concept practice question pool (low-stakes drill + non-repeating bank).
 - [`SECURITY.md`](./architecture/SECURITY.md) — current security posture across every service (auth, sandbox isolation, RLS, secrets). The most up to date source for anything security-related.
 - `architecture-diagram.drawio` — client → API → worker/sandbox diagram source.
 

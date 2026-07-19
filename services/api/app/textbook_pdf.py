@@ -21,7 +21,18 @@ def _inline(markdown: str) -> str:
     text = escape(markdown.strip())
     text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
     text = re.sub(r"`(.+?)`", r'<font name="Courier">\1</font>', text)
+    # There is no LaTeX renderer in reportlab; show the math expression in italics without its
+    # delimiters so exports read cleanly rather than surfacing raw $ / \( markers. Order matters:
+    # strip the paired display/inline delimiters before the bare-$ pass.
+    text = re.sub(r"\$\$(.+?)\$\$", r"<i>\1</i>", text)
+    text = re.sub(r"\\\((.+?)\\\)", r"<i>\1</i>", text)
+    text = re.sub(r"\\\[(.+?)\\\]", r"<i>\1</i>", text)
+    text = re.sub(r"\$(?![\s\d])([^$]+?)\$(?!\d)", r"<i>\1</i>", text)
     return text
+
+
+def _math_flowable(tex: str, styles: dict[str, ParagraphStyle]) -> Paragraph:
+    return Paragraph(f"<i>{escape(tex.strip())}</i>", styles["body"])
 
 
 def _card(content: list, background: str, padding: int = 12) -> Table:
@@ -57,6 +68,23 @@ def _markdown_flowables(markdown: str, styles: dict[str, ParagraphStyle]) -> Ite
                 code.append(lines[index])
                 index += 1
             yield _card([Preformatted("\n".join(code), styles["code"])], "#0f172a", 11)
+        elif text.startswith("$$") or text.startswith("\\["):
+            yield from flush_paragraph()
+            close = "$$" if text.startswith("$$") else "\\]"
+            first = text[2:]
+            if close in first:
+                yield _math_flowable(first.split(close, 1)[0], styles)
+            else:
+                math: list[str] = [first]
+                index += 1
+                while index < len(lines) and close not in lines[index]:
+                    math.append(lines[index])
+                    index += 1
+                if index < len(lines):
+                    math.append(lines[index].split(close, 1)[0])
+                yield _math_flowable("\n".join(math), styles)
+                index += 1
+                continue
         elif not text:
             yield from flush_paragraph()
             yield Spacer(1, 6)

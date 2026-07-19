@@ -2,17 +2,62 @@ import { Fragment, ReactNode } from "react";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Tooltip from "@mui/material/Tooltip";
+import katex from "katex";
+import "katex/dist/katex.min.css";
 
 const CITATION_PATTERN = /\[([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\]/gi;
 
+// Inline math delimiters, longest/most-specific first so `$$` wins over `$`. The bare-`$`
+// arm is deliberately conservative to avoid eating prose currency ("$5 for $10"): the
+// opening `$` may not be followed by whitespace or another `$`, and the closing `$` may not
+// be followed by a digit. `\(...\)`/`\[...\]` are unambiguous and always treated as math.
+const INLINE_MATH_PATTERN = /(\$\$[\s\S]+?\$\$|\\\([\s\S]+?\\\)|\\\[[\s\S]+?\\\]|\$(?![\s$])(?:\\[\s\S]|[^\\$])+?\$(?!\d))/g;
+const HAS_MATH = /\$|\\\(|\\\[/;
+
+/** Split a math token into its LaTeX body and display mode, or null when it is not one. */
+function mathToken(token: string): { tex: string; display: boolean } | null {
+  if (token.startsWith("$$") && token.endsWith("$$") && token.length >= 4) return { tex: token.slice(2, -2), display: true };
+  if (token.startsWith("\\[") && token.endsWith("\\]")) return { tex: token.slice(2, -2), display: true };
+  if (token.startsWith("\\(") && token.endsWith("\\)")) return { tex: token.slice(2, -2), display: false };
+  if (token.startsWith("$") && token.endsWith("$") && token.length >= 2) return { tex: token.slice(1, -1), display: false };
+  return null;
+}
+
+/** Render one span of LaTeX with KaTeX. `throwOnError: false` keeps a malformed formula
+ *  (common in LLM output) from taking down the whole lesson -- it shows in red instead. */
+function MathSpan({ tex, display }: { tex: string; display: boolean }) {
+  const html = katex.renderToString(tex.trim(), { throwOnError: false, displayMode: display, output: "htmlAndMathml" });
+  return (
+    <Box
+      component="span"
+      sx={{
+        display: display ? "block" : "inline",
+        maxWidth: "100%",
+        overflowX: display ? "auto" : "visible",
+        overflowY: "hidden",
+        textAlign: display ? "center" : "inherit",
+      }}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
+}
+
 function formatted(text: string, keyPrefix: string): ReactNode[] {
-  const tokens = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+  const tokens = text.split(/(\*\*[^*]+\*\*|`[^`]+`|\[[^\]\n]+\]\([^)\s]+\))/g);
   return tokens.map((token, index) => {
     if (token.startsWith("**") && token.endsWith("**")) return <strong key={`${keyPrefix}-${index}`}>{token.slice(2, -2)}</strong>;
     if (token.startsWith("`") && token.endsWith("`")) {
       return (
         <Box component="code" key={`${keyPrefix}-${index}`} sx={{ px: "4px", py: "1px", borderRadius: 0.5, bgcolor: "action.hover", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: "0.9em" }}>
           {token.slice(1, -1)}
+        </Box>
+      );
+    }
+    const link = token.match(/^\[([^\]]+)\]\(([^)\s]+)\)$/);
+    if (link) {
+      return (
+        <Box component="a" href={link[2]} target="_blank" rel="noopener noreferrer" key={`${keyPrefix}-${index}`} sx={{ color: "primary.main", textDecoration: "underline", textUnderlineOffset: "2px" }}>
+          {link[1]}
         </Box>
       );
     }
@@ -50,7 +95,7 @@ function findVisibleHighlight(text: string, selected: string, occurrence = 0): {
 
 /** Inline chunk citations ([uuid]) become numbered superscripts when the citation list is
  *  known, and disappear entirely when it is not; learners never see raw UUIDs. */
-function inline(
+function inlineText(
   text: string,
   citations?: string[],
   highlightText?: string,
@@ -137,6 +182,37 @@ function inline(
   return nodes;
 }
 
+/** Inline rendering with LaTeX math awareness. When a span has no math delimiters this is a
+ *  no-op wrapper over inlineText, so existing citation/highlight behavior is byte-for-byte
+ *  unchanged; math spans are pulled out first and rendered with KaTeX so the emphasis and
+ *  citation passes never see their contents. */
+function inline(
+  text: string,
+  citations?: string[],
+  highlightText?: string,
+  highlightFlash = false,
+  highlightOccurrence = 0,
+  onCitationClick?: (citationId: string) => void
+): ReactNode[] {
+  if (!HAS_MATH.test(text)) {
+    return inlineText(text, citations, highlightText, highlightFlash, highlightOccurrence, onCitationClick);
+  }
+  const nodes: ReactNode[] = [];
+  text.split(INLINE_MATH_PATTERN).forEach((part, index) => {
+    if (!part) return;
+    const math = mathToken(part);
+    if (math) {
+      nodes.push(<MathSpan key={`math-${index}`} tex={math.tex} display={math.display} />);
+    } else {
+      // Each inlineText() call restarts its own local key counter, so wrap every text segment
+      // in a keyed Fragment -- that scopes those inner keys to this segment and keeps sibling
+      // keys unique across the split.
+      nodes.push(<Fragment key={`seg-${index}`}>{inlineText(part, citations, highlightText, highlightFlash, highlightOccurrence, onCitationClick)}</Fragment>);
+    }
+  });
+  return nodes;
+}
+
 // Body headings need real hierarchy or the prose reads flat: MUI's default subtitle1/h6
 // land at ~body weight and size. These map each markdown level to a distinct size + bold
 // weight + tighter leading, with extra top margin so a heading signals a new section.
@@ -154,6 +230,7 @@ export function MarkdownText({ children, citations, highlightText, highlightPara
   let paragraph: string[] = [];
   let list: { ordered: boolean; items: string[] } | undefined;
   let codeLines: string[] | undefined;
+  let mathBlock: { close: string; lines: string[] } | undefined;
   let paragraphNumber = 0;
 
   const flushParagraph = () => {
@@ -181,6 +258,19 @@ export function MarkdownText({ children, citations, highlightText, highlightPara
     );
     list = undefined;
   };
+  const flushMathBlock = (tex: string) => {
+    paragraphNumber += 1;
+    blocks.push(
+      <Box
+        key={`math-${blocks.length}`}
+        data-lesson-paragraph={`${paragraphGroup}-${paragraphNumber}`}
+        data-lesson-source={`$$${tex.trim()}$$`}
+        sx={{ my: 0.5, overflowX: "auto" }}
+      >
+        <MathSpan tex={tex} display />
+      </Box>
+    );
+  };
 
   for (const line of lines) {
     if (line.trimStart().startsWith("```")) {
@@ -203,6 +293,32 @@ export function MarkdownText({ children, citations, highlightText, highlightPara
     }
     if (codeLines) {
       codeLines.push(line);
+      continue;
+    }
+    // Multi-line display equation ($$...$$ or \[...\]) started on an earlier line.
+    if (mathBlock) {
+      const closeIndex = line.indexOf(mathBlock.close);
+      if (closeIndex >= 0) {
+        mathBlock.lines.push(line.slice(0, closeIndex));
+        flushMathBlock(mathBlock.lines.join("\n"));
+        mathBlock = undefined;
+      } else {
+        mathBlock.lines.push(line);
+      }
+      continue;
+    }
+    const trimmedStart = line.trimStart();
+    const mathOpen = trimmedStart.startsWith("$$") ? "$$" : trimmedStart.startsWith("\\[") ? "\\[" : undefined;
+    if (mathOpen) {
+      flushParagraph(); flushList();
+      const close = mathOpen === "$$" ? "$$" : "\\]";
+      const afterOpen = trimmedStart.slice(mathOpen.length);
+      const closeIndex = afterOpen.indexOf(close);
+      if (closeIndex >= 0) {
+        flushMathBlock(afterOpen.slice(0, closeIndex));
+      } else {
+        mathBlock = { close, lines: afterOpen.trim() ? [afterOpen] : [] };
+      }
       continue;
     }
     const heading = line.match(/^(#{1,3})\s+(.+)$/);
@@ -238,6 +354,7 @@ export function MarkdownText({ children, citations, highlightText, highlightPara
     }
   }
   flushParagraph(); flushList();
+  if (mathBlock) flushMathBlock(mathBlock.lines.join("\n"));
   if (codeLines) {
     blocks.push(
       <Box

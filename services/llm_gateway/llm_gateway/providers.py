@@ -43,7 +43,7 @@ class OpenAIProvider:
 
     def respond(self, *, model: str, input: list[dict[str, Any]], tools: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
         response = self.client.responses.create(model=model, input=input, tools=tools or [])
-        return [item.model_dump(mode="json") for item in response.output]
+        return _strip_output_only_fields([item.model_dump(mode="json") for item in response.output])
 
     def embed(self, *, model: str, texts: list[str], dimensions: int | None) -> list[list[float]]:
         kwargs: dict[str, Any] = {"model": model, "input": texts}
@@ -138,7 +138,7 @@ class BedrockConverseProvider:
         if tool_config:
             kwargs["toolConfig"] = tool_config
         response = self.client.converse(**kwargs)
-        return _from_converse_output(response["output"]["message"])
+        return _strip_output_only_fields(_from_converse_output(response["output"]["message"]))
 
     def embed(self, *, model: str, texts: list[str], dimensions: int | None) -> list[list[float]]:
         embeddings: list[list[float]] = []
@@ -150,6 +150,19 @@ class BedrockConverseProvider:
             payload = json.loads(response["body"].read())
             embeddings.append(payload["embedding"])
         return embeddings
+
+
+def _strip_output_only_fields(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop fields the Responses API emits on *output* items but rejects on *input*.
+
+    The lesson-repair loop echoes each turn's output items straight into the next turn's
+    input (worker._tool_repair_loop). OpenAI stamps `status` on message/function_call
+    output items, and the Converse adapter does the same in _from_converse_output, so
+    feeding them back unmodified triggers `400 Unknown parameter: 'input[N].status'`.
+    Stripping it here -- the one boundary every provider funnels through -- fixes the loop
+    for all providers without the worker needing to know any provider specifics.
+    """
+    return [{key: value for key, value in item.items() if key != "status"} for item in items]
 
 
 def build_provider(settings: GatewaySettings) -> ModelProvider:

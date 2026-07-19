@@ -35,7 +35,9 @@ class GatewaySettings(BaseSettings):
     # run, so it can afford the flagship Sol reasoning tier where generation cannot.
     openai_builder_model: str = "gpt-5.6-luna"
     openai_repair_model: str = "gpt-5.6-sol"
-    openai_helper_model: str = "gpt-5.4-mini"
+    # The on-page lesson helper answers learner questions in-context; moved onto the
+    # newest-generation Luna tier so its guidance keeps pace with the builder's content.
+    openai_helper_model: str = "gpt-5.6-luna"
 
     azure_openai_endpoint: str | None = None
     azure_openai_planner_deployment: str | None = None

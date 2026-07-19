@@ -32,6 +32,7 @@ import { CourseProgressSteps } from "@/components/course-progress";
 import { MasteryDashboard } from "@/components/mastery-dashboard";
 import { RecommendationsPanel } from "@/components/recommendations-panel";
 import { CourseSettingsDialog } from "@/components/course-settings-dialog";
+import { CourseShareDialog } from "@/components/course-share-dialog";
 import { CourseSourcesDialog } from "@/components/course-sources-dialog";
 import { Icon } from "@/components/icon";
 import { SettingsMenu, SettingsMenuAction } from "@/components/settings-menu";
@@ -55,6 +56,7 @@ export function CourseDetail({ courseId }: { courseId: string }) {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string>();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
@@ -262,11 +264,21 @@ export function CourseDetail({ courseId }: { courseId: string }) {
             />
           ) : null}
           <Button size="small" variant="outlined" startIcon={<Icon name="folder_open" />} onClick={() => setSourcesOpen(true)}>Sources</Button>
+          <Button
+            size="small"
+            variant={course.is_shared ? "contained" : "outlined"}
+            color={course.is_shared ? "success" : "primary"}
+            startIcon={<Icon name={course.is_shared ? "public" : "share"} />}
+            onClick={() => setShareOpen(true)}
+          >
+            {course.is_shared ? "Shared" : "Share"}
+          </Button>
           <SettingsMenu actions={settingsActions} label="Course settings" />
         </Stack>
       </Stack>
 
       <CourseSettingsDialog course={course} open={settingsOpen} onOpenChange={setSettingsOpen} onSaved={setCourse} />
+      <CourseShareDialog course={course} open={shareOpen} onOpenChange={setShareOpen} onSaved={setCourse} />
       <CourseSourcesDialog courseId={courseId} open={sourcesOpen} onOpenChange={setSourcesOpen} />
 
       <Dialog open={confirmDeleteOpen} onClose={() => setConfirmDeleteOpen(false)}>

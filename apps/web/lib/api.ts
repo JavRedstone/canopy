@@ -13,6 +13,8 @@ export interface CourseSummary {
   lessons_completed: number;
   lessons_total: number;
   language: CourseLanguage;
+  // True once the owner turns on link sharing: anyone with the course id can import a copy.
+  is_shared: boolean;
 }
 
 export interface CourseMapConcept {
@@ -217,6 +219,22 @@ export interface UpdateCourseRequest {
   quiz_max_attempts?: number;
   lesson_min?: number;
   lesson_max?: number;
+  is_shared?: boolean;
+}
+
+export class SharedCourseNotFoundError extends Error {}
+
+// Import a copy of a shared course's content (not progress) by its id. The id is the share
+// token: unshared or unknown ids both come back as "not found", by design.
+export async function importCourse(courseId: string, accessToken: string): Promise<CourseSummary> {
+  const response = await fetch(`${apiUrl}/api/v1/courses/import`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ course_id: courseId })
+  });
+  if (response.status === 404) throw new SharedCourseNotFoundError("No shared course was found for that id.");
+  if (!response.ok) throw new Error(`Unable to import the course (HTTP ${response.status}).`);
+  return response.json();
 }
 
 export async function updateCourse(courseId: string, request: UpdateCourseRequest, accessToken: string): Promise<CourseSummary> {

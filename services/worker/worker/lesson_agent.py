@@ -22,6 +22,13 @@ INTERLEAVE_INSTRUCTION = (
     "markers inside code fences and never write the example or quiz content itself in explanation_markdown."
 )
 
+MATH_FORMATTING_INSTRUCTION = (
+    "Use fenced Markdown code blocks only for code, never for mathematics. Write any mathematical "
+    "notation as LaTeX so it renders as real math: wrap inline math in \\( \\) and put display "
+    "equations in $$ ... $$ on their own lines (KaTeX renders both). Never split an inline backtick "
+    "or inline-math expression across lines."
+)
+
 QUIZ_KINDS_INSTRUCTION = (
     "Quiz item kinds: 'mcq' needs 2-6 options, each with a one-sentence explanation_markdown of why it is "
     "right or wrong, and a correct_option_index; 'multi_select' needs 3-6 options with the same per-option "
@@ -41,8 +48,7 @@ CODING_CONTENT_SYSTEM_PROMPT = (
     "from the exercise itself. Add 1-2 quiz_items that check understanding of the concept, not trivia. "
     f"{QUIZ_KINDS_INSTRUCTION} {INTERLEAVE_INSTRUCTION} "
     "Include 1-2 actionable hints that progressively guide the learner without giving away the final "
-    "implementation. Use fenced Markdown code blocks for any multi-line code or equation; never split an "
-    "inline backtick expression across lines."
+    f"implementation. {MATH_FORMATTING_INSTRUCTION}"
 )
 
 CODING_ARTIFACTS_SYSTEM_PROMPT = (
@@ -71,9 +77,8 @@ CPP_CODING_CONTENT_SYSTEM_PROMPT = (
     "distinct from the exercise itself. Add 1-2 quiz_items that check understanding of the concept, not trivia. "
     f"{QUIZ_KINDS_INSTRUCTION} {INTERLEAVE_INSTRUCTION} "
     "Include 1-2 actionable hints that progressively guide the learner without giving away the final "
-    "implementation. Use fenced Markdown code blocks for any multi-line code; never split an inline backtick "
-    "expression across lines. Favor modern, idiomatic C++17, and call out any memory-safety or pointer/"
-    "reference pitfalls the exercise touches on."
+    f"implementation. {MATH_FORMATTING_INSTRUCTION} Favor modern, idiomatic C++17, and call out any "
+    "memory-safety or pointer/reference pitfalls the exercise touches on."
 )
 
 CPP_CODING_ARTIFACTS_SYSTEM_PROMPT = (
@@ -103,9 +108,7 @@ CONCEPTUAL_GENERATION_SYSTEM_PROMPT = (
     "misconception. Add one worked example, a short concrete illustration of the idea in action (use a fenced "
     "code block only when code genuinely clarifies the point). Add 2-3 quiz_items that check understanding of "
     "the concept, not trivia: one inline practice question plus one or two mastery "
-    f"questions. {QUIZ_KINDS_INSTRUCTION} {INTERLEAVE_INSTRUCTION} "
-    "Use fenced Markdown code blocks for any multi-line code or equation; never split an inline backtick "
-    "expression across lines."
+    f"questions. {QUIZ_KINDS_INSTRUCTION} {INTERLEAVE_INSTRUCTION} {MATH_FORMATTING_INSTRUCTION}"
 )
 
 ASSESSMENT_GENERATION_SYSTEM_PROMPT = (
@@ -183,6 +186,40 @@ ENVIRONMENT_ID_BY_LANGUAGE = {
     "cpp": "cpp-basic",
 }
 
+# What each sandbox environment actually provides, fed to the coding generators so a lab
+# only ever depends on what exists. The sandbox has NO network access, so importing a
+# package that isn't installed fails every test at collection and the whole build fails
+# (exactly how a torch-based lab broke). Keep in sync with the per-environment Dockerfiles
+# under services/sandbox_runner/sandbox_image/ -- those are the source of truth for what's
+# installed. If the environment list grows, this is where the model learns its options.
+ENVIRONMENT_PACKAGES = {
+    "python-basic": (
+        "Runtime environment: the sandbox runs this lab on Python 3.13 with, beyond the "
+        "standard library, ONLY these third-party packages installed: numpy, pandas, "
+        "scikit-learn, pytest. The sandbox has no network and no way to install anything "
+        "else, so importing any other third-party package -- torch, tensorflow, jax, "
+        "transformers, requests, and the like -- makes every test error at collection and "
+        "the lab fails to build. Never import outside that list. Implement numerical, ML, "
+        "or deep-learning behavior from scratch with numpy rather than reaching for a "
+        "framework: the from-scratch numpy implementation IS the intended exercise, not a "
+        "one-line call into a library that hides the concept being taught."
+    ),
+    "cpp-basic": (
+        "Runtime environment: the sandbox compiles this lab with g++ 13 (C++17) and "
+        "provides the doctest single-header framework (already present as doctest.h). "
+        "There is no package manager and no network access, so use only the C++ standard "
+        "library plus doctest."
+    ),
+}
+
+
+def _coding_system_prompt(base_prompt: str, language: str) -> str:
+    """Append the target sandbox environment's package manifest to a coding-generation
+    prompt so the model only writes labs that can actually run there."""
+    environment_id = ENVIRONMENT_ID_BY_LANGUAGE.get(language, "python-basic")
+    manifest = ENVIRONMENT_PACKAGES.get(environment_id)
+    return f"{base_prompt} {manifest}" if manifest else base_prompt
+
 
 def generate_lesson_content(
     openai_client: LLMGatewayClient,
@@ -195,7 +232,7 @@ def generate_lesson_content(
     language: str = "python",
 ) -> LessonContentBundle:
     return _generate_content(
-        openai_client, model, CODING_CONTENT_PROMPT_BY_LANGUAGE[language],
+        openai_client, model, _coding_system_prompt(CODING_CONTENT_PROMPT_BY_LANGUAGE[language], language),
         concept_title=concept_title, concept_summary=concept_summary, chunks=chunks, feedback=feedback,
     )
 
@@ -292,7 +329,7 @@ def generate_coding_artifacts(
     language: str = "python",
 ) -> CodingArtifactsBundle:
     input_items: list[dict[str, Any]] = [
-        {"role": "system", "content": CODING_ARTIFACTS_PROMPT_BY_LANGUAGE[language]},
+        {"role": "system", "content": _coding_system_prompt(CODING_ARTIFACTS_PROMPT_BY_LANGUAGE[language], language)},
         {
             "role": "user",
             "content": (

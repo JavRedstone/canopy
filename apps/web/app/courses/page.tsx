@@ -1,6 +1,7 @@
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { CourseDashboard } from "@/components/course-dashboard";
+import { ImportCourseButton } from "@/components/course-import-dialog";
 import { LinkButton } from "@/components/link-button";
 import { PageShell } from "@/components/page-shell";
 
@@ -15,6 +16,7 @@ export default function CoursesPage() {
         </Stack>
         <Stack direction="row" sx={{ gap: 1.5 }}>
           <LinkButton href="/courses/playground" variant="outlined">Sandbox playground</LinkButton>
+          <ImportCourseButton />
           <LinkButton href="/courses/new" variant="contained">New course</LinkButton>
         </Stack>
       </Stack>
