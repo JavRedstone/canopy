@@ -15,6 +15,7 @@ import Avatar from "@mui/material/Avatar";
 import Divider from "@mui/material/Divider";
 import { alpha } from "@mui/material/styles";
 import { QuizAnswerRequest, QuizGradeResponse, QuizItemPreview, answerQuizItem } from "@/lib/api";
+import { Icon } from "@/components/icon";
 import { MarkdownText } from "@/components/markdown-text";
 import { ConfettiBurst } from "@/components/confetti-burst";
 import { createClient } from "@/lib/supabase/client";
@@ -33,7 +34,7 @@ function selectionFromAnswer(answer: QuizAnswerRequest | null): number[] {
   return answer.selected_option_indices ?? [];
 }
 
-export function QuizQuestion({ courseId, slug, item, index, maxAttempts = DEFAULT_MAX_ATTEMPTS, onCorrect, onAnswered }: { courseId: string; slug: string; item: QuizItemPreview; index: number; maxAttempts?: number; onCorrect?: (itemId: string) => void; onAnswered?: () => void }) {
+export function QuizQuestion({ courseId, slug, item, index, maxAttempts = DEFAULT_MAX_ATTEMPTS, onCorrect, onAnswered, onAskHelper }: { courseId: string; slug: string; item: QuizItemPreview; index: number; maxAttempts?: number; onCorrect?: (itemId: string) => void; onAnswered?: () => void; onAskHelper?: (item: QuizItemPreview) => void }) {
   // A previously-correct item is hydrated with the exact answer and grade it was given
   // last time, so it replays as the real answered state instead of resetting blank.
   const [selected, setSelected] = useState<number[]>(() => selectionFromAnswer(item.previous_answer));
@@ -115,6 +116,11 @@ export function QuizQuestion({ courseId, slug, item, index, maxAttempts = DEFAUL
           {index + 1}
         </Avatar>
         <Box sx={{ flex: 1 }}><MarkdownText>{item.prompt_markdown}</MarkdownText></Box>
+        {onAskHelper && !(answered && grade.correct) ? (
+          <Button size="small" variant="text" startIcon={<Icon name="auto_awesome" />} onClick={() => onAskHelper(item)} sx={{ flexShrink: 0 }}>
+            Ask helper
+          </Button>
+        ) : null}
       </Stack>
 
       {isChoice ? (
@@ -234,7 +240,7 @@ export function QuizQuestion({ courseId, slug, item, index, maxAttempts = DEFAUL
   );
 }
 
-export function QuizSection({ courseId, slug, items, maxAttempts = DEFAULT_MAX_ATTEMPTS, title = "Quick check", onComplete, onAnswered }: { courseId: string; slug: string; items?: QuizItemPreview[]; maxAttempts?: number; title?: string; onComplete?: () => void; onAnswered?: () => void }) {
+export function QuizSection({ courseId, slug, items, maxAttempts = DEFAULT_MAX_ATTEMPTS, title = "Quick check", onComplete, onAnswered, onAskHelper }: { courseId: string; slug: string; items?: QuizItemPreview[]; maxAttempts?: number; title?: string; onComplete?: () => void; onAnswered?: () => void; onAskHelper?: (item: QuizItemPreview) => void }) {
   const questions = items ?? [];
   const [correctIds, setCorrectIds] = useState<Set<string>>(() => new Set(questions.filter((item) => item.previous_grade?.correct).map((item) => item.id)));
   if (!questions.length) return null;

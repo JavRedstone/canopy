@@ -133,6 +133,7 @@ function LessonBody({
   highlightFlash,
   paragraphGroup,
   onCitationClick,
+  onAskHelperForQuiz,
 }: {
   courseId: string;
   slug: string;
@@ -148,6 +149,7 @@ function LessonBody({
   highlightFlash?: boolean;
   paragraphGroup?: string;
   onCitationClick?: (citationId: string) => void;
+  onAskHelperForQuiz?: (item: QuizItemPreview) => void;
 }) {
   const blocks: ReactNode[] = [];
   const placedExamples = new Set<number>();
@@ -175,7 +177,7 @@ function LessonBody({
       flush();
       placedQuiz.add(index);
       blocks.push(
-        <QuizQuestion courseId={courseId} slug={slug} item={quizItems[index]} index={placedQuiz.size - 1} maxAttempts={quizMaxAttempts} onAnswered={onQuizAnswered} key={`quiz-${index}`} />
+        <QuizQuestion courseId={courseId} slug={slug} item={quizItems[index]} index={placedQuiz.size - 1} maxAttempts={quizMaxAttempts} onAnswered={onQuizAnswered} onAskHelper={onAskHelperForQuiz} key={`quiz-${index}`} />
       );
     } else {
       flush();
@@ -305,6 +307,8 @@ function LearningHelperSidebar({
   slug,
   selectedText,
   selectedParagraph,
+  focusedQuizItem,
+  workspaceFiles,
   open,
   onToggle,
   onClearSelection,
@@ -314,6 +318,8 @@ function LearningHelperSidebar({
   slug: string;
   selectedText: string;
   selectedParagraph?: { id: string; source: string; occurrence: number };
+  focusedQuizItem?: QuizItemPreview;
+  workspaceFiles?: LessonWorkspaceFile[];
   open: boolean;
   onToggle: () => void;
   onClearSelection: () => void;
@@ -326,10 +332,11 @@ function LearningHelperSidebar({
   const [asking, setAsking] = useState(false);
   const [error, setError] = useState<string>();
 
-  // Reset the previous answer whenever the lesson or focused passage changes, without an
-  // effect: comparing against the previous key during render (React's "adjusting state
-  // during render" pattern) avoids the extra render an effect would cause.
-  const resetKey = `${slug}::${selectedText}`;
+  // Reset the previous answer whenever the lesson, focused passage, or focused quiz
+  // question changes, without an effect: comparing against the previous key during render
+  // (React's "adjusting state during render" pattern) avoids the extra render an effect
+  // would cause.
+  const resetKey = `${slug}::${selectedText}::${focusedQuizItem?.id ?? ""}`;
   const [lastResetKey, setLastResetKey] = useState(resetKey);
   if (resetKey !== lastResetKey) {
     setLastResetKey(resetKey);
@@ -349,7 +356,10 @@ function LearningHelperSidebar({
       const { data } = await createClient().auth.getSession();
       if (!data.session) throw new Error("Your session has expired. Please sign in again.");
       const revisionContext = requestRevision && selectedParagraph ? selectedParagraph.source : selectedText;
-      const response = await askLessonHelper(courseId, slug, text, revisionContext || undefined, data.session.access_token, requestRevision);
+      const response = await askLessonHelper(courseId, slug, text, revisionContext || undefined, data.session.access_token, requestRevision, {
+        workspaceFiles,
+        quizItemId: focusedQuizItem?.id,
+      });
       setAnswer(response.answer_markdown);
       setReplacement(response.replacement_markdown ?? undefined);
     } catch (caught) {
@@ -369,8 +379,19 @@ function LearningHelperSidebar({
       </Stack>
       {open ? (
         <Stack sx={{ height: "calc(100% - 52px)", p: 2, gap: 1.5, overflowY: "auto" }}>
-          <Typography variant="body2" color="text.secondary">Ask about anything on this lesson. The helper uses the whole page, and can focus on an optional passage.</Typography>
-          {selectedText ? (
+          <Typography variant="body2" color="text.secondary">
+            Ask about anything on this lesson, lab, or quiz question. The helper uses the whole page, and can focus
+            on an optional passage or question -- it guides you toward the answer without giving it away.
+          </Typography>
+          {focusedQuizItem ? (
+            <Box sx={{ p: 1.25, borderRadius: 1.5, bgcolor: "action.hover", borderLeft: 3, borderColor: "primary.main", position: "relative" }}>
+              <IconButton size="small" onClick={onClearSelection} aria-label="Use the full lesson instead" sx={{ position: "absolute", top: 4, right: 4 }}>
+                <Icon name="close" />
+              </IconButton>
+              <Typography variant="caption" color="text.secondary">Focused question</Typography>
+              <Typography variant="body2" sx={{ mt: 0.4, pr: 3, whiteSpace: "pre-wrap", display: "-webkit-box", WebkitLineClamp: 6, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{focusedQuizItem.prompt_markdown}</Typography>
+            </Box>
+          ) : selectedText ? (
             <Box sx={{ p: 1.25, borderRadius: 1.5, bgcolor: "action.hover", borderLeft: 3, borderColor: "primary.main", position: "relative" }}>
               <IconButton size="small" onClick={onClearSelection} aria-label="Use the full lesson instead" sx={{ position: "absolute", top: 4, right: 4 }}>
                 <Icon name="close" />
@@ -380,8 +401,16 @@ function LearningHelperSidebar({
             </Box>
           ) : null}
           <Stack direction="row" sx={{ flexWrap: "wrap", gap: 0.75 }}>
-            <Button size="small" variant="outlined" onClick={() => void ask("Explain this more simply.")}>Explain simply</Button>
-            <Button size="small" variant="outlined" onClick={() => void ask("Why does this matter in practice?")}>Why it matters</Button>
+            {focusedQuizItem ? (
+              <Button size="small" variant="outlined" onClick={() => void ask("I'm not sure how to approach this question. Can you give me a hint, without telling me the answer?")}>Give me a hint</Button>
+            ) : workspaceFiles?.length ? (
+              <Button size="small" variant="outlined" onClick={() => void ask("I'm stuck on this exercise. Can you give me a hint based on my current code, without telling me the answer?")}>Give me a hint</Button>
+            ) : (
+              <>
+                <Button size="small" variant="outlined" onClick={() => void ask("Explain this more simply.")}>Explain simply</Button>
+                <Button size="small" variant="outlined" onClick={() => void ask("Why does this matter in practice?")}>Why it matters</Button>
+              </>
+            )}
           </Stack>
           <TextField
             label="Ask about this lesson"
@@ -426,6 +455,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
   const [selectedText, setSelectedText] = useState("");
   const [selectedRange, setSelectedRange] = useState<Range>();
   const [selectedParagraph, setSelectedParagraph] = useState<{ id: string; source: string; occurrence: number }>();
+  const [focusedQuizItem, setFocusedQuizItem] = useState<QuizItemPreview>();
   const [bubbleRect, setBubbleRect] = useState<{ top: number; left: number }>();
   const [lessonUpdateNotice, setLessonUpdateNotice] = useState(false);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
@@ -548,11 +578,21 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
     setFiles((current) => current.map((file) => file.path === path ? { ...file, content } : file));
   }
 
+  function handleAskHelperForQuizItem(item: QuizItemPreview) {
+    setSelectedText("");
+    setSelectedRange(undefined);
+    setSelectedParagraph(undefined);
+    setBubbleRect(undefined);
+    setFocusedQuizItem(item);
+    setHelperOpen(true);
+  }
+
   function captureSelection(event: React.MouseEvent<HTMLElement>) {
     const selection = window.getSelection();
     if (!selection?.rangeCount || !event.currentTarget.contains(selection.getRangeAt(0).commonAncestorContainer)) return;
     const text = selection.toString().trim();
     if (!text) return;
+    setFocusedQuizItem(undefined);
     setSelectedRange(selection.getRangeAt(0).cloneRange());
     const nodeElement = selection.anchorNode instanceof Element ? selection.anchorNode : selection.anchorNode?.parentElement;
     const paragraph = nodeElement?.closest<HTMLElement>("[data-lesson-paragraph]");
@@ -752,7 +792,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
     return (
       <PageShell maxWidth={{ xs: 1040, xl: helperOpen ? 1360 : 1040 }}>
         <CourseOutlineSidebar courseId={courseId} map={courseMap} activeSlug={slug} collapsed={outlineCollapsed} onToggle={() => setOutlineCollapsed((current) => !current)} />
-        <LearningHelperSidebar courseId={courseId} slug={slug} selectedText={selectedText} selectedParagraph={selectedParagraph} open={helperOpen} onToggle={() => setHelperOpen((current) => !current)} onClearSelection={() => { setSelectedText(""); setSelectedRange(undefined); setSelectedParagraph(undefined); setBubbleRect(undefined); }} onApplyRevision={applyHelperRevision} />
+        <LearningHelperSidebar courseId={courseId} slug={slug} selectedText={selectedText} selectedParagraph={selectedParagraph} focusedQuizItem={focusedQuizItem} workspaceFiles={submittableFiles} open={helperOpen} onToggle={() => setHelperOpen((current) => !current)} onClearSelection={() => { setSelectedText(""); setSelectedRange(undefined); setSelectedParagraph(undefined); setBubbleRect(undefined); setFocusedQuizItem(undefined); }} onApplyRevision={applyHelperRevision} />
         {bubbleRect ? <SelectionAskBubble rect={bubbleRect} onAsk={() => { setHelperOpen(true); setBubbleRect(undefined); }} /> : null}
         <Stack direction="row" sx={{ ml: { md: outlineCollapsed ? "56px" : "280px" }, mr: { xs: "56px", xl: helperOpen ? "360px" : "56px" }, alignItems: "center", gap: 1.5, color: "text.secondary" }}>
           <CircularProgress size={18} /> <Typography>Loading…</Typography>
@@ -760,7 +800,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
       </PageShell>
     );
   }
-  if (state === "error") return <PageShell><CourseOutlineSidebar courseId={courseId} map={courseMap} activeSlug={slug} collapsed={outlineCollapsed} onToggle={() => setOutlineCollapsed((current) => !current)} /><LearningHelperSidebar courseId={courseId} slug={slug} selectedText={selectedText} selectedParagraph={selectedParagraph} open={helperOpen} onToggle={() => setHelperOpen((current) => !current)} onClearSelection={() => { setSelectedText(""); setSelectedRange(undefined); setSelectedParagraph(undefined); setBubbleRect(undefined); }} onApplyRevision={applyHelperRevision} />
+  if (state === "error") return <PageShell><CourseOutlineSidebar courseId={courseId} map={courseMap} activeSlug={slug} collapsed={outlineCollapsed} onToggle={() => setOutlineCollapsed((current) => !current)} /><LearningHelperSidebar courseId={courseId} slug={slug} selectedText={selectedText} selectedParagraph={selectedParagraph} focusedQuizItem={focusedQuizItem} workspaceFiles={submittableFiles} open={helperOpen} onToggle={() => setHelperOpen((current) => !current)} onClearSelection={() => { setSelectedText(""); setSelectedRange(undefined); setSelectedParagraph(undefined); setBubbleRect(undefined); setFocusedQuizItem(undefined); }} onApplyRevision={applyHelperRevision} />
         {bubbleRect ? <SelectionAskBubble rect={bubbleRect} onAsk={() => { setHelperOpen(true); setBubbleRect(undefined); }} /> : null}<Box sx={{ ml: { md: outlineCollapsed ? "56px" : "280px" }, mr: { xs: "56px", xl: helperOpen ? "360px" : "56px" } }}><Alert severity="error">{errorMessage ?? "We could not load this concept."}</Alert></Box></PageShell>;
   if (!course || !concept) return null;
 
@@ -796,7 +836,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
   if (concept.kind !== "coding") {
     return (
       <PageShell maxWidth={{ xs: 1040, xl: helperOpen ? 1360 : 1040 }}>
-        <LearningHelperSidebar courseId={courseId} slug={slug} selectedText={selectedText} selectedParagraph={selectedParagraph} open={helperOpen} onToggle={() => setHelperOpen((current) => !current)} onClearSelection={() => { setSelectedText(""); setSelectedRange(undefined); setSelectedParagraph(undefined); setBubbleRect(undefined); }} onApplyRevision={applyHelperRevision} />
+        <LearningHelperSidebar courseId={courseId} slug={slug} selectedText={selectedText} selectedParagraph={selectedParagraph} focusedQuizItem={focusedQuizItem} workspaceFiles={submittableFiles} open={helperOpen} onToggle={() => setHelperOpen((current) => !current)} onClearSelection={() => { setSelectedText(""); setSelectedRange(undefined); setSelectedParagraph(undefined); setBubbleRect(undefined); setFocusedQuizItem(undefined); }} onApplyRevision={applyHelperRevision} />
         {bubbleRect ? <SelectionAskBubble rect={bubbleRect} onAsk={() => { setHelperOpen(true); setBubbleRect(undefined); }} /> : null}
         <CitationExcerptDialog courseId={courseId} citationId={selectedCitationId} onOpenChange={(open) => { if (!open) setSelectedCitationId(null); }} />
         <Box sx={{ ml: { md: outlineCollapsed ? "56px" : "280px" }, mr: { xs: "56px", xl: helperOpen ? "360px" : "56px" } }}>
@@ -843,6 +883,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
                 onQuizAnswered={refreshProgress}
                 paragraphGroup="lesson"
                 onCitationClick={handleCitationClick}
+                onAskHelperForQuiz={handleAskHelperForQuizItem}
               /></Box>
               <QuizSection
                 courseId={courseId}
@@ -854,6 +895,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
                 title={concept.kind === "assessment" ? "Topic assessment" : undefined}
                 onComplete={concept.kind === "assessment" ? () => setAssessmentComplete(true) : undefined}
                 onAnswered={refreshProgress}
+                onAskHelper={handleAskHelperForQuizItem}
               />
               {conceptMastery ? <MasteryCard concept={conceptMastery} threshold={masteryThreshold} /> : null}
               {assessmentComplete ? <LessonComplete courseId={courseId} map={courseMap} slug={slug} title="Assessment" /> : null}
@@ -871,7 +913,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
       <CourseOutlineSidebar courseId={courseId} map={courseMap} activeSlug={slug} collapsed={outlineCollapsed} onToggle={() => setOutlineCollapsed((current) => !current)} />
-      <LearningHelperSidebar courseId={courseId} slug={slug} selectedText={selectedText} selectedParagraph={selectedParagraph} open={helperOpen} onToggle={() => setHelperOpen((current) => !current)} onClearSelection={() => { setSelectedText(""); setSelectedRange(undefined); setSelectedParagraph(undefined); setBubbleRect(undefined); }} onApplyRevision={applyHelperRevision} />
+      <LearningHelperSidebar courseId={courseId} slug={slug} selectedText={selectedText} selectedParagraph={selectedParagraph} focusedQuizItem={focusedQuizItem} workspaceFiles={submittableFiles} open={helperOpen} onToggle={() => setHelperOpen((current) => !current)} onClearSelection={() => { setSelectedText(""); setSelectedRange(undefined); setSelectedParagraph(undefined); setBubbleRect(undefined); setFocusedQuizItem(undefined); }} onApplyRevision={applyHelperRevision} />
         {bubbleRect ? <SelectionAskBubble rect={bubbleRect} onAsk={() => { setHelperOpen(true); setBubbleRect(undefined); }} /> : null}
       <CitationExcerptDialog courseId={courseId} citationId={selectedCitationId} onOpenChange={(open) => { if (!open) setSelectedCitationId(null); }} />
       <Dialog open={solutionConfirmOpen} onClose={() => setSolutionConfirmOpen(false)}>
@@ -935,6 +977,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
                       quizMaxAttempts={concept.lesson.quiz_max_attempts}
                       paragraphGroup="lesson"
                       onCitationClick={handleCitationClick}
+                      onAskHelperForQuiz={handleAskHelperForQuizItem}
                     />
                   </Stack>
                 ) : (
@@ -960,6 +1003,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
                   )}
                   maxAttempts={concept.lesson.quiz_max_attempts}
                   onAnswered={refreshProgress}
+                  onAskHelper={handleAskHelperForQuizItem}
                 />
                 {conceptMastery ? <MasteryCard concept={conceptMastery} threshold={masteryThreshold} /> : null}
                 {labComplete ? <LessonComplete courseId={courseId} map={courseMap} slug={slug} title="Lab" /> : null}

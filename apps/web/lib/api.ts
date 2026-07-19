@@ -285,12 +285,19 @@ export async function askLessonHelper(
   question: string,
   selectedText: string | undefined,
   accessToken: string,
-  requestRevision = false
+  requestRevision = false,
+  context?: { workspaceFiles?: LessonWorkspaceFile[]; quizItemId?: string }
 ): Promise<LessonHelperResponse> {
   const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/concepts/${slug}/helper`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
-    body: JSON.stringify({ question, selected_text: selectedText, request_revision: requestRevision })
+    body: JSON.stringify({
+      question,
+      selected_text: selectedText,
+      request_revision: requestRevision,
+      workspace_files: context?.workspaceFiles ?? [],
+      quiz_item_id: context?.quizItemId,
+    })
   });
   if (!response.ok) throw new Error(`The learning helper is unavailable (HTTP ${response.status}).`);
   return response.json();
