@@ -20,7 +20,8 @@
 
 ## [`demo/`](./demo/) — demo & hackathon
 
-- [`DEMO.md`](./demo/DEMO.md) — the planned live-demo flow, golden path, and reliability checklist.
+- [`DEMO.md`](./demo/DEMO.md) — the detailed demo narrative, golden path, and reliability checklist.
+- [`RECORDING_SCRIPT.md`](./demo/RECORDING_SCRIPT.md) — the concise screen-by-screen script for recording.
 - [`HACKATHON.md`](./demo/HACKATHON.md) — OpenAI Build Week submission rules and judging criteria.
 
 ## [`setup/`](./setup/) — setup

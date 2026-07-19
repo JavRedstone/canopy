@@ -38,6 +38,7 @@ Full index: [docs/README.md](./docs/README.md).
 - [Product idea](./docs/product/IDEA.md)
 - [Architecture](./docs/architecture/ARCHITECTURE.md)
 - [Security](./docs/architecture/SECURITY.md)
-- [Demo plan](./docs/demo/DEMO.md)
+- [Demo guide](./docs/demo/DEMO.md)
+- [Demo recording script](./docs/demo/RECORDING_SCRIPT.md)
 - [Market exploration](./docs/product/MARKET_EXPLORATION.md)
 - [Competitive differentiation](./docs/product/COMPETITIVE_DIFFERENTIATION.md)

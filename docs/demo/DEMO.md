@@ -9,16 +9,22 @@ running product rather than a fictional B2B scenario.*
 **under 3 minutes** and requires it to explain how Codex/GPT-5.6 were used — both are
 budgeted into the flow below, not an afterthought.
 
+For a concise script to read while recording, use
+[`RECORDING_SCRIPT.md`](./RECORDING_SCRIPT.md).
+
 ## Demo in one sentence
 
-> Hand Canopy a source and a goal; it builds a real course — cited lessons, a
-> sandbox-graded coding lab, a quiz, live mastery tracking — then proves you finished it
-> with a certificate and a PDF coursebook. Every exercise validated and repaired itself
-> against the sandbox before you ever saw it.
+> Canopy transforms technical knowledge into demonstrated skill.
 
 The demo should make one point unmistakable: **this is not a prettier chat with
-documentation and not a generic course generator. It produces hands-on practice that's
-graded for real, and it knows the difference between "you read it" and "you can do it."**
+documentation and not a generic course generator. It is a learning platform with an
+AI-generated curriculum engine, execution environment, and mastery system.**
+
+The explanatory line beneath that claim is: **AI can explain anything. Canopy helps you
+actually learn it.**
+
+The product magic is an AI-created closed learning loop: **teach → practice → evaluate →
+adapt**.
 
 ## The best demo story
 
@@ -31,94 +37,134 @@ which is exactly the Education-track framing this submission is built for.
 
 ### Source packet
 
-Use a real document, not a fictional one — the product's whole value is grounded
-generation, so a real source makes every citation click land harder. A short ML
-textbook chapter or library docs page (e.g. the scikit-learn user guide) works well and
-matches [`SAMPLE_COURSES.md`](../product/SAMPLE_COURSES.md): the same source, different
-goals, produces a conceptual course, a hands-on `python-ml` course, or an
-algorithms-from-scratch course. Pick the hands-on goal for this demo — it's the one that
-reaches a real coding lab fastest.
+Use a real document, not a fictional one: grounded generation makes every citation click
+land harder. A primary research paper such as "Attention Is All You Need," a textbook
+chapter, or official library documentation works well. Lead with the research-paper
+course because it demonstrates that a difficult primary source can become an
+implementation-focused coding course, rather than a static summary.
 
 ### Learner goal
 
-> Learn how supervised learning models are trained and evaluated, and be able to train
-> and tune a classifier myself.
+> Understand and implement scaled dot-product attention from Attention Is All You Need.
+
+### Problem credibility
+
+Geoffrey Litt, a Design Engineer at Notion, calls human understanding the new bottleneck
+as agents produce more code. His talk is independent validation for the problem, not the
+product claim: Canopy turns source-grounded understanding into a structured
+implementation path and verifies the learner's application of it. Cite [his written
+talk](https://www.geoffreylitt.com/2026/07/02/understanding-is-the-new-bottleneck.html)
+once in the submission materials or final slide, rather than making it a major demo beat.
+
+### GPT-5.6 and Codex credibility
+
+Keep this brief in the video: GPT-5.6 powers curriculum generation, lesson-aware learner
+guidance, and repair workflows; Codex accelerated implementation and testing of the
+curriculum pipeline, sandbox integration, validation workflows, and product UI. Name
+the Sol/Luna routing in written submission material only if useful. Before claiming any
+of it, verify the active provider is actually configured with GPT-5.6 deployments.
 
 ## Recommended live demo flow (under 3 minutes)
 
-### 1. The hook — 10s
+### 1. The learner problem — 30s
 
-Open "My courses." One line, no dwelling on account setup or file management:
+Open the original paper, then a prepared failed implementation attempt.
 
-> "Any source you have — a paper, a library's docs, a textbook chapter — becomes a real
-> course: cited lessons, a graded coding lab, and proof you actually learned it."
+> "Learning technical skills has a fundamental problem. The information is already
+> available, but understanding an explanation does not prove you can apply the concept.
+> Most AI learning tools optimize for explanation. Canopy optimizes for demonstrated
+> ability: practice, feedback, and evidence that you gained the skill."
 
-### 2. Create the course — 25s
+### 2. The insight — 20s
 
 Upload the source, set the goal, hit generate. Use a course generated moments before this
 recording started (or the dev-only demo auto-complete tool, see the reliability checklist
 below) so the live segment shows the *result* — a structured module/concept outline —
 without waiting on a live model call.
 
-> "Codex built the whole generation pipeline behind this: a planner turns the source and
-> goal into a concept graph, then a lesson agent writes each lesson — explanation, starter
-> code, hidden tests, quiz items, a reference solution — as one structured call."
+> "AI education should not optimize for producing explanations. It should optimize for
+> producing capability. Canopy transforms technical sources into structured lessons,
+> hands-on labs, adaptive feedback, and measurable mastery."
 
-### 3. A cited lesson + a quiz — 25s
+> "The hard part is not generating text. It is generating a learning system that remains
+> connected to the source, produces executable practice, and verifies that the learner
+> can succeed."
 
-Open a conceptual lesson. Click an inline citation marker — it opens the exact source
-excerpt the claim came from. Answer a quiz question (mcq or fill-in-blank; Markdown and
-math render properly, including code blocks in the options).
+### 3. Source to demonstrated skill — 45s
 
-> "Every claim traces back to the actual source, not a hallucinated citation. The quiz
-> isn't decoration — it's the first mastery observation."
+Open a conceptual lesson. Click an inline citation marker to open its source reference.
+Answer a quiz question (mcq or fill-in-blank; Markdown and math render properly,
+including code blocks in the options).
 
-### 4. The coding lab — 55s
+Move quickly into the coding lab. Show an incomplete implementation and pause on the
+failing run.
 
-Navigate into a lab. Show the starter code, Monaco editor, and instructions. Make an
-intentionally incomplete change, hit **Run**:
+> "This is where most AI learning stops. It explains the answer. Canopy makes the learner
+> do the work."
 
-```text
-1 test passed
-1 test failed: expected accuracy above 0.8, got 0.62
-```
+Then show the Learning helper's hint, a small fix, and a passing run. The failure,
+feedback, repair, and result are the demo's magic moment.
 
-Take a hint from the lesson helper (guides, doesn't hand over the answer), fix it, **Run**
-again to confirm, then **Submit** — this is what's graded against the hidden suite and
-what actually moves mastery.
+> "Lessons stay connected to the source, so learners can verify where concepts came from
+> instead of trusting an opaque AI summary. The quiz is the first check that they actually
+> understand it."
 
-> "This exact lab already proved itself once, before you ever saw it: Codex generated it,
-> ran it against the hidden tests in the same sandbox you're using now, and when it
-> failed, patched and re-verified it — the same generate → run → diagnose → patch →
-> re-verify loop, just run on the lesson itself instead of on your submission. Nothing
-> ships to a learner until it's proven itself."
-
-### 5. Mastery, live — 20s
+### 4. Evidence of learning — 25s
 
 Switch to the Mastery tab. Point at one concept's `Understand` and `Apply` numbers moving
 independently — quizzes feed one, labs feed the other — and a prerequisite-review nudge
 if one is showing.
 
-> "This isn't a completion checkbox. It's two separate, real probabilities, updated from
-> what you actually did."
+> "Most learning platforms measure completion. Canopy measures mastery. A learner can
+> understand the theory but struggle to implement it, or write code without understanding
+> why it works. Canopy makes that difference visible."
 
-### 6. Finish — 30s
+> "Underneath, Canopy uses evidence-based mastery tracking: conceptual checks update
+> understanding, and coding submissions update applied skill. These are not completion
+> percentages."
 
-Navigate to (or fast-forward to, via a pre-completed second course) a fully finished
-course. The certificate pops up automatically. Show it, then hit **Download coursebook**
-on another finished course to show the PDF export.
+### 5. Prerequisite-aware adaptation — 25s
 
-> "Finish every lesson and a certificate is waiting for you — no digging for it. And the
-> whole course exports as a real PDF: lessons, worked examples, quizzes, citations — a
-> takeaway that outlives the tab."
+Show a prerequisite recommendation if one is available.
 
-### 7. Bonus, if time allows — 15s
+> "When a learner struggles, Canopy identifies the shaky prerequisite and recommends the
+> targeted concept to review. It responds to demonstrated evidence, not just completion."
+
+### 6. Technical proof — 20s
+
+Return to the passing lab or its validation state.
+
+> "The sandbox validates the course before learners see it. Generated starter code,
+> tests, and reference solutions run in the same environment, so broken labs are caught
+> before delivery."
+
+Then show one real repository diff, test result, or recorded Codex session.
+
+> "Building this required more than generating lessons. GPT-5.6 powers curriculum
+> generation, learning guidance, and repair workflows. Codex was part of our engineering
+> workflow: we used it to iterate across the repository, diagnose failures, implement
+> features, and validate the systems that make Canopy possible."
+
+### 7. Close — 15s
+
+> "Technical knowledge is everywhere. The missing layer is turning knowledge into
+> capability. Canopy creates the bridge between learning something and being able to do
+> something."
+
+End on a five-second final slide that shows the memorable loop:
+
+> **Source → Course → Practice → Evidence → Adaptation**
+
+### 8. Follow-up features, outside the primary cut
 
 Open the share toggle, copy the course link, switch accounts, import — instant, no
 regeneration.
 
 > "One person builds it, anyone imports their own copy for free — that's how this scales
 > past a single learner without an org/team system yet."
+
+Keep the Coursebook and sharing flow out of the primary three-minute recording. They are
+useful follow-ups, but they dilute the central source-to-skill story.
 
 ## What must work live
 
