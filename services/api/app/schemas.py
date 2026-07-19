@@ -328,6 +328,8 @@ class LessonHelperRequest(BaseModel):
     question: str = Field(min_length=1, max_length=1200)
     selected_text: str | None = Field(default=None, max_length=6000)
     request_revision: bool = False
+    workspace_files: list[LessonWorkspaceFile] = Field(default_factory=list, max_length=10)
+    quiz_item_id: str | None = Field(default=None, max_length=100)
 
 
 class LessonHelperResponse(BaseModel):
