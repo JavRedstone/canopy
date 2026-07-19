@@ -80,9 +80,14 @@ export async function exportCoursebook(courseId: string, accessToken: string): P
 export interface CertificateResponse {
   course_id: string;
   course_title: string;
-  learner_email: string;
+  learner_name: string;
   issued_at: string;
   certificate_id: string;
+  verify_url: string;
+  skills: string[];
+  estimated_hours: number;
+  accent_color: string;
+  accent_tint: string;
 }
 
 export class CourseNotCompletedError extends Error {}
@@ -104,6 +109,45 @@ export async function exportCertificate(courseId: string, accessToken: string): 
   if (response.status === 409) throw new CourseNotCompletedError("This course is not fully completed yet.");
   if (!response.ok) throw new Error(`Unable to export the certificate (HTTP ${response.status}).`);
   return response.blob();
+}
+
+// No auth token: the durable verification link is meant to work for anyone it's shared
+// with, the same way an unauthenticated recipient can open a shared course-import link.
+export async function getPublicCertificate(certificateId: string): Promise<CertificateResponse> {
+  const response = await fetch(`${apiUrl}/api/v1/certificates/${certificateId}`, { cache: "no-store" });
+  if (response.status === 404) throw new Error("Certificate not found.");
+  if (!response.ok) throw new Error(`Unable to load the certificate (HTTP ${response.status}).`);
+  return response.json();
+}
+
+export async function exportPublicCertificate(certificateId: string): Promise<Blob> {
+  const response = await fetch(`${apiUrl}/api/v1/certificates/${certificateId}/export`);
+  if (!response.ok) throw new Error(`Unable to export the certificate (HTTP ${response.status}).`);
+  return response.blob();
+}
+
+export interface ProfileResponse {
+  email: string;
+  display_name: string | null;
+}
+
+export async function getProfile(accessToken: string): Promise<ProfileResponse> {
+  const response = await fetch(`${apiUrl}/api/v1/profile`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: "no-store"
+  });
+  if (!response.ok) throw new Error(`Unable to load your profile (HTTP ${response.status}).`);
+  return response.json();
+}
+
+export async function updateProfile(displayName: string | null, accessToken: string): Promise<ProfileResponse> {
+  const response = await fetch(`${apiUrl}/api/v1/profile`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ display_name: displayName })
+  });
+  if (!response.ok) throw new Error(`Unable to update your profile (HTTP ${response.status}).`);
+  return response.json();
 }
 
 export type CourseProgressStage = "ingesting_sources" | "planning" | "building_lessons" | "ready" | "failed";

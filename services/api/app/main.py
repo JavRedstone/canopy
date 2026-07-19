@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.repository import get_repository
-from app.routers import courses, demo, playground, sources
+from app.routers import courses, demo, playground, profile, public_certificates, sources
 from app.schemas import HealthResponse
 from app.settings import get_settings
 
@@ -27,3 +27,5 @@ app.include_router(sources.router, prefix="/api/v1")
 app.include_router(courses.router, prefix="/api/v1")
 app.include_router(playground.router, prefix="/api/v1")
 app.include_router(demo.router, prefix="/api/v1")
+app.include_router(profile.router, prefix="/api/v1")
+app.include_router(public_certificates.router, prefix="/api/v1")

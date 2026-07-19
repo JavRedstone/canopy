@@ -344,15 +344,40 @@ class CitationExcerptResponse(BaseModel):
 
 class CertificateResponse(BaseModel):
     """A completion certificate -- only issuable once every lesson in the course is done
-    (``lessons_completed == lessons_total``, both > 0). ``certificate_id`` is deterministic
-    (derived from course_id + owner_id) so it reads the same every time it's viewed,
-    without needing a dedicated table to persist an issued-once record."""
+    (``lessons_completed == lessons_total``, both > 0). ``issued_at`` is the fixed moment
+    the ``certificates`` row was first created, not recomputed on every view.
+    ``certificate_id`` is a short, deterministic display label (derived from course_id +
+    owner_id); ``verify_url`` is the durable, shareable public link (keyed on the
+    ``certificates`` row id, not on that label)."""
 
     course_id: UUID
     course_title: str
-    learner_email: str
+    learner_name: str
     issued_at: datetime
     certificate_id: str
+    verify_url: str
+    # Module titles from the course map -- the closest existing proxy to discrete "skills"
+    # without a dedicated skill-tagging model.
+    skills: list[str]
+    # Estimated, not measured: no time-on-task tracking exists yet (see
+    # docs/product/PEDAGOGY_EVALUATION.md), so this is lessons_total times a flat
+    # per-lesson estimate, the same honesty tradeoff course-catalog sites make.
+    estimated_hours: float
+    # Computed once, server-side, from the course's title/goal (app/course_category.py) --
+    # so the PDF and the web view theme identically instead of each guessing separately.
+    accent_color: str
+    accent_tint: str
+
+
+class ProfileResponse(BaseModel):
+    email: str
+    display_name: str | None = None
+
+
+class UpdateProfileRequest(BaseModel):
+    # Empty/whitespace-only clears it back to null (falls back to the email everywhere
+    # a name is shown) rather than persisting a blank string.
+    display_name: str | None = Field(default=None, max_length=80)
 
 
 class CourseSourceSummary(BaseModel):

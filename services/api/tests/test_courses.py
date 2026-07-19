@@ -224,9 +224,14 @@ class _CompletedCourseRepository:
         return CertificateResponse(
             course_id=course_id,
             course_title="API auth",
-            learner_email="learner@example.com",
+            learner_name="Ada Lovelace",
             issued_at="2026-07-19T00:00:00Z",
             certificate_id="ABC123DEF456",
+            verify_url="http://localhost:3000/certificates/11111111-1111-1111-1111-111111111111",
+            skills=["JWT Validation", "REST APIs"],
+            estimated_hours=1.5,
+            accent_color="#581c27",
+            accent_tint="#fee2e2",
         )
 
 
@@ -240,8 +245,10 @@ def test_certificate_is_issued_once_a_course_is_fully_completed() -> None:
         assert certificate.status_code == 200
         body = certificate.json()
         assert body["course_title"] == "API auth"
-        assert body["learner_email"] == "learner@example.com"
+        assert body["learner_name"] == "Ada Lovelace"
         assert body["certificate_id"] == "ABC123DEF456"
+        assert body["skills"] == ["JWT Validation", "REST APIs"]
+        assert body["estimated_hours"] == 1.5
 
         export = client.get(f"/api/v1/courses/{course_id}/export/certificate")
         assert export.status_code == 200

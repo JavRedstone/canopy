@@ -323,8 +323,7 @@ export function CourseDetail({ courseId }: { courseId: string }) {
         <Stack direction="row" sx={{ alignItems: "center", gap: 1.75, minWidth: 0 }}>
           <CourseCategoryBadge title={course.title} goal={course.goal} />
           <Box sx={{ minWidth: 0 }}>
-            <Typography variant="overline" color="text.secondary">{course.status}</Typography>
-            <Typography variant="h4" sx={{ letterSpacing: "-0.02em", my: 0.25 }}>{course.title}</Typography>
+            <Typography variant="h4" sx={{ letterSpacing: "-0.02em", mb: 0.5 }}>{course.title}</Typography>
             <Typography color="text.secondary">{course.goal}</Typography>
           </Box>
         </Stack>

@@ -3,8 +3,8 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
-import Typography from "@mui/material/Typography";
 import { BrandLink } from "@/components/brand-link";
+import { ProfileNameButton } from "@/components/profile-name-button";
 import { SignOutButton } from "@/components/sign-out-button";
 
 const SetFullBleedContext = createContext<(fullBleed: boolean) => void>(() => {});
@@ -27,7 +27,7 @@ export function AppShell({ email, children }: { email: string; children: React.R
         <Stack component="header" direction="row" sx={{ position: "sticky", top: 0, zIndex: 3, height: 64, px: { xs: 2, sm: 3 }, alignItems: "center", justifyContent: "space-between", borderBottom: 1, borderColor: "divider", bgcolor: "background.paper" }}>
           <BrandLink />
           <Stack direction="row" sx={{ alignItems: "center", gap: 1.25 }}>
-            <Typography variant="body2" color="text.secondary" sx={{ display: { xs: "none", sm: "block" } }}>{email}</Typography>
+            <ProfileNameButton email={email} />
             <SignOutButton />
           </Stack>
         </Stack>

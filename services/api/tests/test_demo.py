@@ -218,7 +218,13 @@ def test_auto_complete_mastered_answers_correctly_and_submits_a_passing_lab() ->
     assert all(correct for _item_id, correct in repository.quiz_responses)
 
 
-def test_auto_complete_mixed_with_zero_correct_rate_answers_everything_wrong() -> None:
+def test_auto_complete_mixed_with_zero_correct_rate_still_reaches_completion() -> None:
+    # A "mixed" run's whole point is to leave real wrong-answer observations on the
+    # mastery record without stranding the course below 100% -- a lesson only completes
+    # once every quiz item has been answered correctly at least once and a lab has
+    # actually passed, so an uncorrected wrong answer would make the certificate
+    # unreachable from this mode. Every deliberately-wrong first attempt should still
+    # get a corrective follow-up when attempts allow.
     repository = DemoRepository()
     app.dependency_overrides[get_repository] = lambda: repository
     app.dependency_overrides[get_lesson_sandbox] = lambda: DemoSandbox()
@@ -234,11 +240,16 @@ def test_auto_complete_mixed_with_zero_correct_rate_answers_everything_wrong() -
 
     assert status_body["state"] == "completed"
     results = {result["concept_slug"]: result for result in status_body["results"]}
+    # The displayed stats reflect the simulated first attempt (the whole point of "mixed").
     assert results["quiz-concept"]["quiz_items_correct"] == 0
     assert results["quiz-concept"]["quiz_items_incorrect"] == 2
-    assert results["lab-concept"]["lab_passed"] is False
-    assert repository.lab_submissions == [False]
-    assert not any(correct for _item_id, correct in repository.quiz_responses)
+    # But every item ends up answered correctly too, and the lab ends up passing --
+    # otherwise this course could never earn a certificate.
+    assert results["lab-concept"]["lab_passed"] is True
+    assert repository.lab_submissions == [False, True]
+    wrong_then_right = [correct for _item_id, correct in repository.quiz_responses]
+    assert wrong_then_right.count(False) == 2
+    assert wrong_then_right.count(True) == 2
 
 
 def test_auto_complete_skips_already_correct_and_attempt_exhausted_items() -> None:

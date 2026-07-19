@@ -48,8 +48,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/courses/{course_id}/demo", tags=["demo"])
 
 # A lab submission gets one retry with the sandbox's own failure output as feedback --
-# mirrors the worker's repair loop in spirit, without pulling in its machinery -- but
-# only when the target is "mastered"; a "mixed"/incorrect attempt is left to stand.
+# mirrors the worker's repair loop in spirit, without pulling in its machinery. Applies
+# regardless of target: a "mastered" run may need it because the model's first attempt
+# wasn't actually flawless; a "mixed" run needs it to correct a deliberately-wrong first
+# attempt so the lesson still reaches "completed" (see _process_lab).
 _LAB_ATTEMPTS_WHEN_MASTERED = 2
 
 
@@ -165,6 +167,15 @@ def _process_quiz_items(
             correct_count += 1
         else:
             incorrect_count += 1
+            # A deliberately-wrong answer is a real, mastery-lowering observation -- but
+            # leaving it uncorrected would strand this lesson as permanently incomplete
+            # (a lesson only completes once every quiz item has been answered correctly
+            # at least once), which would make the certificate unreachable from any
+            # "mixed" run. Follow up with a correct answer when an attempt remains, so
+            # the wrong answer still counts against mastery without blocking completion.
+            if preview.attempts_used + 1 < max_attempts:
+                fixup = _quiz_answer_for(item, want_correct=True, grader=grader)
+                answer_quiz_item(course_id, slug, preview.id, fixup, current_user, repository, grader)
     return correct_count, incorrect_count, skipped_count
 
 
@@ -216,11 +227,16 @@ def _process_lab(
     lesson = concept.lesson
     if lesson is None or lesson.status != "built" or not lesson.starter_files:
         return None
-    want_correct = True if target == "mastered" else random.random() < correct_rate
-    attempts = _LAB_ATTEMPTS_WHEN_MASTERED if (target == "mastered" and want_correct) else 1
+    first_attempt_correct = True if target == "mastered" else random.random() < correct_rate
     feedback: str | None = None
     result = None
-    for _ in range(attempts):
+    for attempt_index in range(_LAB_ATTEMPTS_WHEN_MASTERED):
+        # Only the first attempt can be a deliberate wrong one (mixed mode); every retry
+        # aims for correct. A coding lesson only completes on a passing submission, so a
+        # lesson left on a wrong attempt would never reach 100% and the certificate could
+        # never unlock -- the wrong attempt still lands as a real failed observation
+        # (lowering apply mastery), it just doesn't get the last word.
+        want_correct = first_attempt_correct if attempt_index == 0 else True
         files = _lab_files_for(lesson.starter_files, lesson.explanation_markdown, lesson.hints, want_correct=want_correct, grader=grader, feedback=feedback)
         result = submit_lesson(course_id, slug, RunLessonRequest(files=files), current_user, repository, sandbox)
         if result.passed:

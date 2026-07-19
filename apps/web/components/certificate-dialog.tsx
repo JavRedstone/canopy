@@ -8,9 +8,8 @@ import CircularProgress from "@mui/material/CircularProgress";
 import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
-import Stack from "@mui/material/Stack";
-import Typography from "@mui/material/Typography";
 import { CertificateResponse, CourseNotCompletedError, exportCertificate, getCertificate } from "@/lib/api";
+import { CertificateCard } from "@/components/certificate-card";
 import { Icon } from "@/components/icon";
 import { createClient } from "@/lib/supabase/client";
 
@@ -21,6 +20,8 @@ export function CertificateDialog({ courseId, open, onOpenChange }: { courseId: 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
   const [exporting, setExporting] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string>();
 
   useEffect(() => {
     if (!open) return;
@@ -33,7 +34,11 @@ export function CertificateDialog({ courseId, open, onOpenChange }: { courseId: 
         const { data } = await createClient().auth.getSession();
         if (!data.session) throw new Error("Your session has expired. Please sign in again.");
         const response = await getCertificate(courseId, data.session.access_token);
-        if (!cancelled) setCertificate(response);
+        const pdf = await exportCertificate(courseId, data.session.access_token);
+        if (!cancelled) {
+          setCertificate(response);
+          setPreviewUrl(URL.createObjectURL(pdf));
+        }
       } catch (caught) {
         if (cancelled) return;
         setError(
@@ -53,6 +58,16 @@ export function CertificateDialog({ courseId, open, onOpenChange }: { courseId: 
       cancelled = true;
     };
   }, [courseId, open]);
+
+  useEffect(() => () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+  }, [previewUrl]);
+
+  useEffect(() => {
+    if (!linkCopied) return;
+    const timer = window.setTimeout(() => setLinkCopied(false), 2000);
+    return () => window.clearTimeout(timer);
+  }, [linkCopied]);
 
   async function handleDownload() {
     if (!certificate) return;
@@ -75,41 +90,38 @@ export function CertificateDialog({ courseId, open, onOpenChange }: { courseId: 
     }
   }
 
+  async function handleCopyLink() {
+    if (!certificate) return;
+    await navigator.clipboard.writeText(certificate.verify_url);
+    setLinkCopied(true);
+  }
+
   return (
-    <Dialog open={open} onClose={() => onOpenChange(false)} fullWidth maxWidth="sm">
-      <DialogContent sx={{ pt: 4 }}>
+    <Dialog open={open} onClose={() => onOpenChange(false)} fullWidth maxWidth="lg">
+      <DialogContent sx={{ pt: 2 }}>
         {loading ? (
           <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
             <CircularProgress size={28} />
           </Box>
         ) : null}
         {error ? <Alert severity="info">{error}</Alert> : null}
-        {certificate ? (
-          <Box
-            sx={{
-              position: "relative", p: { xs: 3, sm: 4 }, borderRadius: 3, textAlign: "center",
-              background: "linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%)",
-              border: "2px solid #a5b4fc", boxShadow: "0 18px 40px rgba(49, 46, 129, 0.15)"
-            }}
-          >
-            <Box sx={{ position: "absolute", inset: 8, border: "1px solid #c7d2fe", borderRadius: 2, pointerEvents: "none" }} />
-            <Stack sx={{ alignItems: "center", gap: 1.25 }}>
-              <Box sx={{ width: 56, height: 56, borderRadius: "50%", display: "grid", placeItems: "center", bgcolor: "#312e81", color: "white" }}>
-                <Icon name="workspace_premium" />
-              </Box>
-              <Typography variant="overline" sx={{ letterSpacing: "0.13em", fontWeight: 700, color: "#6366f1" }}>Certificate of completion</Typography>
-              <Typography variant="body2" color="text.secondary">This certifies that</Typography>
-              <Typography variant="h6" sx={{ fontWeight: 700 }}>{certificate.learner_email}</Typography>
-              <Typography variant="body2" color="text.secondary">has successfully completed</Typography>
-              <Typography variant="h5" sx={{ fontWeight: 800, color: "#312e81", letterSpacing: "-0.02em" }}>{certificate.course_title}</Typography>
-              <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
-                Issued {new Date(certificate.issued_at).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })} · Certificate ID {certificate.certificate_id}
-              </Typography>
-            </Stack>
+        {previewUrl ? (
+          <Box sx={{ width: "100%", aspectRatio: "11 / 8.5", border: 1, borderColor: "divider", borderRadius: 1, overflow: "hidden", bgcolor: "grey.100" }}>
+            <iframe title={`${certificate?.course_title ?? "Course"} certificate preview`} src={previewUrl} style={{ display: "block", width: "100%", height: "100%", border: 0 }} />
           </Box>
-        ) : null}
+        ) : certificate ? <CertificateCard certificate={certificate} /> : null}
       </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 3 }}>
+      <DialogActions sx={{ px: 3, pb: 3, flexWrap: "wrap", gap: 1 }}>
+        {certificate ? (
+          <Button
+            variant="text"
+            startIcon={<Icon name={linkCopied ? "check" : "link"} />}
+            onClick={() => void handleCopyLink()}
+          >
+            {linkCopied ? "Link copied" : "Copy verify link"}
+          </Button>
+        ) : null}
+        <Box sx={{ flex: 1 }} />
         <Button variant="text" onClick={() => onOpenChange(false)}>Close</Button>
         {certificate ? (
           <Button
