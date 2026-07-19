@@ -26,7 +26,7 @@ this well today. ⚠️ = partial or in progress. ❌ = doesn't do this / not it
 |---|---|---|---|---|---|
 | Learns from *your own* material (docs, code, PRs) | ✅ | ✅ | ✅ (paste/upload) | ❌ fixed catalog | ✅ (searches it) |
 | Executable, hidden-test-graded practice | ✅ | ❌ | ⚠️ code execution exists, not curriculum-integrated or hidden-graded | ✅ fixed catalog only | ❌ |
-| Multi-language sandbox (Python / JS / Go today) | ✅ | — | ⚠️ depends on the chat client | ✅ | — |
+| Multi-language sandbox (Python, Python/ML, C++, C, JS, Go today) | ✅ | — | ⚠️ depends on the chat client | ✅ | — |
 | Citations grounded to your actual source excerpts, clickable to the real text | ✅ | ✅ | ⚠️ often unverifiable | — | ⚠️ shows search results, not curated citations |
 | Coherent, ordered curriculum (not isolated Q&A) | ✅ | ✅ (Learning Guide) | ❌ one conversation at a time | ✅ | ❌ |
 | Per-concept mastery, tracked separately for *understanding* vs. *applying* | ✅ (dual-track BKT) | ❌ | ❌ | ⚠️ completion-based, not concept-level | ❌ |
@@ -37,11 +37,14 @@ this well today. ⚠️ = partial or in progress. ❌ = doesn't do this / not it
 ## Reading the gaps honestly
 
 Two rows above are real, current weaknesses, not competitor spin — both are tracked in
-[`USE_CASES.md`](./USE_CASES.md#structural-gaps-that-affect-every-use-case-below):
+[`USE_CASES.md`](./USE_CASES.md#whats-still-missing):
 
-- **No org/team layer.** Every course is single-owner today. This blocks the B2B use
-  cases that are the actual business case (see `MARKET_EXPLORATION.md` §4) until it's
-  built — Codecademy for Business already has this.
+- **No org/team layer.** Every course is single-owner today; sharing is Google-Docs-style
+  cloning, not a live-shared course with a progress dashboard. That's fine for the
+  individual-learner and one-link-to-many-learners use cases this product targets today
+  (see `USE_CASES.md`), but it's the gap that would matter most for the B2B enablement
+  direction sketched in `MARKET_EXPLORATION.md` §4 — Codecademy for Business already has
+  this.
 - **No repo ingestion.** Sources are curated files uploaded one at a time, not a
   connected GitHub repo. Copilot/Cody's whole value is repo-scale, always-current
   context; Canopy's is depth and verified practice on a deliberately bounded packet.

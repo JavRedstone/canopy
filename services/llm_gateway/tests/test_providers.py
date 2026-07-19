@@ -55,16 +55,20 @@ def test_settings_accept_legacy_openai_provider_env_alias(monkeypatch) -> None:
 
 def test_settings_model_for_splits_openai_generation_and_repair() -> None:
     settings = _settings(openai_api_key="test-key")
+    # Assert routing to each *tier*, not literal model names -- which model backs a given
+    # tier is a free-to-change product/cost decision, not something a test should pin.
     # The outline is the one planning call promoted to the Sol reasoning tier; per-module
     # concepts and every generation task share the cheaper builder (Luna) tier.
-    assert settings.model_for("course_outline") == "gpt-5.6-sol"
-    assert settings.model_for("module_concepts") == "gpt-5.6-luna"
-    assert settings.model_for("lesson_build") == "gpt-5.6-luna"
-    assert settings.model_for("concept_regeneration") == "gpt-5.6-luna"
-    assert settings.model_for("quiz_grading") == "gpt-5.6-luna"
+    assert settings.model_for("course_outline") == settings.openai_outline_model
+    assert settings.model_for("module_concepts") == settings.openai_builder_model
+    assert settings.model_for("lesson_build") == settings.openai_builder_model
+    assert settings.model_for("concept_regeneration") == settings.openai_builder_model
+    assert settings.model_for("quiz_grading") == settings.openai_builder_model
     # Repair is the other Sol task: the last line of defense before a lab is declared failed.
-    assert settings.model_for("lesson_repair") == "gpt-5.6-sol"
-    assert settings.model_for("lesson_helper") == "gpt-5.4-mini"
+    assert settings.model_for("lesson_repair") == settings.openai_repair_model
+    assert settings.model_for("lesson_helper") == settings.openai_helper_model
+    # The tiers are genuinely distinct models, or this test would pass by coincidence.
+    assert settings.openai_outline_model != settings.openai_builder_model
 
 
 def test_settings_model_for_uses_bedrock_models_when_aws() -> None:
@@ -95,8 +99,8 @@ def test_bedrock_openai_targets_mantle_endpoint_and_uses_titan_for_embeddings() 
     provider = BedrockOpenAIProvider(settings, bedrock_client=FakeBedrockClient())
 
     assert str(provider.client.base_url).startswith("https://bedrock-mantle.us-west-2.api.aws/openai/v1")
-    assert settings.model_for("course_outline") == "openai.gpt-5.4"
-    assert settings.model_for("embedding") == "amazon.titan-embed-text-v2:0"
+    assert settings.model_for("course_outline") == settings.aws_openai_planner_model
+    assert settings.model_for("embedding") == settings.aws_bedrock_embedding_model
     assert provider.embed(model="amazon.titan-embed-text-v2:0", texts=["a"], dimensions=None) == [[0.1, 0.2, 0.3]]
 
 

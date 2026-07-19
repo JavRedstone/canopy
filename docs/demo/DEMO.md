@@ -1,203 +1,255 @@
 # Canopy Demo Plan
 
-*Hackathon demo exploration — July 17, 2026*
+*Hackathon demo script — written July 17, 2026; revised July 19, 2026 to match the
+individual-learner-first submission story in
+[`../product/MARKET_EXPLORATION.md`](../product/MARKET_EXPLORATION.md) and the real,
+running product rather than a fictional B2B scenario.*
+
+**Format constraint:** [`HACKATHON.md`](./HACKATHON.md) caps the submission video at
+**under 3 minutes** and requires it to explain how Codex/GPT-5.6 were used — both are
+budgeted into the flow below, not an afterthought.
 
 ## Demo in one sentence
 
-> Drop in the knowledge around an unfamiliar engineering system; Canopy turns it into a short, source-grounded path where a developer learns the mental model, practises a change, and proves they can apply it.
+> Hand Canopy a source and a goal; it builds a real course — cited lessons, a
+> sandbox-graded coding lab, a quiz, live mastery tracking — then proves you finished it
+> with a certificate and a PDF coursebook. Every exercise validated and repaired itself
+> against the sandbox before you ever saw it.
 
-The demo should make one point unmistakable: **Canopy is not a prettier chat with documentation and not a generic course generator. It produces an actionable learning path with runnable practice.**
+The demo should make one point unmistakable: **this is not a prettier chat with
+documentation and not a generic course generator. It produces hands-on practice that's
+graded for real, and it knows the difference between "you read it" and "you can do it."**
 
 ## The best demo story
 
 ### Persona
 
-Maya is a developer joining the payments team. She has been assigned a small change to the authorization flow, but the knowledge is scattered across a service overview, an ADR, an SDK guide, and a recent pull request.
-
-She does not need a twelve-week course on backend engineering. She needs to understand this system well enough to make a safe contribution.
+Not a fictional character — the demo *is* the product's actual best-supported use case
+(`USE_CASES.md` #1): a learner with a source and a goal who wants more than a summary.
+For a hackathon judge that reads as a grad student or engineer, not an enterprise buyer,
+which is exactly the Education-track framing this submission is built for.
 
 ### Source packet
 
-Use a small, internally consistent fictional source packet, not a real customer repository:
-
-- `payments-service-overview.md` — request flow and service ownership;
-- `idempotency-adr.md` — why retry safety matters;
-- `authorization.ts` — a focused implementation excerpt;
-- `authorization.test.ts` — representative tests;
-- `PR-1842.md` — a recent change that introduced a new decline reason.
-
-Keep the source material compact enough that every explanation, lab, and citation can be visually tied back to it. Fictional sources prevent privacy concerns and make the happy path reliable.
+Use a real document, not a fictional one — the product's whole value is grounded
+generation, so a real source makes every citation click land harder. A short ML
+textbook chapter or library docs page (e.g. the scikit-learn user guide) works well and
+matches [`SAMPLE_COURSES.md`](../product/SAMPLE_COURSES.md): the same source, different
+goals, produces a conceptual course, a hands-on `python-ml` course, or an
+algorithms-from-scratch course. Pick the hands-on goal for this demo — it's the one that
+reaches a real coding lab fastest.
 
 ### Learner goal
 
-> Learn the authorization pipeline and safely add validation for an expired authorization hold.
+> Learn how supervised learning models are trained and evaluated, and be able to train
+> and tune a classifier myself.
 
-## Recommended live demo flow (3–4 minutes)
+## Recommended live demo flow (under 3 minutes)
 
-### 1. The before state — 15 seconds
+### 1. The hook — 10s
 
-Open a simple “My courses” page. Frame the pain:
+Open "My courses." One line, no dwelling on account setup or file management:
 
-> “A developer has the docs and code, but no guided route from reading to confidently making a change.”
+> "Any source you have — a paper, a library's docs, a textbook chapter — becomes a real
+> course: cited lessons, a graded coding lab, and proof you actually learned it."
 
-Avoid spending time on account setup, file-management details, or a long landing page.
+### 2. Create the course — 25s
 
-### 2. Create the learning path — 30–45 seconds
+Upload the source, set the goal, hit generate. Use a course generated moments before this
+recording started (or the dev-only demo auto-complete tool, see the reliability checklist
+below) so the live segment shows the *result* — a structured module/concept outline —
+without waiting on a live model call.
 
-Show the source packet and learner goal. Generate the course.
+> "Codex built the whole generation pipeline behind this: a planner turns the source and
+> goal into a concept graph, then a lesson agent writes each lesson — explanation, starter
+> code, hidden tests, quiz items, a reference solution — as one structured call."
 
-The important reveal is a visible outline such as:
+### 3. A cited lesson + a quiz — 25s
 
-```text
-Authorization Pipeline
-  ✓ 1. Request lifecycle
-  → 2. Idempotency and retries
-    3. Decline-reason change
-    4. Lab: trace the expired-hold path
-    5. Lab: add expiry validation
-    6. Assessment: choose a safe implementation point
-```
+Open a conceptual lesson. Click an inline citation marker — it opens the exact source
+excerpt the claim came from. Answer a quiz question (mcq or fill-in-blank; Markdown and
+math render properly, including code blocks in the options).
 
-Narrate the design choice: “Instead of one giant lesson, Canopy creates a sequence of short explanations, practice, and a check for transfer.”
+> "Every claim traces back to the actual source, not a hallucinated citation. The quiz
+> isn't decoration — it's the first mastery observation."
 
-If generation takes time, use realistic streaming/progress states or a prepared course. Do not let a live model call determine whether the demo succeeds.
+### 4. The coding lab — 55s
 
-### 3. Establish understanding — 35–45 seconds
-
-Open a short conceptual lesson. Show:
-
-- a concise explanation of the request path;
-- a highlighted source citation that opens the relevant excerpt;
-- a small question such as “Why must an authorization retry return the original result?”; and
-- automatic completion after a read-only lesson, or an explicit correct answer for a quiz.
-
-This is where the demo earns its claim of source grounding. A citation should look concrete, not decorative.
-
-### 4. The runnable lab — 60–75 seconds
-
-Navigate through the persistent course outline into the expiry-validation lab. Show the starter code, task, and tests.
-
-The learner makes an intentionally incomplete change. Click **Run**:
+Navigate into a lab. Show the starter code, Monaco editor, and instructions. Make an
+intentionally incomplete change, hit **Run**:
 
 ```text
 1 test passed
-1 test failed: expected EXPIRED_HOLD, received AUTHORIZED
+1 test failed: expected accuracy above 0.8, got 0.62
 ```
 
-Offer a progressive hint that points to the relevant condition without writing the full solution. The learner adds the expiry branch, runs again, and passes.
+Take a hint from the lesson helper (guides, doesn't hand over the answer), fix it, **Run**
+again to confirm, then **Submit** — this is what's graded against the hidden suite and
+what actually moves mastery.
 
-Then click **Submit** to distinguish experimentation from evaluated completion. Show the lesson’s completion state updating in the fixed course outline.
+> "This exact lab already proved itself once, before you ever saw it: Codex generated it,
+> ran it against the hidden tests in the same sandbox you're using now, and when it
+> failed, patched and re-verified it — the same generate → run → diagnose → patch →
+> re-verify loop, just run on the lesson itself instead of on your submission. Nothing
+> ships to a learner until it's proven itself."
 
-The central visual is not the code editor alone. It is the loop:
+### 5. Mastery, live — 20s
 
-```text
-Understand → try → receive evidence → improve → demonstrate application
-```
+Switch to the Mastery tab. Point at one concept's `Understand` and `Apply` numbers moving
+independently — quizzes feed one, labs feed the other — and a prerequisite-review nudge
+if one is showing.
 
-### 5. Assessment and celebration — 30–40 seconds
+> "This isn't a completion checkbox. It's two separate, real probabilities, updated from
+> what you actually did."
 
-Show a compact scenario assessment:
+### 6. Finish — 30s
 
-> “A retry arrives after the hold expires. Which layer should enforce expiry and why?”
+Navigate to (or fast-forward to, via a pre-completed second course) a fully finished
+course. The certificate pops up automatically. Show it, then hit **Download coursebook**
+on another finished course to show the PDF export.
 
-After answering, show the celebration/completion state, progress checkmarks, and a clear “next lesson” action. This makes Canopy feel like a learning product rather than an isolated code exercise.
+> "Finish every lesson and a certificate is waiting for you — no digging for it. And the
+> whole course exports as a real PDF: lessons, worked examples, quizzes, citations — a
+> takeaway that outlives the tab."
 
-### 6. Finish with the business insight — 20 seconds
+### 7. Bonus, if time allows — 15s
 
-Return to the course map or a lightweight outcome panel:
+Open the share toggle, copy the course link, switch accounts, import — instant, no
+regeneration.
 
-> “Canopy turns the knowledge around a codebase into an approved, reusable route to a developer’s first safe change. Teams reduce repeated explanations; developers gain confidence through actual practice.”
-
-Do not claim a time-to-productivity improvement unless it was measured. State it as the outcome a pilot would test.
+> "One person builds it, anyone imports their own copy for free — that's how this scales
+> past a single learner without an org/team system yet."
 
 ## What must work live
 
-Prioritize this narrow vertical slice:
-
 | Capability | Demo requirement |
 |---|---|
-| Course creation | A goal and compact source packet result in a structured sequence. Prepared data is acceptable as a reliability fallback. |
-| Learning experience | Fixed, collapsible course outline; current item, completion checkmarks, and next/previous navigation. |
-| Short lessons | At least two concise conceptual lessons, with source references. |
-| Coding lab | Editable starter code, Run feedback, and a deterministic successful solution path. |
-| Assessment | One small transfer-style question that marks completion. |
-| Progress | Completion visibly updates both in the lesson and on the course page. |
-| Finish | A satisfying but brief celebration state. |
+| Course creation | A goal and a real source produce a structured module/concept outline. A course generated just before recording is fine — don't let live generation latency eat the 3-minute budget. |
+| Cited lesson | At least one concept with a clickable inline citation resolving to the real excerpt. |
+| Quiz | At least one quiz item with Markdown/code rendering, answered live. |
+| Coding lab | Editable starter code, a **Run** that fails meaningfully, a hint, a fix, a **Submit** that passes and updates mastery. |
+| Mastery dashboard | `Understand`/`Apply` visibly different per concept, at least one clearly non-zero and moving. |
+| Certificate | A finished course that auto-pops the certificate on open, plus the PDF export. |
+| Coursebook | A finished course's "Download coursebook" produces a real PDF. |
+| Sharing (bonus) | Toggle sharing, import under a second account, instantly. |
 
-The existing product direction already supports much of this learning flow. If any part is unreliable, prepare a fully generated course and spend the live demo on learning and practice rather than generation latency.
+The existing product already supports all of this end to end — see
+[`USE_CASES.md`](../product/USE_CASES.md) for exactly what's verified against the code.
+If any generation step is unreliable on the day, prepare the course ahead of time and
+spend the live segment on the learning/practice loop, not generation latency.
 
 ## What to simulate or defer
 
-Do not overbuild these for a hackathon demo:
+Do not overbuild these for a hackathon demo — none of them are built, and claiming them
+live would be dishonest:
 
-- full GitHub installation, organisation permissions, or repository-wide indexing;
-- real pull-request syncing or automatic updates after merge;
-- perfect adaptive mastery modelling;
-- arbitrary-language sandbox support;
-- multi-user management, team analytics, and billing;
-- broad course authoring controls.
-
-Use a fictional PR/change document in the source packet. It demonstrates the developer-native use case without claiming that Canopy is a production GitHub integration today.
+- full GitHub/repo ingestion — sources are uploaded files, not a connected repository;
+- real pull-request syncing or automatic updates after a merge;
+- an org/team assignment view or cohort progress dashboard (courses are single-owner;
+  sharing is link-based cloning, not live-shared);
+- the LLM diagnosis-and-remediation layer surfaced to the learner (the self-repair loop
+  in step 4 runs on the lesson during generation, not as a learner-facing "the system
+  diagnosed your mistake" moment yet);
+- perfect adaptive resequencing — there's a prerequisite-review *nudge*, not a fully
+  reshaped course.
 
 ## Demo reliability checklist
 
-Prepare a “golden path” course before presenting.
+Prepare a "golden path" state before recording, don't generate live end to end:
 
-- The course has at least six activities: three short concepts, two labs, and one assessment.
-- All explanations cite a source excerpt that exists in the displayed packet.
-- The lab has a known initial failure and a known passing solution.
-- The test output is deterministic and readable.
-- Completion can be reset in a fresh demo account or seeded data state.
-- The source packet, generated course, and fallback screenshots are available offline.
-- No API key, private repository, or live external model call is necessary to complete the live story.
-
-If presenting a live generate action, pre-generate the same course in another tab/session and use it immediately if the call is slow or fails.
+- One course generated ahead of time with a real coding lab known to fail on first Run
+  and pass after one small fix.
+- A second course brought to full completion ahead of time (the dev-only demo
+  auto-complete admin tool exists for exactly this — see
+  [`ROADMAP.md`](../product/ROADMAP.md) — target "mixed" so the mastery dashboard shows
+  varied, non-uniform numbers instead of a suspiciously uniform 100% everywhere), so the
+  certificate/coursebook segment doesn't depend on live grading.
+- Citations, quiz items, and lab test output are all real — nothing staged or faked, just
+  pre-generated so the recording doesn't wait on a model call.
+- Completion state resets cleanly (fresh account or seeded data) if a re-record is
+  needed.
+- The source packet, a screen recording of the whole golden path, and fallback
+  screenshots are all available offline in case a live call fails during recording.
 
 ## Judging narrative
 
-### Problem
+Mapped directly to [`HACKATHON.md`](./HACKATHON.md)'s four criteria:
 
-Engineering knowledge is trapped in repositories, documentation, PRs, and senior engineers’ heads. New contributors can search for answers, but struggle to form a reliable mental model and practise safely before touching production work.
+### Potential impact
 
-### Insight
+A learner with a source and a goal — a paper, a library's docs, a textbook chapter —
+today gets either a passive summary (NotebookLM, a chatbot) or nothing at all if no
+course exists for that material. Canopy gets them a validated, hands-on course with real
+evidence they can do the thing, not just describe it.
 
-AI code tools can explain a file or search a codebase. The missing layer is structured learning: ordering the concepts, making the learner apply them, and recording evidence of understanding.
+### Design
 
-### Solution
+A complete loop, not a tech demo: source in, structured course out, a real coding
+sandbox with Run/Submit, a dual-track mastery model, a certificate, a PDF takeaway. Every
+piece is reachable from the same course page, not a disconnected feature list.
 
-Canopy converts approved engineering context into a compact path of explanations, labs, and assessments. It is source-grounded, practical, and reusable by the team.
+### Quality of idea
 
-### Why now
+The empty quadrant no competitor occupies: generated from *your* material **and**
+executable, hidden-test-graded practice, at once (see
+[`../product/COMPETITIVE_DIFFERENTIATION.md`](../product/COMPETITIVE_DIFFERENTIATION.md)).
+The self-validating sandbox — a lesson proves itself against hidden tests before a
+learner ever sees it — is the specific mechanism that makes that combination trustworthy
+instead of just plausible.
 
-AI makes it feasible to transform changing technical context into learning material quickly. But it must be paired with guarded source selection, deterministic labs, and human review—not treated as an automatic source of truth.
+### Technological implementation (Codex usage)
+
+The generate → run → diagnose → patch → re-verify loop is the core agentic workflow:
+Codex-assisted development built a pipeline where lesson generation never trusts its own
+first answer — it's checked against a real sandbox, and repaired against real failure
+output, before a learner is exposed to it. That loop runs across six curated sandbox
+environments (`python-basic`, `python-ml` with GPU-capable PyTorch/scikit-learn,
+`cpp-basic`, `c-basic`, `javascript-basic`, `go-basic`), not one fixed toolchain.
 
 ### Credible future
 
-Start with curated source packets. Later, connect approved repositories, architecture docs, and change metadata so learning paths can be refreshed as a system evolves.
+Start with an individual learner and their own material (built, demoed here). The same
+mechanism scales into internal engineering onboarding once an org/team layer exists —
+see [`MARKET_EXPLORATION.md`](../product/MARKET_EXPLORATION.md) §4.2 — but that's the
+deliberate next phase, not a claim this submission makes.
 
 ## Suggested spoken script
 
-> “Meet Maya. She just joined the payments team and needs to make one safe change—not complete a generic backend course. Her team’s knowledge is spread through docs, code, and a recent PR.
+> "Any source you have can become a real course. I'll hand Canopy a chapter on
+> supervised learning and a goal: I want to actually train and tune a classifier, not
+> just read about one.
 >
-> We give Canopy that bounded context and her goal. It creates a short path: first the request lifecycle, then idempotency, then two small labs, then an assessment.
+> It builds a course — lessons that cite the real source, a quiz, and a coding lab.
+> Codex built the pipeline that generates this: every lesson is checked against a real
+> sandbox and repaired if it fails, before I ever see it.
 >
-> In this lab, Maya has to handle an expired authorization hold. Her first attempt fails a meaningful test. Canopy gives her evidence and a hint, but does not just write the answer. Once she fixes it, she submits and the path records demonstrated completion.
+> Here's the lab. My first attempt fails a real test. I take a hint — not the answer —
+> fix it, and submit. That's graded against hidden tests, and it just moved my mastery
+> score — not a completion checkbox, a real probability that updates from what I actually
+> did.
 >
-> Code assistants help you find an answer. Canopy helps a team turn its engineering knowledge into a reusable route to understanding and safe contribution.”
+> Finish the course, and a certificate is waiting — plus the whole thing exports as a PDF
+> I keep. And if I want to share it, anyone can import their own copy for free, no
+> regeneration.
+>
+> Chat tools can explain a document. Canopy proves you can do the thing it taught."
 
 ## Assets to prepare
 
-- Fictional payments source packet, with clearly labeled code and docs.
-- A seeded course using the exact source packet.
-- A lab that fails on one recognizable edge case and passes after one small edit.
-- A concise slide or opening screen containing the product sentence.
+- A real source document (short ML chapter or library docs page) and its matching goal.
+- A course generated ahead of time with a lab known to fail on first Run and pass after
+  one small fix.
+- A second, fully completed course (via the demo auto-complete tool, mixed target) for
+  the mastery/certificate/coursebook segment.
+- A concise opening line/slide containing the one-sentence pitch.
 - A fallback screen recording of the whole golden path.
-- Optional architecture diagram: client → authorization service → ledger, showing where the expiry rule belongs.
 
 ## Success criteria
 
 After the demo, a viewer should be able to repeat all three ideas without prompting:
 
-1. Canopy is for learning the concepts behind a specific engineering system, not generic coding education.
-2. It goes beyond chat by creating structured, hands-on practice and evidence of understanding.
-3. Its first business use case is helping teams onboard developers and explain changing technical systems.
+1. Canopy turns a source you already have into a real, hands-on course — not a summary.
+2. It goes beyond chat: a graded sandbox and a real mastery model, not just reading or
+   chatting.
+3. Every exercise proved itself against the sandbox — repaired if it failed — before a
+   learner ever saw it. That loop is the actual Codex-driven engineering in this system.

@@ -6,12 +6,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
+from app.certificate_pdf import render_certificate_pdf
 from app.dependencies import CurrentUser
 from app.llm import LLMGatewayClient, LLMGatewayError
 from app.quiz import grade_quiz_answer, withhold_answer
 from app.repository import CourseRepository, get_repository
 from app.sandbox import SandboxError, SandboxFile, SandboxRunnerClient
-from app.schemas import CitationExcerptResponse, ConceptDetailResponse, CoursePointsResponse, CourseMapResponse, CourseMasteryResponse, CourseProgressResponse, CourseSourceSummary, CourseSummary, CreateCourseRequest, ImportCourseRequest, LessonHelperRequest, LessonHelperResponse, LessonWorkspaceFile, PrerequisiteReviewResponse, QuizAnswerRequest, QuizGradeResponse, RecommendationDecisionRequest, RecommendationsResponse, RunLessonRequest, RunLessonResponse, RunScriptRequest, RunScriptResponse, SourceDownloadResponse, UpdateCourseRequest
+from app.schemas import CertificateResponse, CitationExcerptResponse, ConceptDetailResponse, CoursePointsResponse, CourseMapResponse, CourseMasteryResponse, CourseProgressResponse, CourseSourceSummary, CourseSummary, CreateCourseRequest, ImportCourseRequest, LessonHelperRequest, LessonHelperResponse, LessonWorkspaceFile, PrerequisiteReviewResponse, QuizAnswerRequest, QuizGradeResponse, RecommendationDecisionRequest, RecommendationsResponse, RunLessonRequest, RunLessonResponse, RunScriptRequest, RunScriptResponse, SourceDownloadResponse, UpdateCourseRequest
 from app.settings import get_settings
 from app.textbook_pdf import render_textbook_pdf
 
@@ -193,6 +194,24 @@ def decide_course_recommendation(
 @router.get("/{course_id}/citations/{citation_id}", response_model=CitationExcerptResponse)
 def get_citation_excerpt(course_id: UUID, citation_id: UUID, current_user: CurrentUser, repository: Repository) -> CitationExcerptResponse:
     return repository.citation_excerpt(current_user, course_id, citation_id)
+
+
+@router.get("/{course_id}/certificate", response_model=CertificateResponse)
+def get_certificate(course_id: UUID, current_user: CurrentUser, repository: Repository) -> CertificateResponse:
+    """409s until every lesson in the course is completed."""
+    return repository.certificate(current_user, course_id)
+
+
+@router.get("/{course_id}/export/certificate", response_class=Response)
+def export_certificate(course_id: UUID, current_user: CurrentUser, repository: Repository) -> Response:
+    """Download the completion certificate as a real PDF."""
+    certificate = repository.certificate(current_user, course_id)
+    filename = re.sub(r"[^a-zA-Z0-9._-]+", "-", certificate.course_title).strip("-.") or "course"
+    return Response(
+        content=render_certificate_pdf(certificate),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}-certificate.pdf"'},
+    )
 
 
 @router.get("/{course_id}/sources", response_model=list[CourseSourceSummary])

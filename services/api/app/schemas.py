@@ -36,7 +36,7 @@ class SourceSummary(BaseModel):
     status: SourceStatus
 
 
-CourseLanguage = Literal["python", "cpp"]
+CourseLanguage = Literal["python", "python-ml", "cpp"]
 
 
 class CreateCourseRequest(BaseModel):
@@ -342,6 +342,19 @@ class CitationExcerptResponse(BaseModel):
     content: str
 
 
+class CertificateResponse(BaseModel):
+    """A completion certificate -- only issuable once every lesson in the course is done
+    (``lessons_completed == lessons_total``, both > 0). ``certificate_id`` is deterministic
+    (derived from course_id + owner_id) so it reads the same every time it's viewed,
+    without needing a dedicated table to persist an issued-once record."""
+
+    course_id: UUID
+    course_title: str
+    learner_email: str
+    issued_at: datetime
+    certificate_id: str
+
+
 class CourseSourceSummary(BaseModel):
     id: UUID
     filename: str
@@ -368,3 +381,48 @@ class LessonHelperRequest(BaseModel):
 class LessonHelperResponse(BaseModel):
     answer_markdown: str = Field(min_length=1, max_length=4000)
     replacement_markdown: str | None = Field(default=None, max_length=2400)
+
+
+class DemoAutoCompleteRequest(BaseModel):
+    """Dev-only: drive some or all of a course to completion as an LLM standing in for
+    the learner, through the real grading/sandbox paths -- for demoing mastery, points,
+    and completion state without grinding through a course by hand."""
+
+    # "mastered": answer everything correctly -- the fastest path to a fully completed
+    # course. "mixed": aim for correct_rate correct and the rest deliberately wrong, so
+    # the mastery meters show a realistic, partially-mastered snapshot instead of 100%.
+    target: Literal["mastered", "mixed"] = "mastered"
+    correct_rate: float = Field(default=0.6, ge=0.0, le=1.0)
+    # None means every concept in the course; otherwise only these slugs are touched --
+    # lets a demo target one struggling concept, one module, or the whole course.
+    concept_slugs: list[str] | None = None
+    include_quizzes: bool = True
+    include_labs: bool = True
+
+
+class DemoConceptResult(BaseModel):
+    concept_slug: str
+    concept_title: str
+    kind: Literal["conceptual", "coding", "assessment"]
+    quiz_items_correct: int = 0
+    quiz_items_incorrect: int = 0
+    quiz_items_skipped: int = 0
+    lab_passed: bool | None = None
+    error: str | None = None
+
+
+class DemoJobStatus(BaseModel):
+    """Polled while a demo auto-complete run is in progress. Runs in a background
+    thread inside the API process (dev-only, in-memory -- lost on restart, which is fine
+    for a local debug tool) so the client can see real per-concept progress and cancel
+    between concepts, instead of one opaque request that blocks until the whole course
+    is done."""
+
+    job_id: str
+    course_id: UUID
+    state: Literal["running", "completed", "cancelled", "failed"]
+    total: int
+    completed: int
+    current_concept_title: str | None = None
+    results: list[DemoConceptResult] = Field(default_factory=list)
+    error: str | None = None

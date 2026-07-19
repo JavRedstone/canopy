@@ -25,7 +25,7 @@ from app.mastery import (
     MASTERY_THRESHOLD,
     REVIEW_THRESHOLD,
 )
-from app.schemas import CitationExcerptResponse, ConceptDetailResponse, ConceptMastery, CoursePointsResponse, CourseMapConcept, CourseMapModule, CourseMapResponse, CourseMasteryResponse, CourseProgressResponse, CourseSourceSummary, CourseSummary, CreateCourseRequest, CreateSourceRequest, LessonPreview, LessonWorkspaceFile, PrerequisiteConcept, PrerequisiteRecommendation, PrerequisiteReviewResponse, QuizAnswerRequest, QuizGradeResponse, QuizItemPreview, RecommendationDecision, RecommendationSummary, RecommendationsResponse, SourceDownloadResponse, SourceSummary, SourceUploadTarget, UpdateCourseRequest
+from app.schemas import CertificateResponse, CitationExcerptResponse, ConceptDetailResponse, ConceptMastery, CoursePointsResponse, CourseMapConcept, CourseMapModule, CourseMapResponse, CourseMasteryResponse, CourseProgressResponse, CourseSourceSummary, CourseSummary, CreateCourseRequest, CreateSourceRequest, LessonPreview, LessonWorkspaceFile, PrerequisiteConcept, PrerequisiteRecommendation, PrerequisiteReviewResponse, QuizAnswerRequest, QuizGradeResponse, QuizItemPreview, RecommendationDecision, RecommendationSummary, RecommendationsResponse, SourceDownloadResponse, SourceSummary, SourceUploadTarget, UpdateCourseRequest
 from app.settings import get_settings
 from app.supabase import get_service_client
 
@@ -173,6 +173,11 @@ class CourseRepository(Protocol):
 
     def citation_excerpt(self, owner_id: UUID, course_id: UUID, citation_id: UUID) -> CitationExcerptResponse:
         """The source chunk text and filename behind a lesson citation marker."""
+        ...
+
+    def certificate(self, owner_id: UUID, course_id: UUID) -> CertificateResponse:
+        """The completion certificate for a fully finished course. Raises 409 if the
+        course isn't fully completed yet."""
         ...
 
     def course_sources(self, owner_id: UUID, course_id: UUID) -> list[CourseSourceSummary]:
@@ -426,6 +431,11 @@ class MemoryCourseRepository:
         self._course_for_owner(owner_id, course_id)
         # concept_detail() always returns citations=[] in memory mode, so this is unreachable from the UI.
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Citation not found.")
+
+    def certificate(self, owner_id: UUID, course_id: UUID) -> CertificateResponse:
+        self._course_for_owner(owner_id, course_id)
+        # Memory mode never tracks real lesson completion, so a course here is never "done".
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This course is not fully completed yet.")
 
     def course_sources(self, owner_id: UUID, course_id: UUID) -> list[CourseSourceSummary]:
         course = self._course_for_owner(owner_id, course_id)
@@ -1479,6 +1489,25 @@ class SupabaseCourseRepository:
             section=chunk["section"],
             page_number=chunk["page_number"],
             content=chunk["content"],
+        )
+
+    def certificate(self, owner_id: UUID, course_id: UUID) -> CertificateResponse:
+        summary = self.get_course(owner_id, course_id)
+        if summary.lessons_total == 0 or summary.lessons_completed < summary.lessons_total:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This course is not fully completed yet.")
+        profile = self._one(
+            self._data(self.client.table("profiles").select("email").eq("id", str(owner_id)), "load learner profile"),
+            "Profile",
+        )
+        # Deterministic, not random -- the same certificate_id every time this course's
+        # certificate is viewed, without a dedicated table to persist an issued-once record.
+        certificate_id = sha256(f"{course_id}:{owner_id}".encode()).hexdigest()[:12].upper()
+        return CertificateResponse(
+            course_id=course_id,
+            course_title=summary.title,
+            learner_email=profile["email"],
+            issued_at=datetime.now(UTC),
+            certificate_id=certificate_id,
         )
 
     def course_sources(self, owner_id: UUID, course_id: UUID) -> list[CourseSourceSummary]:

@@ -15,7 +15,11 @@ class Settings(BaseSettings):
     supabase_service_role_key: str | None = None
     database_url: str | None = None
     cors_origins: str = "http://localhost:3000"
-    sandbox_timeout_seconds: int = 20
+    # Must stay >= the sandbox runner's slowest per-environment timeout (python-ml's is
+    # 60s -- torch/CUDA import alone eats into a tight budget) plus margin, or the API's
+    # own HTTP call to the sandbox runner gives up before that environment's container
+    # would, surfacing a false "sandbox unavailable" for a run that was still in progress.
+    sandbox_timeout_seconds: int = 65
     sandbox_runner_url: str = "http://localhost:8020"
     llm_gateway_url: str = "http://localhost:8010"
     llm_gateway_timeout_seconds: int = 30

@@ -1,5 +1,14 @@
 # Canopy — Product Idea
 
+**Status:** this is the founding design spec — the target vision, not a build log. A lot
+of it has since shipped as specified (dual-track BKT, the self-repairing sandbox loop,
+run/submit, source citations); a real chunk is still deliberately deferred (the LLM
+diagnosis layer, remediation lesson generation, transfer exercises, just-ahead-of-time
+caching). For what's actually running today, verified against the code, see
+[`USE_CASES.md`](./USE_CASES.md) and [`ROADMAP.md`](./ROADMAP.md); for how the built
+half holds up against the learning-science literature, see
+[`PEDAGOGY_EVALUATION.md`](./PEDAGOGY_EVALUATION.md).
+
 ## One-Line Pitch
 
 **Codecademy, but the entire course is generated from *your* documents — and it reshapes itself around *your* mastery.**
@@ -298,6 +307,16 @@ BKT tracks *how much* a student knows; it cannot see *why* they're failing, beca
 
 ## One-Week Build Plan
 
+**Historical — this was the original week-one plan, written before the build started.**
+The actual build tracked it closely for the ingestion/planner/sandbox/mastery core, but
+diverged in two directions: it went *further* on environment breadth than planned here
+(`python-ml`, `cpp`, and `c` sandboxes shipped, not just `python-basic`/`python-fastapi`;
+see [`../architecture/SANDBOX_ARCHITECTURE.md`](../architecture/SANDBOX_ARCHITECTURE.md)),
+and added features this plan didn't anticipate (a completion certificate, free course
+sharing/cloning, quiz Markdown/LaTeX rendering). It deliberately did *not* build the LLM
+diagnosis layer, remediation generation, or transfer exercises described below — those
+remain the highest-value unbuilt work per [`PEDAGOGY_EVALUATION.md`](./PEDAGOGY_EVALUATION.md).
+
 **Days 1–2 — Foundations.**
 - LLM adapter layer: provider-agnostic interface (`generate_structured`, `stream`, `embed`), Bedrock provider implemented first, capability-based model config.
 - Ingestion pipeline: PDF parse → chunk → embed → Supabase pgvector, with source-section metadata.
@@ -329,10 +348,18 @@ BKT tracks *how much* a student knows; it cannot see *why* they're failing, beca
 - Sandbox security hardening: no-network containers, CPU/memory limits, timeouts, read-only system FS.
 - Observability: generation latency, validation pass rate, repair-loop frequency (the "X% of lessons needed self-repair" stat is itself a compelling metric to surface).
 
-**Deferred (post-week roadmap):**
-- Environment-builder agent for fully automated catalog expansion (week 1 ships with manually built base images behind the same catalog interface).
+**Deferred (post-week roadmap) — still deferred today unless noted:**
+- Environment-builder agent for fully automated catalog expansion (the catalog is still
+  manually curated behind the same registry interface —
+  `services/sandbox_runner/sandbox_runner/runner.py` — now with six environments instead
+  of the original two).
 - DKT/SAKT upgrade for the mastery model once observation data accumulates; EM refitting of BKT parameters.
-- Multi-language environments beyond Python; instructor analytics dashboard; cross-student lesson-quality learning (a lesson that triggers remediation for many students gets regenerated for everyone); citations linking explanations back into source PDF pages.
+- Multi-language *content* (course text in languages other than English) — not to be
+  confused with the multi-language sandbox *environments*, which shipped
+  (`python`, `python-ml`, `cpp`, plus `javascript`/`go` in the standalone playground).
+- Instructor analytics dashboard; cross-student lesson-quality learning (a lesson that
+  triggers remediation for many students gets regenerated for everyone); citations
+  linking explanations back into source PDF pages.
 
 ---
 
@@ -341,8 +368,16 @@ BKT tracks *how much* a student knows; it cannot see *why* they're failing, beca
 Existing AI education tools generate *content*. Codecademy provides *hands-on environments* but only for a fixed, human-built catalog. This platform is the intersection neither side covers:
 
 - **Any document becomes a hands-on course** — generation grounded in the learner's own materials.
-- **Mastery, not completion** — the course visibly reorganizes itself around what the learner actually understands.
+- **Mastery, not completion** — the course tracks what the learner actually understands
+  versus can apply, separately, instead of a single finished/not-finished flag.
 - **Trustworthy by construction** — every exercise validates itself (and repairs itself) before a learner sees it.
+- **A real takeaway** — a certificate and a PDF coursebook a learner keeps, not a session
+  that stops existing when the tab closes.
+
+This is also the [OpenAI Build Week](../demo/HACKATHON.md) submission's core bet: the
+judging criteria reward a complete product experience with a clear user and real impact,
+not a technical concept demo — see [`MARKET_EXPLORATION.md`](./MARKET_EXPLORATION.md) for
+how that shapes who this is being built and demoed for first.
 
 The agentic loop, restated:
 

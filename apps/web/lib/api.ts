@@ -1,4 +1,4 @@
-export type CourseLanguage = "python" | "cpp";
+export type CourseLanguage = "python" | "python-ml" | "cpp";
 
 export interface CourseSummary {
   id: string;
@@ -74,6 +74,35 @@ export async function exportCoursebook(courseId: string, accessToken: string): P
     headers: { Authorization: `Bearer ${accessToken}` }
   });
   if (!response.ok) throw new Error(`Unable to export the coursebook (HTTP ${response.status}).`);
+  return response.blob();
+}
+
+export interface CertificateResponse {
+  course_id: string;
+  course_title: string;
+  learner_email: string;
+  issued_at: string;
+  certificate_id: string;
+}
+
+export class CourseNotCompletedError extends Error {}
+
+export async function getCertificate(courseId: string, accessToken: string): Promise<CertificateResponse> {
+  const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/certificate`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: "no-store"
+  });
+  if (response.status === 409) throw new CourseNotCompletedError("This course is not fully completed yet.");
+  if (!response.ok) throw new Error(`Unable to load the certificate (HTTP ${response.status}).`);
+  return response.json();
+}
+
+export async function exportCertificate(courseId: string, accessToken: string): Promise<Blob> {
+  const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/export/certificate`, {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  if (response.status === 409) throw new CourseNotCompletedError("This course is not fully completed yet.");
+  if (!response.ok) throw new Error(`Unable to export the certificate (HTTP ${response.status}).`);
   return response.blob();
 }
 
@@ -472,6 +501,78 @@ export interface ScriptRunResult {
   timed_out: boolean;
 }
 
+export interface DemoConceptResult {
+  concept_slug: string;
+  concept_title: string;
+  kind: "conceptual" | "coding" | "assessment";
+  quiz_items_correct: number;
+  quiz_items_incorrect: number;
+  quiz_items_skipped: number;
+  lab_passed: boolean | null;
+  error: string | null;
+}
+
+export interface DemoJobStatus {
+  job_id: string;
+  course_id: string;
+  state: "running" | "completed" | "cancelled" | "failed";
+  total: number;
+  completed: number;
+  current_concept_title: string | null;
+  results: DemoConceptResult[];
+  error: string | null;
+}
+
+export interface DemoAutoCompleteOptions {
+  target: "mastered" | "mixed";
+  correctRate: number;
+  // undefined/omitted means every concept in the course.
+  conceptSlugs?: string[];
+  includeQuizzes: boolean;
+  includeLabs: boolean;
+}
+
+// Dev-only: the API 404s all of these outside APP_ENVIRONMENT=development. Drives some or
+// all of a course to completion as an LLM standing in for the learner, through the real
+// grading/sandbox paths -- as a background job, since a full course is real LLM/sandbox
+// work that can take minutes. Start it, then poll getDemoAutoCompleteStatus for progress.
+export async function startDemoAutoComplete(
+  courseId: string,
+  options: DemoAutoCompleteOptions,
+  accessToken: string
+): Promise<DemoJobStatus> {
+  const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/demo/auto-complete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({
+      target: options.target,
+      correct_rate: options.correctRate,
+      concept_slugs: options.conceptSlugs ?? null,
+      include_quizzes: options.includeQuizzes,
+      include_labs: options.includeLabs
+    })
+  });
+  if (!response.ok) throw new Error(`Unable to start auto-complete (HTTP ${response.status}).`);
+  return response.json();
+}
+
+export async function getDemoAutoCompleteStatus(courseId: string, jobId: string, accessToken: string): Promise<DemoJobStatus> {
+  const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/demo/auto-complete/${jobId}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: "no-store"
+  });
+  if (!response.ok) throw new Error(`Unable to check auto-complete status (HTTP ${response.status}).`);
+  return response.json();
+}
+
+export async function cancelDemoAutoComplete(courseId: string, jobId: string, accessToken: string): Promise<void> {
+  const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/demo/auto-complete/${jobId}/cancel`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  if (!response.ok) throw new Error(`Unable to cancel auto-complete (HTTP ${response.status}).`);
+}
+
 export async function runLessonScript(
   courseId: string,
   slug: string,
@@ -488,7 +589,7 @@ export async function runLessonScript(
   return response.json();
 }
 
-export type PlaygroundEnvironmentId = "python-basic" | "javascript-basic" | "go-basic" | "cpp-basic";
+export type PlaygroundEnvironmentId = "python-basic" | "python-ml" | "javascript-basic" | "go-basic" | "cpp-basic" | "c-basic";
 
 // Each environment's test command auto-discovers test files by its own convention
 // (pytest: test_*.py, node --test: *.test.js, go test: *_test.go, doctest: any *.cpp

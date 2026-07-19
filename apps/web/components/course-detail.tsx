@@ -25,8 +25,9 @@ import DialogContent from "@mui/material/DialogContent";
 import DialogContentText from "@mui/material/DialogContentText";
 import DialogActions from "@mui/material/DialogActions";
 import Button from "@mui/material/Button";
-import { CoursePlanningNotStartedError, CourseMapResponse, CoursePointsResponse, CourseProgressResponse, CourseSummary, deleteCourse, exportCoursebook, getCourse, getCourseMap, getCoursePoints, getCourseProgress, regenerateCourse, resumeCourseLessons } from "@/lib/api";
+import { CoursePlanningNotStartedError, CourseMapResponse, CoursePointsResponse, CourseProgressResponse, CourseSummary, DemoAutoCompleteOptions, DemoJobStatus, cancelDemoAutoComplete, deleteCourse, exportCoursebook, getCourse, getCourseMap, getCoursePoints, getCourseProgress, getDemoAutoCompleteStatus, regenerateCourse, resumeCourseLessons, startDemoAutoComplete } from "@/lib/api";
 import { Breadcrumbs } from "@/components/breadcrumbs";
+import { CertificateDialog } from "@/components/certificate-dialog";
 import { CourseCategoryBadge } from "@/components/course-category-badge";
 import { CourseProgressSteps } from "@/components/course-progress";
 import { MasteryDashboard } from "@/components/mastery-dashboard";
@@ -34,6 +35,7 @@ import { RecommendationsPanel } from "@/components/recommendations-panel";
 import { CourseSettingsDialog } from "@/components/course-settings-dialog";
 import { CourseShareDialog } from "@/components/course-share-dialog";
 import { CourseSourcesDialog } from "@/components/course-sources-dialog";
+import { DemoAutoCompleteDialog } from "@/components/demo-autocomplete-dialog";
 import { Icon } from "@/components/icon";
 import { SettingsMenu, SettingsMenuAction } from "@/components/settings-menu";
 import { conceptKindIcon } from "@/lib/concept-kind";
@@ -58,6 +60,9 @@ export function CourseDetail({ courseId }: { courseId: string }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
+  const [demoOpen, setDemoOpen] = useState(false);
+  const [demoJob, setDemoJob] = useState<DemoJobStatus>();
+  const [certificateOpen, setCertificateOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [detailTab, setDetailTab] = useState<"content" | "mastery">("content");
@@ -144,6 +149,62 @@ export function CourseDetail({ courseId }: { courseId: string }) {
     const timer = setTimeout(() => void progressRefreshRef.current(), pollIntervalMs);
     return () => clearTimeout(timer);
   }, [progress]);
+
+  // Deliberately independent of demoOpen: a run keeps going (and stays trackable) whether
+  // or not its dialog is open, so closing it never leaves you guessing whether it stopped.
+  useEffect(() => {
+    if (!demoJob || demoJob.state !== "running") return;
+    const timer = window.setTimeout(async () => {
+      try {
+        const { data } = await createClient().auth.getSession();
+        if (!data.session) return;
+        setDemoJob(await getDemoAutoCompleteStatus(courseId, demoJob.job_id, data.session.access_token));
+      } catch {
+        // Non-fatal: keep the last known status and try again on the next tick.
+      }
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, [courseId, demoJob]);
+
+  // Mirrors what a real learner's own actions already trigger elsewhere (a mastery/course-map
+  // refresh after answering a quiz or submitting a lab) -- as the demo finishes each concept,
+  // pull the course's own checkmarks/points/mastery back in so the page visibly updates while
+  // it runs, not just the dialog's own results list.
+  useEffect(() => {
+    if (!demoJob) return;
+    void fullLoadRef.current();
+    // Deliberately narrower than the full demoJob object: only re-run when a concept
+    // actually finishes or the run reaches a terminal state, not on every 1.5s poll tick
+    // (current_concept_title changes far more often and isn't worth a reload on its own).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demoJob?.completed, demoJob?.state]);
+
+  // Pop the certificate up the first time a visit finds every lesson done -- sessionStorage
+  // (not a ref) so it fires again on a fresh visit later, but not on every re-render or
+  // background poll within the same tab session while the learner keeps browsing the course.
+  useEffect(() => {
+    if (!course || course.lessons_total === 0 || course.lessons_completed < course.lessons_total) return;
+    const seenKey = `canopy:certificate-shown:${courseId}`;
+    if (window.sessionStorage.getItem(seenKey)) return;
+    window.sessionStorage.setItem(seenKey, "1");
+    // Popup eligibility depends on sessionStorage, an external store React doesn't track --
+    // there's no render-time way to derive it, so the setState has to live here.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCertificateOpen(true);
+  }, [course, courseId]);
+
+  async function handleStartDemo(options: DemoAutoCompleteOptions) {
+    const { data } = await createClient().auth.getSession();
+    if (!data.session) throw new Error("Your session has expired. Please sign in again.");
+    setDemoJob(await startDemoAutoComplete(courseId, options, data.session.access_token));
+  }
+
+  async function handleCancelDemo() {
+    if (!demoJob) return;
+    const { data } = await createClient().auth.getSession();
+    if (!data.session) throw new Error("Your session has expired. Please sign in again.");
+    await cancelDemoAutoComplete(courseId, demoJob.job_id, data.session.access_token);
+  }
 
   async function handleRegenerate() {
     setRegenerating(true);
@@ -235,10 +296,24 @@ export function CourseDetail({ courseId }: { courseId: string }) {
     default: "linear-gradient(120deg, #334155 0%, #475569 58%, #64748b 130%)"
   };
   const coursebookGradient = coursebookGradients[courseCategory.key] ?? coursebookGradients.default;
+  // The button sitting on the white card needs a solid, readable color, not a gradient --
+  // this is each gradient's own darkest stop, so it always matches the card instead of a
+  // fixed color chosen for one category (previously hardcoded to the "ml" gradient's
+  // indigo, which looked like an arbitrary unrelated blue on every other category).
+  const coursebookAccentColors: Record<string, string> = {
+    security: "#581c27", ml: "#312e81", data: "#78350f", web: "#0c4a6e",
+    backend: "#14532d", cloud: "#134e4a", code: "#365314", default: "#334155"
+  };
+  const coursebookAccent = coursebookAccentColors[courseCategory.key] ?? coursebookAccentColors.default;
   const settingsActions: SettingsMenuAction[] = [
     { label: "Modify", icon: "edit", onClick: () => setSettingsOpen(true), disabled: regenerating || deleting },
     { label: regenerating ? "Regenerating…" : "Regenerate", icon: "refresh", onClick: handleRegenerate, disabled: regenerating || deleting },
     { label: deleting ? "Deleting…" : "Delete", icon: "delete", onClick: () => setConfirmDeleteOpen(true), disabled: regenerating || deleting, danger: true },
+    // The API 404s this outside local development regardless -- hidden here too so a
+    // production build never even shows an action that can't work.
+    ...(process.env.NODE_ENV === "development"
+      ? [{ label: "Demo: auto-complete", icon: "smart_toy", onClick: () => setDemoOpen(true) }]
+      : []),
   ];
 
   return (
@@ -264,6 +339,17 @@ export function CourseDetail({ courseId }: { courseId: string }) {
             />
           ) : null}
           <Button size="small" variant="outlined" startIcon={<Icon name="folder_open" />} onClick={() => setSourcesOpen(true)}>Sources</Button>
+          {course.lessons_total > 0 && course.lessons_completed >= course.lessons_total ? (
+            <Button
+              size="small"
+              variant="contained"
+              color="secondary"
+              startIcon={<Icon name="workspace_premium" />}
+              onClick={() => setCertificateOpen(true)}
+            >
+              Certificate
+            </Button>
+          ) : null}
           <Button
             size="small"
             variant={course.is_shared ? "contained" : "outlined"}
@@ -280,6 +366,28 @@ export function CourseDetail({ courseId }: { courseId: string }) {
       <CourseSettingsDialog course={course} open={settingsOpen} onOpenChange={setSettingsOpen} onSaved={setCourse} />
       <CourseShareDialog course={course} open={shareOpen} onOpenChange={setShareOpen} onSaved={setCourse} />
       <CourseSourcesDialog courseId={courseId} open={sourcesOpen} onOpenChange={setSourcesOpen} />
+      <CertificateDialog courseId={courseId} open={certificateOpen} onOpenChange={setCertificateOpen} />
+      {process.env.NODE_ENV === "development" ? (
+        <DemoAutoCompleteDialog
+          courseId={courseId}
+          open={demoOpen}
+          onOpenChange={setDemoOpen}
+          job={demoJob}
+          onStart={handleStartDemo}
+          onCancel={handleCancelDemo}
+        />
+      ) : null}
+      {process.env.NODE_ENV === "development" && demoJob && demoJob.state === "running" && !demoOpen ? (
+        <Alert
+          severity="info"
+          icon={<CircularProgress size={16} />}
+          action={<Button size="small" onClick={() => setDemoOpen(true)}>View</Button>}
+          sx={{ mb: 2 }}
+        >
+          Demo auto-complete still running in the background: {demoJob.completed}/{demoJob.total} concepts done
+          {demoJob.current_concept_title ? ` — currently "${demoJob.current_concept_title}"` : ""}.
+        </Alert>
+      ) : null}
 
       <Dialog open={confirmDeleteOpen} onClose={() => setConfirmDeleteOpen(false)}>
         <DialogTitle>Delete course?</DialogTitle>
@@ -325,7 +433,7 @@ export function CourseDetail({ courseId }: { courseId: string }) {
                   {map.modules.length > 3 ? <Chip size="small" label={`+${map.modules.length - 3} more`} sx={{ bgcolor: "rgba(255,255,255,0.13)", color: "white" }} /> : null}
                 </Stack>
                 <Stack direction="row" sx={{ gap: 1, flexWrap: "wrap", mt: 1 }}>
-                  <Button variant="contained" color="inherit" startIcon={exporting ? <CircularProgress size={16} /> : <Icon name="download" />} onClick={() => void handleExportTextbook()} disabled={exporting} sx={{ color: "#312e81", bgcolor: "white", fontWeight: 700, "&:hover": { bgcolor: "#eef2ff" }, "&.Mui-disabled": { color: "#312e81", bgcolor: "rgba(255,255,255,0.82)", opacity: 1 }, "& .MuiCircularProgress-root": { color: "#312e81" } }}>
+                  <Button variant="contained" color="inherit" startIcon={exporting ? <CircularProgress size={16} /> : <Icon name="download" />} onClick={() => void handleExportTextbook()} disabled={exporting} sx={{ color: coursebookAccent, bgcolor: "white", fontWeight: 700, "&:hover": { bgcolor: "#eef2ff" }, "&.Mui-disabled": { color: coursebookAccent, bgcolor: "rgba(255,255,255,0.82)", opacity: 1 }, "& .MuiCircularProgress-root": { color: coursebookAccent } }}>
                     {exporting ? "Preparing PDF…" : "Download coursebook"}
                   </Button>
                   <Button variant="text" startIcon={<Icon name="folder_open" />} onClick={() => setSourcesOpen(true)} sx={{ color: "#e0e7ff" }}>Browse sources</Button>
@@ -354,7 +462,7 @@ export function CourseDetail({ courseId }: { courseId: string }) {
       ) : null}
 
       {detailTab === "mastery" && progress.stage === "ready" && map.modules.length > 0 ? (
-        <MasteryDashboard courseId={courseId} />
+        <MasteryDashboard courseId={courseId} refreshKey={demoJob?.completed} />
       ) : map.modules.length === 0 ? (
         progress.stage === "ready" ? <Typography color="text.secondary">This course has no modules yet.</Typography> : null
       ) : (

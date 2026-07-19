@@ -29,6 +29,7 @@ _SLUG = r"^[a-z0-9]+(?:-[a-z0-9]+)*$"
 # sandbox_runner/runner.py's own per-environment `file_suffix`, which this mirrors.
 ENVIRONMENT_FILE_SUFFIXES: dict[str, tuple[str, ...]] = {
     "python-basic": (".py",),
+    "python-ml": (".py",),
     "cpp-basic": (".cpp", ".h", ".hpp"),
 }
 
