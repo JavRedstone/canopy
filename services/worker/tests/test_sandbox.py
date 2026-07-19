@@ -53,3 +53,17 @@ def test_client_hides_transport_errors_as_sandbox_error() -> None:
 
     with pytest.raises(SandboxError):
         client.run_pytest([SandboxFile(path="solution.py", content="x = 1\n")])
+
+
+def test_client_exposes_docker_readiness_error() -> None:
+    def unavailable(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            503,
+            json={"detail": "Docker is unavailable. Start Docker Desktop, then retry the lesson build."},
+        )
+
+    http = httpx.Client(transport=httpx.MockTransport(unavailable))
+    client = SandboxRunnerClient("http://sandbox", internal_service_token=None, timeout_seconds=20, http_client=http)
+
+    with pytest.raises(SandboxError, match="Start Docker Desktop"):
+        client.ensure_available()

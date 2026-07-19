@@ -37,7 +37,10 @@ class SandboxEnvironment:
 
 _ENVIRONMENTS: dict[str, SandboxEnvironment] = {
     "python-basic": SandboxEnvironment(
-        image="canopy-lesson-sandbox:python-basic",
+        # Increment this tag whenever the Dockerfile changes. The runner only builds
+        # missing images, so a versioned tag prevents an old cached environment from
+        # silently surviving a dependency update.
+        image="canopy-lesson-sandbox:python-basic-v2",
         dockerfile_dir=_SANDBOX_IMAGE_DIR / "python-basic",
         file_suffix=".py",
         # -v (not -q) prints one "path::test_name PASSED/FAILED" line per test, which the

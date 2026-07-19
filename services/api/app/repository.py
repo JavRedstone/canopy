@@ -711,6 +711,7 @@ class SupabaseCourseRepository:
         lessons_total = 0
         lessons_built = 0
         current_lesson_title: str | None = None
+        lesson_rows: list[dict[str, Any]] = []
         if lesson_concepts:
             lesson_rows = self._data(
                 self.client.table("lesson_definitions")
@@ -725,7 +726,16 @@ class SupabaseCourseRepository:
             if building_row:
                 current_lesson_title = title_by_concept_id.get(building_row["concept_id"])
 
-        stage = "building_lessons" if lessons_total > 0 and lessons_built < lessons_total else "ready"
+        incomplete_rows = [row for row in lesson_rows if row["build_status"] != "built"]
+        has_active_or_queued_lesson = any(row["build_status"] in ("pending", "building") for row in incomplete_rows)
+        has_terminal_lesson_failure = any(row["build_status"] == "failed" for row in incomplete_rows)
+        stage = (
+            "building_lessons"
+            if lessons_total > 0 and lessons_built < lessons_total and has_active_or_queued_lesson
+            else "failed"
+            if lessons_total > 0 and lessons_built < lessons_total and has_terminal_lesson_failure
+            else "ready"
+        )
         return CourseProgressResponse(
             course_id=course_id, stage=stage,
             sources_ready=sources_ready, sources_total=sources_total,

@@ -4,6 +4,7 @@
 
 - [`IDEA.md`](./product/IDEA.md) — the product plan; source of truth for product intent.
 - [`MARKET_EXPLORATION.md`](./product/MARKET_EXPLORATION.md) — business case, market map, target customers, competitive landscape, positioning, and risks. Consolidated from three earlier independent explorations that all converged on the same conclusion.
+- [`COMPETITIVE_DIFFERENTIATION.md`](./product/COMPETITIVE_DIFFERENTIATION.md) — a scannable head-to-head table vs. NotebookLM, ChatGPT, Codecademy/DataCamp, and GitHub Copilot/Cody, distilled from `MARKET_EXPLORATION.md` and `USE_CASES.md`.
 - [`USE_CASES.md`](./product/USE_CASES.md) — candidate use cases compared against what the product can actually do today, not just the plan's intent.
 - [`SAMPLE_COURSES.md`](./product/SAMPLE_COURSES.md) — example course-creation inputs (goal text) and what they produce.
 

@@ -40,3 +40,4 @@ Full index: [docs/README.md](./docs/README.md).
 - [Security](./docs/architecture/SECURITY.md)
 - [Demo plan](./docs/demo/DEMO.md)
 - [Market exploration](./docs/product/MARKET_EXPLORATION.md)
+- [Competitive differentiation](./docs/product/COMPETITIVE_DIFFERENTIATION.md)

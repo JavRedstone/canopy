@@ -8,9 +8,9 @@ from fastapi import Depends, FastAPI, Header, HTTPException, status
 from pydantic import BaseModel, Field, model_validator
 
 from sandbox_runner.runner import DockerSandboxRunner, SandboxError, SandboxFile, SandboxRunResult, get_environment, validate_file_suffix, validate_workspace_file
+from sandbox_runner.settings import SandboxRunnerSettings, get_settings
 
 EnvironmentId = Literal["python-basic", "javascript-basic", "go-basic"]
-from sandbox_runner.settings import SandboxRunnerSettings, get_settings
 
 
 logger = logging.getLogger(__name__)
@@ -99,8 +99,21 @@ class RunScriptResponse(BaseModel):
     timed_out: bool
 
 
+def _docker_client() -> docker.DockerClient:
+    """Return a verified Docker client with an actionable unavailable error."""
+    try:
+        client = docker.from_env()
+        client.ping()
+        return client
+    except docker.errors.DockerException as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Docker is unavailable. Start Docker Desktop, then retry the lesson build.",
+        ) from exc
+
+
 def _backend(settings: SandboxRunnerSettings = Depends(get_settings)) -> SandboxBackend:
-    return DockerSandboxRunner(docker.from_env(), timeout_seconds=settings.sandbox_timeout_seconds)
+    return DockerSandboxRunner(_docker_client(), timeout_seconds=settings.sandbox_timeout_seconds)
 
 
 def _internal_request_allowed(
@@ -116,7 +129,8 @@ def _internal_request_allowed(
 
 @app.get("/health", dependencies=[Depends(_internal_request_allowed)])
 def health() -> dict[str, str]:
-    return {"status": "ok"}
+    _docker_client()
+    return {"status": "ok", "docker": "ready"}
 
 
 @app.post("/internal/v1/runs", response_model=RunResponse, dependencies=[Depends(_internal_request_allowed)])

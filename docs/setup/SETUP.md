@@ -163,27 +163,66 @@ npm run dev:web
 npm run dev:web
 ```
 
+## Health checks
+
+Confirm each service actually came up, especially after `npm run dev` (all five start
+concurrently, so a slow one can be easy to miss in the interleaved log output):
+
+```
+curl http://127.0.0.1:3000/          # web     -> 200
+curl http://127.0.0.1:8000/health    # api     -> 200
+curl http://127.0.0.1:8010/health    # gateway -> 200
+curl http://127.0.0.1:8020/health    # sandbox -> 200
+```
+
+The **worker has no HTTP port** — confirm it's alive from its log output instead; you
+should see repeating `POST .../rpc/read_generation_jobs 200 OK` and
+`read_ingestion_jobs 200 OK` lines (prefixed `[worker]` under `npm run dev`).
+
 ## Troubleshooting
 
 - A learning-helper 503 usually means the LLM gateway is stopped, still running old code, or lacks a working provider configuration. Restart the gateway after pulling helper changes.
 - **A course (or a Regenerate) stuck at "planning" with no error is almost always the worker not running.** Course generation needs the worker, LLM gateway, and sandbox runner running in addition to the API and web app — see the table in [§3](#3-run-the-services). Check for a `python -m worker.main` process; if it's not there, start it.
 - The current vertical slice uses Supabase Auth and the Supabase-backed repository when `APP_AUTH_MODE=supabase` and `APP_REPOSITORY_BACKEND=supabase` are set.
+- **No local Supabase/Postgres is required to run the app.** Web, API, and worker all talk
+  to whichever Supabase `APP_SUPABASE_URL` in `.env` points at (local or hosted, per
+  [Database migrations](#database-migrations) above) via the service-role key and PGMQ
+  RPCs — `npx supabase start` is only needed if that URL is the local one.
+
+### A service's terminal output is hard to find
+
+Each process under `npm run dev` is prefixed (`[api]`, `[gateway]`, `[sandbox]`,
+`[worker]`, `[web]`) in one interleaved stream. If you'd rather have per-service log
+files instead, run the individual `npm run dev:*` scripts (or the raw commands below)
+each redirected to a file, e.g. on PowerShell: `npm run dev:worker *> .logs\worker.log`,
+then `Get-Content .logs\worker.log -Tail 40 -Wait` to follow it. Next.js also writes its
+own dev log at `apps\web\.next\dev\logs\next-development.log` regardless.
 
 ### Windows: a port is already in use
 
 Local servers keep running until their terminal receives `Ctrl+C` or the process is stopped. If a terminal is no longer visible, an older API, gateway, or sandbox process can still hold its port.
 
-Find the process holding a port (for example, the LLM gateway on 8010):
+**If you're using `npm run dev`, this shouldn't happen** — `concurrently` kills each
+process's full tree (via the `tree-kill` package, which uses `taskkill /T` on Windows)
+when you stop it or when another process in the group exits, which is exactly what
+avoids the classic Windows gotcha where killing a wrapper script (`uvicorn`, `npm run
+dev:web`) leaves the real child process running and still holding the port.
+
+If a port is still stuck (e.g. after a hard crash, or from a service started outside
+`npm run dev`), find and stop whatever's holding it. Either works:
+
+```powershell
+Get-NetTCPConnection -LocalPort 8010 -State Listen -ErrorAction SilentlyContinue |
+  Select-Object -Expand OwningProcess -Unique |
+  ForEach-Object { Stop-Process -Id $_ -Force }
+```
 
 ```powershell
 netstat -ano | Select-String ':8010'
-```
-
-The final column is the process ID (PID). Inspect it, then stop only that PID:
-
-```powershell
+# The final column is the process ID (PID). Inspect it, then stop only that PID:
 Get-Process -Id <pid>
 Stop-Process -Id <pid>
 ```
 
-Start the service again using its command above. Common local ports are API `8000`, LLM gateway `8010`, and sandbox runner `8020`.
+Swap `8010` for `3000` / `8000` / `8020` as needed, then relaunch that service. Common
+local ports are web `3000`, API `8000`, LLM gateway `8010`, and sandbox runner `8020`.

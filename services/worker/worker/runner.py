@@ -25,6 +25,7 @@ class Worker:
     """
 
     def __init__(self, settings: WorkerSettings, client: Client, openai: LLMGatewayClient, sandbox: SandboxRunnerClient) -> None:
+        self.settings = settings
         self.client = client
         self.queue = QueueAdapter(client, settings.queue_visibility_seconds)
         self.ingestor = SourceIngestor(settings, client, openai, self.queue)
@@ -82,9 +83,25 @@ class Worker:
             logger.exception("Generation job hit a transient error; leaving job queued for retry", extra={"payload": message.payload})
             return
         except Exception:
-            if job_type == "concept_regeneration":
-                lesson_definition_id = message.payload.get("lesson_definition_id")
+            if job_type in ("lesson_build", "concept_regeneration"):
+                lesson_definition_id = str(message.payload.get("lesson_definition_id", ""))
                 if lesson_definition_id:
-                    self.client.table("lesson_definitions").update({"build_status": "failed"}).eq("id", lesson_definition_id).execute()
+                    retry = self.client.rpc(
+                        "retry_lesson_build",
+                        {
+                            "p_lesson_definition_id": lesson_definition_id,
+                            "p_max_retries": self.settings.lesson_build_job_max_retries,
+                        },
+                    ).execute().data
+                    if retry:
+                        logger.warning(
+                            "Lesson build failed; queued bounded automatic retry",
+                            extra={"lesson_definition_id": lesson_definition_id},
+                        )
+                    else:
+                        logger.error(
+                            "Lesson build exhausted automatic retries",
+                            extra={"lesson_definition_id": lesson_definition_id},
+                        )
             logger.exception("Generation job failed", extra={"payload": message.payload})
         self.queue.archive("generation", message.message_id)

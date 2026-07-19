@@ -36,9 +36,14 @@ class FakeTableQuery:
 class FakeClient:
     def __init__(self) -> None:
         self.update_calls: list[tuple[str, dict | None]] = []
+        self.rpc_calls: list[tuple[str, dict]] = []
 
     def table(self, name: str) -> FakeTableQuery:
         return FakeTableQuery(self.update_calls, name)
+
+    def rpc(self, function: str, arguments: dict) -> SimpleNamespace:
+        self.rpc_calls.append((function, arguments))
+        return SimpleNamespace(execute=lambda: SimpleNamespace(data=True))
 
 
 class FakeQueue:
@@ -62,6 +67,7 @@ def _worker() -> tuple[Worker, FakeClient, FakeQueue]:
     queue = FakeQueue()
     worker.client = client
     worker.queue = queue
+    worker.settings = SimpleNamespace(lesson_build_job_max_retries=2)
     return worker, client, queue
 
 
@@ -77,7 +83,7 @@ def test_transient_lesson_build_error_resets_status_and_leaves_job_queued() -> N
     assert client.update_calls == []
 
 
-def test_permanent_lesson_build_error_archives() -> None:
+def test_lesson_build_error_queues_a_bounded_automatic_retry() -> None:
     worker, client, queue = _worker()
     worker.lesson_builder = SimpleNamespace(build_lesson=_raiser(ValueError("bad bundle")))
 
@@ -86,6 +92,15 @@ def test_permanent_lesson_build_error_archives() -> None:
     )
 
     assert queue.archived == [("generation", 2)]
+    assert client.rpc_calls == [
+        (
+            "retry_lesson_build",
+            {
+                "p_lesson_definition_id": "22222222-2222-2222-2222-222222222222",
+                "p_max_retries": 2,
+            },
+        )
+    ]
 
 
 class ClaimingClient(FakeClient):
@@ -177,6 +192,9 @@ class ScriptedSandbox:
     def __init__(self, verdicts: list[bool]) -> None:
         self.verdicts = list(verdicts)
         self.calls = 0
+
+    def ensure_available(self) -> None:
+        return None
 
     def run_pytest(self, _files: list) -> SimpleNamespace:
         self.calls += 1
@@ -356,7 +374,7 @@ def test_build_lesson_resets_build_status_to_pending_on_retryable_error(monkeypa
     builder = LessonBuilder.__new__(LessonBuilder)
     builder.settings = SimpleNamespace(builder_model="test-model", queue_visibility_seconds=300)
     builder.openai = SimpleNamespace()
-    builder.sandbox = SimpleNamespace()
+    builder.sandbox = SimpleNamespace(ensure_available=lambda: None)
     builder.client = ClaimingClient()
 
     def _raise_transient(*_args: object, **_kwargs: object) -> None:

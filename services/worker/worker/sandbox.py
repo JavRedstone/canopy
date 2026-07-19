@@ -62,3 +62,20 @@ class SandboxRunnerClient:
             )
         except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
             raise SandboxError("The sandbox runner request failed.") from exc
+
+    def ensure_available(self) -> None:
+        """Fail fast before an expensive coding-lesson build when Docker is unavailable."""
+        headers = {"X-Internal-Service-Token": self.internal_service_token} if self.internal_service_token else {}
+        try:
+            response = self.http_client.get(f"{self.base_url}/health", headers=headers)
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            detail = ""
+            if exc.response is not None:
+                try:
+                    body = exc.response.json()
+                    detail = str(body.get("detail", "")) if isinstance(body, dict) else ""
+                except (ValueError, TypeError):
+                    pass
+            message = detail or "The sandbox runner is unavailable."
+            raise SandboxError(message) from exc

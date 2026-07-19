@@ -2,7 +2,9 @@ import io
 import tarfile
 
 import pytest
+from fastapi import HTTPException
 
+from sandbox_runner import main
 from sandbox_runner.main import RunFile, RunRequest
 from sandbox_runner.runner import SandboxFile, files_to_tar, get_environment
 
@@ -75,3 +77,16 @@ def test_run_request_rejects_files_whose_suffix_does_not_match_the_environment()
             environment_id="javascript-basic",
             files=[RunFile(path="solution.py", content="x = 1\n")],
         )
+
+
+def test_docker_readiness_has_an_actionable_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    class UnavailableDocker:
+        def ping(self) -> None:
+            raise main.docker.errors.DockerException("connection refused")
+
+    monkeypatch.setattr(main.docker, "from_env", lambda: UnavailableDocker())
+
+    with pytest.raises(HTTPException, match="Start Docker Desktop") as exc_info:
+        main.health()
+
+    assert exc_info.value.status_code == 503

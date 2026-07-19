@@ -146,7 +146,7 @@ export function CourseProgressSteps({ progress, onResume }: { progress: CoursePr
       </Stepper>
 
       {progress.stage === "failed" ? (
-        <Alert severity="error">Course planning failed. Use the Regenerate button to try again.</Alert>
+        <Alert severity="error">Course generation failed. Use the Regenerate button to try again.</Alert>
       ) : null}
 
       {stalled && onResume ? (

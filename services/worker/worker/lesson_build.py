@@ -23,7 +23,7 @@ from supabase import Client
 from worker.context import citation_chunks
 from worker.errors import RETRYABLE_ERRORS
 from worker.lesson_agent import generate_assessment_content, generate_coding_artifacts, generate_conceptual_content, generate_lesson_content, repair_bundle, strip_starter_solution
-from worker.lesson_schema import Assessment, CodingArtifactsBundle, LessonBundle, LessonContentBundle, WorkspaceFile, reference_workspace, starter_workspace, validate_lesson_content
+from worker.lesson_schema import Assessment, CodingArtifactsBundle, LessonBundle, LessonContentBundle, reference_workspace, starter_workspace, validate_lesson_content
 from worker.llm import LLMGatewayClient
 from worker.sandbox import SandboxFile, SandboxRunnerClient
 from worker.settings import WorkerSettings
@@ -59,6 +59,10 @@ class LessonBuilder:
             if self._concept_kind(claimed) != "coding":
                 bundle, status, build_error = self._conceptual_bundle(lesson_definition_id, claimed)
             else:
+                # Check Docker-backed execution before paying for generation. If Docker
+                # Desktop is stopped, the worker leaves this transient job queued with
+                # the direct, actionable error from the sandbox service.
+                self.sandbox.ensure_available()
                 bundle, status, build_error = self._coding_bundle(lesson_definition_id, claimed)
             self.client.rpc(
                 "apply_lesson_bundle",
@@ -110,7 +114,7 @@ class LessonBuilder:
         )
         bundle = _compose_bundle(content, artifacts)
 
-        # A starter that already passes every test leaves the learner nothing to do — the
+        # A starter that already passes every test leaves the learner nothing to do. The
         # classic failure being the model copying the reference solution into the visible
         # workspace files. Strip it back to a stub with a targeted, sandbox-verified repair
         # loop instead of blindly regenerating the whole artifacts bundle.

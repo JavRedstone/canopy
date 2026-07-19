@@ -26,6 +26,9 @@ class WorkerSettings(BaseSettings):
     # Agentic lesson sandbox builder: generate -> run in Docker -> repair on failure.
     lesson_build_max_attempts: int = 3
     lesson_build_max_tool_calls: int = 8
+    # A malformed model response can fail before the builder's internal repair loop.
+    # Retry the whole queued job a small number of times before making it terminal.
+    lesson_build_job_max_retries: int = 2
     sandbox_timeout_seconds: int = 20
 
     @property
