@@ -11,9 +11,8 @@ import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import List from "@mui/material/List";
-import ListItemButton from "@mui/material/ListItemButton";
-import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
+import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { CourseSourceSummary, getCourseSources, getSourceDownloadUrl } from "@/lib/api";
 import { Icon } from "@/components/icon";
@@ -87,7 +86,7 @@ export function CourseSourcesDialog({ courseId, open, onOpenChange }: { courseId
 
   return (
     <Dialog open={open} onClose={() => onOpenChange(false)} fullWidth maxWidth="sm">
-      <DialogTitle>Source documents</DialogTitle>
+      <DialogTitle sx={{ pb: 1 }}>Source library</DialogTitle>
       <DialogContent>
         <Box sx={{ pt: 0.5 }}>
           {loading ? (
@@ -100,29 +99,46 @@ export function CourseSourcesDialog({ courseId, open, onOpenChange }: { courseId
             <Typography color="text.secondary">This course has no attached source documents.</Typography>
           ) : null}
           {sources && sources.length > 0 ? (
-            <List disablePadding sx={{ display: "grid", gap: 1 }}>
+            <>
+              <Box sx={{ mb: 2, p: 1.5, borderRadius: 2, border: 1, borderColor: "divider", bgcolor: "action.hover" }}>
+                <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", gap: 2 }}>
+                  <Box>
+                    <Typography sx={{ fontWeight: 700 }}>Course materials</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>Original documents used to create this coursebook.</Typography>
+                  </Box>
+                  <Box sx={{ minWidth: 40, height: 40, borderRadius: 1.5, display: "grid", placeItems: "center", color: "primary.main", bgcolor: "rgba(99,102,241,0.10)" }}>
+                    <Icon name="folder_open" />
+                  </Box>
+                </Stack>
+              </Box>
+              <List disablePadding sx={{ display: "grid", gap: 1.2 }}>
               {sources.map((source) => {
                 const downloadable = source.status !== "uploading" && source.status !== "failed";
                 return (
-                  <ListItemButton
+                  <Box
                     key={source.id}
-                    onClick={() => void handleDownload(source)}
-                    disabled={!downloadable || downloadingId === source.id}
-                    sx={{ border: 1, borderColor: "divider", borderRadius: 1.5 }}
+                    sx={{ border: 1, borderColor: "divider", borderRadius: 1.5, p: 1.25, bgcolor: "background.paper", "&:hover": downloadable ? { bgcolor: "action.hover" } : {} }}
                   >
-                    <ListItemIcon sx={{ minWidth: 40 }}>
-                      <Icon name={sourceIcon(source.mime_type)} />
-                    </ListItemIcon>
-                    <ListItemText primary={source.filename} secondary={formatBytes(source.byte_size)} />
-                    {downloadingId === source.id ? (
-                      <CircularProgress size={18} />
-                    ) : (
-                      <Chip size="small" label={STATUS_LABEL[source.status]} variant="outlined" color={source.status === "failed" ? "error" : "default"} />
-                    )}
-                  </ListItemButton>
+                    <Stack direction="row" sx={{ alignItems: "center", gap: 1.3 }}>
+                      <Box sx={{ width: 44, height: 52, borderRadius: 1.25, display: "grid", placeItems: "center", color: source.mime_type === "application/pdf" ? "#dc2626" : "#4338ca", bgcolor: source.mime_type === "application/pdf" ? "#fef2f2" : "#eef2ff" }}>
+                        <Icon name={sourceIcon(source.mime_type)} />
+                      </Box>
+                      <ListItemText
+                        primary={<Typography noWrap sx={{ fontWeight: 700 }}>{source.filename}</Typography>}
+                        secondary={`Source ${String(source.position).padStart(2, "0")} · ${formatBytes(source.byte_size)}`}
+                      />
+                      <Stack sx={{ alignItems: "flex-end", gap: 0.75, flexShrink: 0 }}>
+                        <Chip size="small" label={STATUS_LABEL[source.status]} variant="outlined" color={source.status === "failed" ? "error" : "default"} />
+                        <Button size="small" startIcon={downloadingId === source.id ? <CircularProgress size={13} /> : <Icon name="download" />} onClick={() => void handleDownload(source)} disabled={!downloadable || downloadingId === source.id}>
+                          Download
+                        </Button>
+                      </Stack>
+                    </Stack>
+                  </Box>
                 );
               })}
-            </List>
+              </List>
+            </>
           ) : null}
         </Box>
       </DialogContent>

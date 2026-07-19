@@ -10,7 +10,6 @@ import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import List from "@mui/material/List";
 import ListItemButton from "@mui/material/ListItemButton";
-import ListItemText from "@mui/material/ListItemText";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
 import Alert from "@mui/material/Alert";
@@ -76,7 +75,12 @@ export function CourseDashboard() {
     );
   }
   return (
-    <List disablePadding sx={{ display: "grid", gap: 1 }}>
+    <>
+      <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", mb: 1.5 }}>
+        <Typography variant="body2" color="text.secondary">{courses.length} course{courses.length === 1 ? "" : "s"} in your library</Typography>
+        <Typography variant="body2" color="text.secondary">Continue where you left off</Typography>
+      </Stack>
+      <List disablePadding sx={{ display: "grid", gap: 1.25 }}>
       {courses.map((course, index) => (
         <motion.div
           key={course.id}
@@ -84,10 +88,19 @@ export function CourseDashboard() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.25, delay: Math.min(index * 0.04, 0.3) }}
         >
-          <ListItemButton component={Link} href={`/courses/${course.id}`} sx={{ border: 1, borderColor: "divider", borderRadius: 1.5, gap: 1.75 }}>
-            <CourseCategoryBadge title={course.title} goal={course.goal} />
-            <ListItemText primary={course.title} secondary={course.goal} sx={{ minWidth: 0 }} />
-            {course.status === "draft" ? (
+          <ListItemButton component={Link} href={`/courses/${course.id}`} sx={{ p: 1.75, border: 1, borderColor: "divider", borderRadius: 2, gap: 1.75, alignItems: "center", "&:hover": { borderColor: "primary.light", bgcolor: "rgba(99,102,241,0.035)" } }}>
+            <Box sx={{ p: 0.45, borderRadius: 1.5, bgcolor: "action.hover", flexShrink: 0 }}>
+              <CourseCategoryBadge title={course.title} goal={course.goal} />
+            </Box>
+            <Stack sx={{ minWidth: 0, flex: 1, gap: 0.35 }}>
+              <Stack direction="row" sx={{ alignItems: "center", gap: 0.75, minWidth: 0 }}>
+                <Typography noWrap sx={{ fontWeight: 750 }}>{course.title}</Typography>
+                <Chip size="small" label={course.language} variant="outlined" sx={{ height: 20, fontSize: "0.68rem", textTransform: "uppercase" }} />
+              </Stack>
+              <Typography variant="body2" color="text.secondary" sx={{ overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical" }}>{course.goal}</Typography>
+            </Stack>
+            <Stack direction="row" sx={{ alignItems: "center", gap: 1, flexShrink: 0 }}>
+              {course.status === "draft" ? (
               <Chip size="small" icon={<CircularProgress size={12} sx={{ color: "inherit" }} />} label="Building…" />
             ) : course.status === "ready" && course.lessons_total > 0 ? (
               course.lessons_completed === course.lessons_total ? (
@@ -120,9 +133,12 @@ export function CourseDashboard() {
                 sx={{ textTransform: "capitalize" }}
               />
             )}
+              <Icon name="chevron_right" className="course-row-arrow" />
+            </Stack>
           </ListItemButton>
         </motion.div>
       ))}
-    </List>
+      </List>
+    </>
   );
 }

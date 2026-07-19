@@ -36,6 +36,7 @@ import { CourseSourcesDialog } from "@/components/course-sources-dialog";
 import { Icon } from "@/components/icon";
 import { SettingsMenu, SettingsMenuAction } from "@/components/settings-menu";
 import { conceptKindIcon } from "@/lib/concept-kind";
+import { getCourseCategory } from "@/lib/course-category";
 import { createClient } from "@/lib/supabase/client";
 
 const pollIntervalMs = 5000;
@@ -220,6 +221,18 @@ export function CourseDetail({ courseId }: { courseId: string }) {
   if (!course || !progress || !map) return null;
 
   const coursebookConcepts = map.modules.flatMap((module) => module.concepts);
+  const courseCategory = getCourseCategory(course.title, course.goal);
+  const coursebookGradients: Record<string, string> = {
+    security: "linear-gradient(120deg, #581c27 0%, #9f1239 58%, #be123c 130%)",
+    ml: "linear-gradient(120deg, #312e81 0%, #6d28d9 58%, #7c3aed 130%)",
+    data: "linear-gradient(120deg, #78350f 0%, #b45309 58%, #d97706 130%)",
+    web: "linear-gradient(120deg, #0c4a6e 0%, #0369a1 58%, #0284c7 130%)",
+    backend: "linear-gradient(120deg, #14532d 0%, #15803d 58%, #16a34a 130%)",
+    cloud: "linear-gradient(120deg, #134e4a 0%, #0f766e 58%, #0d9488 130%)",
+    code: "linear-gradient(120deg, #365314 0%, #4d7c0f 58%, #65a30d 130%)",
+    default: "linear-gradient(120deg, #334155 0%, #475569 58%, #64748b 130%)"
+  };
+  const coursebookGradient = coursebookGradients[courseCategory.key] ?? coursebookGradients.default;
   const settingsActions: SettingsMenuAction[] = [
     { label: "Modify", icon: "edit", onClick: () => setSettingsOpen(true), disabled: regenerating || deleting },
     { label: regenerating ? "Regenerating…" : "Regenerate", icon: "refresh", onClick: handleRegenerate, disabled: regenerating || deleting },
@@ -280,7 +293,7 @@ export function CourseDetail({ courseId }: { courseId: string }) {
           <Box
             sx={{
               position: "relative", overflow: "hidden", mb: 3, p: { xs: 2.25, sm: 3 }, borderRadius: 3,
-              color: "white", background: "linear-gradient(120deg, #312e81 0%, #4338ca 52%, #0f766e 130%)",
+              color: "white", background: coursebookGradient,
               boxShadow: "0 18px 40px rgba(49, 46, 129, 0.22)"
             }}
           >
@@ -300,7 +313,7 @@ export function CourseDetail({ courseId }: { courseId: string }) {
                   {map.modules.length > 3 ? <Chip size="small" label={`+${map.modules.length - 3} more`} sx={{ bgcolor: "rgba(255,255,255,0.13)", color: "white" }} /> : null}
                 </Stack>
                 <Stack direction="row" sx={{ gap: 1, flexWrap: "wrap", mt: 1 }}>
-                  <Button variant="contained" color="inherit" startIcon={exporting ? <CircularProgress size={16} /> : <Icon name="download" />} onClick={() => void handleExportTextbook()} disabled={exporting} sx={{ color: "#312e81", bgcolor: "white", fontWeight: 700, "&:hover": { bgcolor: "#eef2ff" } }}>
+                  <Button variant="contained" color="inherit" startIcon={exporting ? <CircularProgress size={16} /> : <Icon name="download" />} onClick={() => void handleExportTextbook()} disabled={exporting} sx={{ color: "#312e81", bgcolor: "white", fontWeight: 700, "&:hover": { bgcolor: "#eef2ff" }, "&.Mui-disabled": { color: "#312e81", bgcolor: "rgba(255,255,255,0.82)", opacity: 1 }, "& .MuiCircularProgress-root": { color: "#312e81" } }}>
                     {exporting ? "Preparing PDF…" : "Download coursebook"}
                   </Button>
                   <Button variant="text" startIcon={<Icon name="folder_open" />} onClick={() => setSourcesOpen(true)} sx={{ color: "#e0e7ff" }}>Browse sources</Button>
@@ -309,7 +322,7 @@ export function CourseDetail({ courseId }: { courseId: string }) {
               <Box sx={{ alignSelf: { xs: "flex-start", sm: "center" }, width: 135, minHeight: 174, p: 1.5, borderRadius: 1.5, bgcolor: "#f8fafc", color: "#172554", boxShadow: "0 14px 25px rgba(15, 23, 42, 0.27)", transform: { sm: "rotate(3deg)" } }}>
                 <Icon name="menu_book" />
                 <Typography sx={{ mt: 3, fontWeight: 800, lineHeight: 1.18, fontSize: "0.95rem" }}>{course.title}</Typography>
-                <Box sx={{ height: 3, width: 38, bgcolor: "#2dd4bf", mt: 1.2, mb: 1 }} />
+                <Box sx={{ height: 3, width: 38, bgcolor: courseCategory.color, mt: 1.2, mb: 1 }} />
                 <Typography variant="caption" color="text.secondary">Canopy Coursebook</Typography>
               </Box>
             </Stack>
