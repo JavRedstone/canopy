@@ -69,6 +69,24 @@ _ENVIRONMENTS: dict[str, SandboxEnvironment] = {
         # go test requires a go.mod; submitted lesson/demo content won't include one.
         bootstrap_files={"go.mod": "module sandbox\n\ngo 1.22\n"},
     ),
+    "cpp-basic": SandboxEnvironment(
+        image="canopy-lesson-sandbox:cpp-basic-v1",
+        dockerfile_dir=_SANDBOX_IMAGE_DIR / "cpp-basic",
+        file_suffix=".cpp",
+        # No single command both compiles and runs C++, so this shells out: compile every
+        # .cpp in the workspace, then execute the resulting binary. A compile error trips
+        # `&&`'s short-circuit and g++'s own nonzero exit code/stderr surface exactly like
+        # a Python syntax error does for pytest -- no special-casing needed downstream.
+        test_command=["sh", "-c", "g++ -std=c++17 -O0 -I/usr/local/include *.cpp -o /tmp/sandbox_run && /tmp/sandbox_run"],
+        # `sh -c script entry_path` binds the first positional arg after the script to $0.
+        script_command=["sh", "-c", "g++ -std=c++17 -O0 -I/usr/local/include \"$0\" -o /tmp/sandbox_script && /tmp/sandbox_script"],
+        # doctest (a single vendored header, baked into the image -- see
+        # sandbox_image/cpp-basic/Dockerfile) needs exactly one translation unit that
+        # defines the runner's main(). Bootstrapping it keeps the learner's own file
+        # limited to `#include "doctest.h"` plus TEST_CASE(...), the same no-entry-point
+        # shape as the other environments.
+        bootstrap_files={"doctest_main.cpp": "#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN\n#include \"doctest.h\"\n"},
+    ),
 }
 
 

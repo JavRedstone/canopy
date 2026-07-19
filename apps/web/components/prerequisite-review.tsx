@@ -47,22 +47,31 @@ export function PrerequisiteReview({ courseId, slug }: { courseId: string; slug:
   const weak = data.prerequisites.filter((prerequisite) => prerequisite.needs_review);
 
   return (
-    <Alert severity="warning" icon={<Icon name="account_tree" />} sx={{ display: "grid", gap: 1 }}>
+    <Alert
+      severity="warning"
+      icon={<Icon name="account_tree" />}
+      sx={{ display: "grid", gap: 1, minWidth: 0, "& .MuiAlert-message": { minWidth: 0, overflow: "hidden" } }}
+    >
       <AlertTitle sx={{ fontWeight: 700, mb: 0 }}>Review recommended first</AlertTitle>
       <Typography variant="body2">
         This builds on {weak.length === 1 ? "a concept" : "concepts"} you&apos;re still shaky on. A quick review will make it click faster.
       </Typography>
-      <Stack sx={{ gap: 1, mt: 0.5 }}>
+      <Stack sx={{ gap: 1, mt: 0.5, minWidth: 0 }}>
         {weak.map((prerequisite) => {
           const percent = relevantPercent(prerequisite);
           return (
             <Stack
               key={prerequisite.slug}
               direction="row"
-              sx={{ alignItems: "center", justifyContent: "space-between", gap: 1, flexWrap: "wrap" }}
+              sx={{ alignItems: "center", justifyContent: "space-between", gap: 1, flexWrap: "wrap", minWidth: 0 }}
             >
-              <Stack direction="row" sx={{ alignItems: "center", gap: 1, minWidth: 0 }}>
-                <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap title={prerequisite.title}>
+              <Stack direction="row" sx={{ alignItems: "center", gap: 1, minWidth: 0, flex: "1 1 auto" }}>
+                {/* minWidth: 0 on the text itself, not just its ancestors, is what lets a flex
+                    child actually shrink below its content width -- without it `noWrap`'s
+                    ellipsis never gets room to kick in, and the row (and everything above it,
+                    up to the lab's ~420px instructions column) is forced to the title's full
+                    unwrapped width instead, which is what caused the horizontal scroll. */}
+                <Typography variant="body2" sx={{ fontWeight: 600, minWidth: 0 }} noWrap title={prerequisite.title}>
                   {prerequisite.title}
                 </Typography>
                 {percent !== null ? (
@@ -70,7 +79,7 @@ export function PrerequisiteReview({ courseId, slug }: { courseId: string; slug:
                     size="small"
                     variant="outlined"
                     label={`${percent}% ${prerequisite.kind === "coding" ? "apply" : "understand"}`}
-                    sx={{ fontVariantNumeric: "tabular-nums" }}
+                    sx={{ fontVariantNumeric: "tabular-nums", flexShrink: 0 }}
                   />
                 ) : null}
               </Stack>
@@ -81,6 +90,7 @@ export function PrerequisiteReview({ courseId, slug }: { courseId: string; slug:
                 component={Link}
                 href={`/courses/${courseId}/concepts/${prerequisite.slug}`}
                 endIcon={<Icon name="arrow_forward" />}
+                sx={{ flexShrink: 0 }}
               >
                 Review
               </Button>

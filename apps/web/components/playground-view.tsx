@@ -49,6 +49,13 @@ const ENVIRONMENTS: Record<PlaygroundEnvironmentId, EnvironmentConfig> = {
     framework: "go test",
     filePath: "example_test.go",
     defaultContent: `package sandbox\n\nimport "testing"\n\nfunc add(a, b int) int {\n\treturn a + b\n}\n\nfunc TestAddPasses(t *testing.T) {\n\tif add(2, 3) != 5 {\n\t\tt.Fatal("expected 5")\n\t}\n}\n\nfunc TestAddFails(t *testing.T) {\n\tif add(2, 2) != 5 {\n\t\tt.Fatal("expected 5")\n\t}\n}\n`
+  },
+  "cpp-basic": {
+    label: "C++",
+    monacoLanguage: "cpp",
+    framework: "doctest",
+    filePath: "example.cpp",
+    defaultContent: `#include "doctest.h"\n\nint add(int a, int b) {\n    return a + b;\n}\n\nTEST_CASE("add passes") {\n    CHECK(add(2, 3) == 5);\n}\n\nTEST_CASE("add fails") {\n    CHECK(add(2, 2) == 5);\n}\n`
   }
 };
 

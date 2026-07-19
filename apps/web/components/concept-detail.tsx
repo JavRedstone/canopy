@@ -51,9 +51,18 @@ const stallThresholdMs = 45_000;
 const monoFont = "ui-monospace, SFMono-Regular, Menlo, monospace";
 const editorOptionsBase = { minimap: { enabled: false }, fontSize: 12, tabSize: 4, scrollBeyondLastLine: false, scrollbar: { alwaysConsumeMouseWheel: false, verticalScrollbarSize: 10, horizontalScrollbarSize: 10 } };
 
-// A line the lesson generator emits to place a worked example or quiz item
-// inside the prose, e.g. "{{example:1}}" or "{{quiz:2}}" (1-based indexes).
-const LESSON_MARKER = /^\s*\{\{\s*(example|quiz)\s*:\s*(\d+)\s*\}\}\s*$/;
+// The bundle doesn't carry an explicit language field to the frontend -- the file
+// extension already says it, and it's the one thing Monaco actually needs for highlighting.
+function monacoLanguageForPath(path: string): string {
+  if (path.endsWith(".cpp") || path.endsWith(".h") || path.endsWith(".hpp")) return "cpp";
+  return "python";
+}
+
+// A marker the lesson generator emits to place a worked example or quiz item inside the
+// prose, e.g. "{{example:1}}" or "{{quiz:2}}" (1-based indexes). Meant to sit alone on its
+// own line, but matched anywhere in a line since the model occasionally tacks one onto the
+// end of a sentence instead -- the rest of that line still renders as ordinary prose.
+const LESSON_MARKER = /\{\{\s*(example|quiz)\s*:\s*(\d+)\s*\}\}/;
 
 /** Map rendered prose back to its Markdown positions so a browser text selection can
  * replace the right source span even when it crosses whitespace or inline emphasis. */
@@ -162,27 +171,36 @@ function LessonBody({
     if (text.trim()) blocks.push(<MarkdownText citations={citations} highlightText={highlightText} highlightParagraphId={highlightParagraphId} highlightOccurrence={highlightOccurrence} highlightFlash={highlightFlash} paragraphGroup={`${paragraphGroup ?? "lesson"}-${blocks.length}`} onCitationClick={onCitationClick} key={`text-${blocks.length}`}>{text}</MarkdownText>);
     buffer = [];
   };
-  for (const line of markdown.split("\n")) {
-    if (line.trimStart().startsWith("```")) insideCodeFence = !insideCodeFence;
-    const match = insideCodeFence ? null : line.match(LESSON_MARKER);
-    if (!match) {
-      buffer.push(line);
+  for (const rawLine of markdown.split("\n")) {
+    if (rawLine.trimStart().startsWith("```")) insideCodeFence = !insideCodeFence;
+    if (insideCodeFence) {
+      buffer.push(rawLine);
       continue;
     }
-    const index = Number(match[2]) - 1;
-    if (match[1] === "example" && examples[index] && !placedExamples.has(index)) {
-      flush();
-      placedExamples.add(index);
-      blocks.push(<WorkedExampleCard example={examples[index]} citations={citations} onCitationClick={onCitationClick} key={`example-${index}`} />);
-    } else if (match[1] === "quiz" && quizItems[index] && !placedQuiz.has(index)) {
-      flush();
-      placedQuiz.add(index);
-      blocks.push(
-        <QuizQuestion courseId={courseId} slug={slug} item={quizItems[index]} index={placedQuiz.size - 1} maxAttempts={quizMaxAttempts} onAnswered={onQuizAnswered} onAskHelper={onAskHelperForQuiz} key={`quiz-${index}`} />
-      );
-    } else {
-      flush();
+    let remainder = rawLine;
+    let sawMarker = false;
+    let match: RegExpMatchArray | null;
+    while ((match = remainder.match(LESSON_MARKER))) {
+      sawMarker = true;
+      const before = remainder.slice(0, match.index).trim();
+      if (before) buffer.push(before);
+      const index = Number(match[2]) - 1;
+      if (match[1] === "example" && examples[index] && !placedExamples.has(index)) {
+        flush();
+        placedExamples.add(index);
+        blocks.push(<WorkedExampleCard example={examples[index]} citations={citations} onCitationClick={onCitationClick} key={`example-${index}`} />);
+      } else if (match[1] === "quiz" && quizItems[index] && !placedQuiz.has(index)) {
+        flush();
+        placedQuiz.add(index);
+        blocks.push(
+          <QuizQuestion courseId={courseId} slug={slug} item={quizItems[index]} index={placedQuiz.size - 1} maxAttempts={quizMaxAttempts} onAnswered={onQuizAnswered} onAskHelper={onAskHelperForQuiz} key={`quiz-${index}`} />
+        );
+      } else {
+        flush();
+      }
+      remainder = remainder.slice((match.index ?? 0) + match[0].length);
     }
+    buffer.push(sawMarker ? remainder.trim() : rawLine);
   }
   flush();
   const leftoverExamples = examples.filter((_, index) => !placedExamples.has(index));
@@ -671,6 +689,10 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
   const activePublicTestFile = publicTestFiles.find((file) => file.path === activeFilePath);
   const activeFile = activeEditableFile ?? activePublicTestFile ?? files[0];
   const activeFileIsReadOnly = !activeEditableFile;
+  // The scratch console imports the lab module Python-style ("from x import *") and the
+  // sandbox only compiles the single scratch file for non-Python environments, so it
+  // can't reach the lab's own functions there yet -- scoped to Python until that's solved.
+  const scratchScriptSupported = !files[0] || monacoLanguageForPath(files[0].path) === "python";
 
   // The API rejects a run/submit unless the file set is *exactly* the lesson's starter
   // paths (HTTP 422 "Submit exactly the lesson starter files."). Revealing the solution
@@ -1118,7 +1140,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
                 {activeFile ? (
                   <MonacoEditor
                     height="100%"
-                    language="python"
+                    language={monacoLanguageForPath(activeFile.path)}
                     theme="vs-dark"
                     path={activeFile.path}
                     value={activeFile.content}
@@ -1158,7 +1180,9 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
                   />
                 </Tabs>
                 <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", bgcolor: "background.default", p: "12px 14px", display: "grid", gap: 1.25, alignContent: "start" }}>
-                  {consoleTab === "testcase" ? (
+                  {consoleTab === "testcase" && !scratchScriptSupported ? (
+                    <Alert severity="info">Scratch scripts are only available for Python labs right now -- use Run/Submit below to test your code.</Alert>
+                  ) : consoleTab === "testcase" ? (
                     <>
                       <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", gap: 1 }}>
                         <Typography variant="body2" color="text.secondary">

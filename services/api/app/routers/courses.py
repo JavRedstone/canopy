@@ -9,7 +9,7 @@ from app.llm import LLMGatewayClient, LLMGatewayError
 from app.quiz import grade_quiz_answer, withhold_answer
 from app.repository import CourseRepository, get_repository
 from app.sandbox import SandboxError, SandboxFile, SandboxRunnerClient
-from app.schemas import CitationExcerptResponse, ConceptDetailResponse, CoursePointsResponse, CourseMapResponse, CourseMasteryResponse, CourseProgressResponse, CourseSummary, CreateCourseRequest, LessonHelperRequest, LessonHelperResponse, LessonWorkspaceFile, PrerequisiteReviewResponse, QuizAnswerRequest, QuizGradeResponse, RecommendationDecisionRequest, RecommendationsResponse, RunLessonRequest, RunLessonResponse, RunScriptRequest, RunScriptResponse, UpdateCourseRequest
+from app.schemas import CitationExcerptResponse, ConceptDetailResponse, CoursePointsResponse, CourseMapResponse, CourseMasteryResponse, CourseProgressResponse, CourseSourceSummary, CourseSummary, CreateCourseRequest, LessonHelperRequest, LessonHelperResponse, LessonWorkspaceFile, PrerequisiteReviewResponse, QuizAnswerRequest, QuizGradeResponse, RecommendationDecisionRequest, RecommendationsResponse, RunLessonRequest, RunLessonResponse, RunScriptRequest, RunScriptResponse, SourceDownloadResponse, UpdateCourseRequest
 from app.settings import get_settings
 
 router = APIRouter(prefix="/courses", tags=["courses"])
@@ -152,6 +152,16 @@ def get_citation_excerpt(course_id: UUID, citation_id: UUID, current_user: Curre
     return repository.citation_excerpt(current_user, course_id, citation_id)
 
 
+@router.get("/{course_id}/sources", response_model=list[CourseSourceSummary])
+def list_course_sources(course_id: UUID, current_user: CurrentUser, repository: Repository) -> list[CourseSourceSummary]:
+    return repository.course_sources(current_user, course_id)
+
+
+@router.get("/{course_id}/sources/{source_id}/download", response_model=SourceDownloadResponse)
+def get_source_download(course_id: UUID, source_id: UUID, current_user: CurrentUser, repository: Repository) -> SourceDownloadResponse:
+    return repository.source_download_url(current_user, course_id, source_id)
+
+
 def _validated_submission(request: RunLessonRequest, starter_files: list[LessonWorkspaceFile]) -> dict[str, str]:
     expected_paths = {file.path for file in starter_files}
     submitted = {file.path: file.content for file in request.files}
@@ -160,11 +170,12 @@ def _validated_submission(request: RunLessonRequest, starter_files: list[LessonW
     return submitted
 
 
-def _run_pytest(sandbox: SandboxRunnerClient, submitted: dict[str, str], test_files: list[LessonWorkspaceFile]) -> RunLessonResponse:
+def _run_pytest(sandbox: SandboxRunnerClient, submitted: dict[str, str], test_files: list[LessonWorkspaceFile], environment_id: str) -> RunLessonResponse:
     test_set = [SandboxFile(file.path, file.content) for file in test_files]
     try:
         result = sandbox.run_pytest(
-            [SandboxFile(path, submitted[path]) for path in sorted(submitted)] + test_set
+            [SandboxFile(path, submitted[path]) for path in sorted(submitted)] + test_set,
+            environment_id=environment_id,
         )
     except (SandboxError, ValueError) as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="The exercise runner is unavailable.") from exc
@@ -246,9 +257,9 @@ def run_lesson(
 ) -> RunLessonResponse:
     """Run the *visible* checks only, on demand. This is a tight feedback loop -- no hidden
     suite, no completion, and never a mastery observation. Deliberate Submit does those."""
-    starter_files, public_test_files, _hidden_test_files = repository.lesson_workspace(current_user, course_id, slug)
+    starter_files, public_test_files, _hidden_test_files, environment_id = repository.lesson_workspace(current_user, course_id, slug)
     submitted = _validated_submission(request, starter_files)
-    return _run_pytest(sandbox, submitted, public_test_files)
+    return _run_pytest(sandbox, submitted, public_test_files, environment_id)
 
 
 @router.post("/{course_id}/concepts/{slug}/submit", response_model=RunLessonResponse)
@@ -262,9 +273,9 @@ def submit_lesson(
 ) -> RunLessonResponse:
     """Full evaluation: visible + hidden suite. Records an applied-skill (``p(apply)``)
     mastery observation whether it passes or fails, and marks the lab complete on pass."""
-    starter_files, public_test_files, hidden_test_files = repository.lesson_workspace(current_user, course_id, slug)
+    starter_files, public_test_files, hidden_test_files, environment_id = repository.lesson_workspace(current_user, course_id, slug)
     submitted = _validated_submission(request, starter_files)
-    result = _run_pytest(sandbox, submitted, public_test_files + hidden_test_files)
+    result = _run_pytest(sandbox, submitted, public_test_files + hidden_test_files, environment_id)
     repository.record_coding_submission(current_user, course_id, slug, result.passed)
     # A failed suite that leaves apply-mastery stuck surfaces a prerequisite-review nudge, from
     # the observation just recorded. On a pass, apply-mastery climbs and this returns None.
@@ -282,7 +293,7 @@ def run_script(
     sandbox: LessonSandbox,
 ) -> RunScriptResponse:
     """Run arbitrary learner code as a plain script (not a pytest check) so they can print/debug freely."""
-    starter_files, _public_test_files, _hidden_test_files = repository.lesson_workspace(current_user, course_id, slug)
+    starter_files, _public_test_files, _hidden_test_files, environment_id = repository.lesson_workspace(current_user, course_id, slug)
     expected_paths = {file.path for file in starter_files}
     submitted = {file.path: file.content for file in request.files}
     if len(submitted) != len(request.files) or set(submitted) != expected_paths:
@@ -294,6 +305,7 @@ def run_script(
         result = sandbox.run_script(
             [SandboxFile(path, submitted[path]) for path in sorted(submitted)] + [SandboxFile(request.script.path, request.script.content)],
             entry_path=request.script.path,
+            environment_id=environment_id,
         )
     except (SandboxError, ValueError) as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="The exercise runner is unavailable.") from exc

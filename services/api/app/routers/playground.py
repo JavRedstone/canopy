@@ -30,9 +30,10 @@ class PlaygroundRunRequest(BaseModel):
     separate from the Python-only AI course-generation pipeline (see docs/architecture/SECURITY.md
     and the sandbox runner's own curated environment registry for why languages are
     not arbitrary). Each environment's test command auto-discovers test files by its
-    own convention (pytest: test_*.py, node --test: *.test.js, go test: *_test.go)."""
+    own convention (pytest: test_*.py, node --test: *.test.js, go test: *_test.go,
+    doctest: any *.cpp file)."""
 
-    environment_id: Literal["python-basic", "javascript-basic", "go-basic"]
+    environment_id: Literal["python-basic", "javascript-basic", "go-basic", "cpp-basic"]
     files: list[LessonWorkspaceFile] = Field(min_length=1, max_length=20)
 
 

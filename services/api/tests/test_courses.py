@@ -32,6 +32,23 @@ def test_course_vertical_slice() -> None:
     assert len(course_map.json()["modules"]) == 1
     assert len(course_map.json()["modules"][0]["concepts"]) == 4
 
+    sources = client.get(f"/api/v1/courses/{course_id}/sources")
+    assert sources.status_code == 200
+    assert sources.json() == [
+        {"id": source_id, "filename": "auth.md", "mime_type": "text/markdown", "byte_size": 123, "status": "uploaded", "position": 1}
+    ]
+
+    download = client.get(f"/api/v1/courses/{course_id}/sources/{source_id}/download")
+    assert download.status_code == 200
+    assert download.json()["filename"] == "auth.md"
+    assert download.json()["download_url"]
+
+    other_user_sources = client.get(
+        f"/api/v1/courses/{course_id}/sources",
+        headers={"X-Demo-User-Id": "00000000-0000-0000-0000-000000000002"},
+    )
+    assert other_user_sources.status_code == 404
+
     single_course = client.get(f"/api/v1/courses/{course_id}")
     assert single_course.status_code == 200
     assert single_course.json()["title"] == "API auth"

@@ -1,3 +1,5 @@
+export type CourseLanguage = "python" | "cpp";
+
 export interface CourseSummary {
   id: string;
   title: string;
@@ -10,6 +12,7 @@ export interface CourseSummary {
   lesson_max: number;
   lessons_completed: number;
   lessons_total: number;
+  language: CourseLanguage;
 }
 
 export interface CourseMapConcept {
@@ -382,6 +385,39 @@ export async function getCitationExcerpt(courseId: string, citationId: string, a
   return response.json();
 }
 
+export interface CourseSourceSummary {
+  id: string;
+  filename: string;
+  mime_type: string;
+  byte_size: number;
+  status: "uploading" | "uploaded" | "ingesting" | "ready" | "failed";
+  position: number;
+}
+
+export async function getCourseSources(courseId: string, accessToken: string): Promise<CourseSourceSummary[]> {
+  const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/sources`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: "no-store"
+  });
+  if (!response.ok) throw new Error(`Unable to load this course's sources (HTTP ${response.status}).`);
+  return response.json();
+}
+
+export interface SourceDownloadResponse {
+  filename: string;
+  mime_type: string;
+  download_url: string;
+}
+
+export async function getSourceDownloadUrl(courseId: string, sourceId: string, accessToken: string): Promise<SourceDownloadResponse> {
+  const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/sources/${sourceId}/download`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: "no-store"
+  });
+  if (!response.ok) throw new Error(`Unable to prepare this download (HTTP ${response.status}).`);
+  return response.json();
+}
+
 export async function runLesson(courseId: string, slug: string, files: LessonWorkspaceFile[], accessToken: string): Promise<LessonRunResult> {
   const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/concepts/${slug}/run`, {
     method: "POST",
@@ -426,10 +462,11 @@ export async function runLessonScript(
   return response.json();
 }
 
-export type PlaygroundEnvironmentId = "python-basic" | "javascript-basic" | "go-basic";
+export type PlaygroundEnvironmentId = "python-basic" | "javascript-basic" | "go-basic" | "cpp-basic";
 
 // Each environment's test command auto-discovers test files by its own convention
-// (pytest: test_*.py, node --test: *.test.js, go test: *_test.go) -- no entry point needed.
+// (pytest: test_*.py, node --test: *.test.js, go test: *_test.go, doctest: any *.cpp
+// file) -- no entry point needed.
 export async function runPlayground(environmentId: PlaygroundEnvironmentId, files: LessonWorkspaceFile[], accessToken: string): Promise<LessonRunResult> {
   const response = await fetch(`${apiUrl}/api/v1/playground/run`, {
     method: "POST",

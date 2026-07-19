@@ -25,6 +25,7 @@ class BundleView:
     hints: list[str]
     worked_examples: list[WorkedExamplePreview]
     quiz_items: list[QuizItemPreview]
+    environment_id: str
 
 
 def _files(entries: list[dict[str, Any]] | None) -> list[LessonWorkspaceFile]:
@@ -59,6 +60,7 @@ def bundle_view(bundle: dict[str, Any]) -> BundleView:
                 )
                 for item in assessment.get("quiz_items") or []
             ],
+            environment_id=workspace.get("environment_id") or "python-basic",
         )
     return BundleView(
         title=bundle.get("title", ""),
@@ -71,4 +73,5 @@ def bundle_view(bundle: dict[str, Any]) -> BundleView:
         hints=bundle.get("hints") or [],
         worked_examples=[],
         quiz_items=[],
+        environment_id="python-basic",
     )

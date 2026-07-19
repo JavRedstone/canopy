@@ -143,12 +143,12 @@ def test_artifacts_requires_hidden_tests() -> None:
 
 
 def test_artifacts_requires_a_discoverable_hidden_test_file() -> None:
-    with pytest.raises(ValueError, match="hidden test file must be pytest-discoverable"):
+    with pytest.raises(ValueError, match="hidden test file must be discoverable"):
         CodingArtifactsBundle.model_validate(_artifacts(hidden_tests=[{"path": "checks.py", "content": "assert True\n"}]))
 
 
 def test_artifacts_rejects_non_discoverable_visible_test_file() -> None:
-    with pytest.raises(ValueError, match="visible test file must be pytest-discoverable"):
+    with pytest.raises(ValueError, match="visible test file must be discoverable"):
         CodingArtifactsBundle.model_validate(_artifacts(visible_tests=[{"path": "checks.py", "content": "assert True\n"}]))
 
 

@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, model_validator
 from sandbox_runner.runner import DockerSandboxRunner, SandboxError, SandboxFile, SandboxRunResult, get_environment, validate_file_suffix, validate_workspace_file
 from sandbox_runner.settings import SandboxRunnerSettings, get_settings
 
-EnvironmentId = Literal["python-basic", "javascript-basic", "go-basic"]
+EnvironmentId = Literal["python-basic", "javascript-basic", "go-basic", "cpp-basic"]
 
 
 logger = logging.getLogger(__name__)

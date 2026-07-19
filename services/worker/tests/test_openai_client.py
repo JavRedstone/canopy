@@ -287,6 +287,29 @@ def test_plan_fails_when_concepts_never_pass_validation() -> None:
     assert len(responses.calls) == 1 + PLAN_VALIDATION_ATTEMPTS
 
 
+def test_module_concepts_cite_by_ordinal_label_resolved_to_real_chunk_ids() -> None:
+    """The model is shown short numeric labels ([1], [2], ...), not raw chunk UUIDs, since a
+    UUID is easy for a model to mis-copy -- exactly the failure this guards against. Citing
+    the label the excerpt was shown under must resolve to the real chunk id in what gets
+    persisted, without needing a retry."""
+    outline = CourseOutline.model_validate(_outline_dict())
+    module_concepts = ModuleConcepts.model_validate({"concepts": _module_concept_entries(citations=["2"])})
+    responses = FakeResponses([outline, module_concepts])
+    chunks = [
+        {"id": "5968e028-f96f-4776-91f7-eccad2741378", "content": "First chunk."},
+        {"id": "aa11bb22-cc33-dd44-ee55-ff6677889900", "content": "Second chunk."},
+    ]
+    worker = _planner_with(responses, chunks)
+
+    worker.plan_course("course-id")
+
+    module_context = responses.calls[1]["input"][1]["content"]
+    assert "[1]" in module_context and "[2]" in module_context
+    assert "5968e028-f96f-4776-91f7-eccad2741378" not in module_context
+    persisted_concepts = worker.client.calls[-2][1]["p_concepts"]
+    assert all(concept["citations"] == ["aa11bb22-cc33-dd44-ee55-ff6677889900"] for concept in persisted_concepts)
+
+
 def test_goal_only_planner_request_requires_empty_citations() -> None:
     outline = CourseOutline.model_validate(_outline_dict())
     module_concepts = ModuleConcepts.model_validate({"concepts": _module_concept_entries(citations=[])})

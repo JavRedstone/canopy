@@ -25,7 +25,7 @@ from app.mastery import (
     MASTERY_THRESHOLD,
     REVIEW_THRESHOLD,
 )
-from app.schemas import CitationExcerptResponse, ConceptDetailResponse, ConceptMastery, CoursePointsResponse, CourseMapConcept, CourseMapModule, CourseMapResponse, CourseMasteryResponse, CourseProgressResponse, CourseSummary, CreateCourseRequest, CreateSourceRequest, LessonPreview, LessonWorkspaceFile, PrerequisiteConcept, PrerequisiteRecommendation, PrerequisiteReviewResponse, QuizAnswerRequest, QuizGradeResponse, QuizItemPreview, RecommendationDecision, RecommendationSummary, RecommendationsResponse, SourceSummary, SourceUploadTarget, UpdateCourseRequest
+from app.schemas import CitationExcerptResponse, ConceptDetailResponse, ConceptMastery, CoursePointsResponse, CourseMapConcept, CourseMapModule, CourseMapResponse, CourseMasteryResponse, CourseProgressResponse, CourseSourceSummary, CourseSummary, CreateCourseRequest, CreateSourceRequest, LessonPreview, LessonWorkspaceFile, PrerequisiteConcept, PrerequisiteRecommendation, PrerequisiteReviewResponse, QuizAnswerRequest, QuizGradeResponse, QuizItemPreview, RecommendationDecision, RecommendationSummary, RecommendationsResponse, SourceDownloadResponse, SourceSummary, SourceUploadTarget, UpdateCourseRequest
 from app.settings import get_settings
 from app.supabase import get_service_client
 
@@ -118,7 +118,7 @@ class CourseRepository(Protocol):
 
     def lesson_workspace(
         self, owner_id: UUID, course_id: UUID, slug: str
-    ) -> tuple[list[LessonWorkspaceFile], list[LessonWorkspaceFile], list[LessonWorkspaceFile]]: ...
+    ) -> tuple[list[LessonWorkspaceFile], list[LessonWorkspaceFile], list[LessonWorkspaceFile], str]: ...
 
     def quiz_item(self, owner_id: UUID, course_id: UUID, slug: str, item_id: str) -> dict[str, Any]: ...
 
@@ -170,6 +170,14 @@ class CourseRepository(Protocol):
         """The source chunk text and filename behind a lesson citation marker."""
         ...
 
+    def course_sources(self, owner_id: UUID, course_id: UUID) -> list[CourseSourceSummary]:
+        """The documents this course was built from, in their attached order."""
+        ...
+
+    def source_download_url(self, owner_id: UUID, course_id: UUID, source_id: UUID) -> SourceDownloadResponse:
+        """A short-lived signed URL to download one of this course's attached source documents."""
+        ...
+
     def course_points(self, owner_id: UUID, course_id: UUID) -> CoursePointsResponse: ...
 
     def regenerate_lesson(self, owner_id: UUID, course_id: UUID, slug: str) -> None: ...
@@ -182,6 +190,8 @@ class SourceRecord:
     filename: str
     storage_path: str
     status: str
+    mime_type: str = "application/pdf"
+    byte_size: int = 0
 
 
 @dataclass
@@ -197,6 +207,7 @@ class CourseRecord:
     quiz_max_attempts: int = 3
     lesson_min: int = 12
     lesson_max: int = 20
+    language: str = "python"
 
 
 class MemoryCourseRepository:
@@ -212,7 +223,7 @@ class MemoryCourseRepository:
         source_id = uuid4()
         safe_name = PurePosixPath(request.filename).name
         storage_path = f"{owner_id}/{source_id}/{safe_name}"
-        self.sources[source_id] = SourceRecord(source_id, owner_id, safe_name, storage_path, "uploading")
+        self.sources[source_id] = SourceRecord(source_id, owner_id, safe_name, storage_path, "uploading", request.mime_type, request.byte_size)
         return SourceUploadTarget(
             id=source_id,
             storage_path=storage_path,
@@ -249,6 +260,7 @@ class MemoryCourseRepository:
             quiz_max_attempts=request.quiz_max_attempts,
             lesson_min=request.lesson_min,
             lesson_max=request.lesson_max,
+            language=request.language,
         )
         return self._summary(self.courses[course_id])
 
@@ -330,7 +342,7 @@ class MemoryCourseRepository:
 
     def lesson_workspace(
         self, owner_id: UUID, course_id: UUID, slug: str
-    ) -> tuple[list[LessonWorkspaceFile], list[LessonWorkspaceFile], list[LessonWorkspaceFile]]:
+    ) -> tuple[list[LessonWorkspaceFile], list[LessonWorkspaceFile], list[LessonWorkspaceFile], str]:
         self._course_for_owner(owner_id, course_id)
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A generated lesson is required before it can run.")
 
@@ -385,6 +397,29 @@ class MemoryCourseRepository:
         # concept_detail() always returns citations=[] in memory mode, so this is unreachable from the UI.
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Citation not found.")
 
+    def course_sources(self, owner_id: UUID, course_id: UUID) -> list[CourseSourceSummary]:
+        course = self._course_for_owner(owner_id, course_id)
+        summaries = []
+        for position, source_id in enumerate(course.source_ids, start=1):
+            source = self.sources.get(source_id)
+            if source is None:
+                continue
+            summaries.append(CourseSourceSummary(
+                id=source.id, filename=source.filename, mime_type=source.mime_type,
+                byte_size=source.byte_size, status=source.status, position=position,
+            ))
+        return summaries
+
+    def source_download_url(self, owner_id: UUID, course_id: UUID, source_id: UUID) -> SourceDownloadResponse:
+        course = self._course_for_owner(owner_id, course_id)
+        if source_id not in course.source_ids:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found.")
+        source = self._source_for_owner(owner_id, source_id)
+        return SourceDownloadResponse(
+            filename=source.filename, mime_type=source.mime_type,
+            download_url=f"https://development.invalid/dev-sources/{source.storage_path}",
+        )
+
     def course_points(self, owner_id: UUID, course_id: UUID) -> CoursePointsResponse:
         course = self._course_for_owner(owner_id, course_id)
         return CoursePointsResponse(course_id=course.id, points_earned=0, points_total=0, points_per_lesson=POINTS_PER_LESSON)
@@ -418,6 +453,7 @@ class MemoryCourseRepository:
             quiz_max_attempts=course.quiz_max_attempts,
             lesson_min=course.lesson_min,
             lesson_max=course.lesson_max,
+            language=course.language,
         )
 
 
@@ -524,6 +560,7 @@ class SupabaseCourseRepository:
                         "lesson_min": request.lesson_min,
                         "lesson_max": request.lesson_max,
                         "quiz_max_attempts": request.quiz_max_attempts,
+                        "language": request.language,
                         "status": "draft",
                     }
                 ),
@@ -590,7 +627,7 @@ class SupabaseCourseRepository:
     def list_courses(self, owner_id: UUID) -> list[CourseSummary]:
         courses = self._data(
             self.client.table("courses")
-            .select("id,title,goal,status,active_version_id,updated_at,quiz_max_attempts,lesson_min,lesson_max")
+            .select("id,title,goal,status,active_version_id,updated_at,quiz_max_attempts,lesson_min,lesson_max,language")
             .eq("owner_id", str(owner_id))
             .order("updated_at", desc=True),
             "list courses",
@@ -1005,11 +1042,11 @@ class SupabaseCourseRepository:
 
     def lesson_workspace(
         self, owner_id: UUID, course_id: UUID, slug: str
-    ) -> tuple[list[LessonWorkspaceFile], list[LessonWorkspaceFile], list[LessonWorkspaceFile]]:
+    ) -> tuple[list[LessonWorkspaceFile], list[LessonWorkspaceFile], list[LessonWorkspaceFile], str]:
         view = bundle_view(self._built_lesson_bundle(owner_id, course_id, slug))
         # Read-only context files ride along with the hidden set so the sandbox has
         # them without the learner being required to submit them.
-        return (view.starter_files, view.public_test_files, view.context_files + view.hidden_test_files)
+        return (view.starter_files, view.public_test_files, view.context_files + view.hidden_test_files, view.environment_id)
 
     def quiz_item(self, owner_id: UUID, course_id: UUID, slug: str, item_id: str) -> dict[str, Any]:
         _definition_id, _revision_id, bundle = self._built_lesson(owner_id, course_id, slug)
@@ -1381,6 +1418,52 @@ class SupabaseCourseRepository:
             content=chunk["content"],
         )
 
+    def course_sources(self, owner_id: UUID, course_id: UUID) -> list[CourseSourceSummary]:
+        self._course_for_owner(owner_id, course_id)
+        rows = self._data(
+            self.client.table("course_sources")
+            .select("position,source_documents(id,filename,mime_type,byte_size,status)")
+            .eq("course_id", str(course_id))
+            .order("position"),
+            "load course sources",
+        )
+        return [
+            CourseSourceSummary(
+                id=row["source_documents"]["id"],
+                filename=row["source_documents"]["filename"],
+                mime_type=row["source_documents"]["mime_type"],
+                byte_size=row["source_documents"]["byte_size"],
+                status=row["source_documents"]["status"],
+                position=row["position"],
+            )
+            for row in rows
+        ]
+
+    def source_download_url(self, owner_id: UUID, course_id: UUID, source_id: UUID) -> SourceDownloadResponse:
+        self._course_for_owner(owner_id, course_id)
+        # The course_sources match (not just source_documents.owner_id) is what proves this
+        # source belongs to *this* course -- same reasoning as citation_excerpt above.
+        attachment = self._one(
+            self._data(
+                self.client.table("course_sources")
+                .select("source_documents(filename,mime_type,storage_path)")
+                .eq("course_id", str(course_id))
+                .eq("source_document_id", str(source_id)),
+                "load source attachment",
+            ),
+            "Source",
+        )
+        document = attachment["source_documents"]
+        try:
+            signed = self.client.storage.from_("sources").create_signed_url(document["storage_path"], 300)
+        except Exception as exc:
+            logger.exception("Could not create a signed source download URL")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="The source download could not be prepared. Please try again.",
+            ) from exc
+        return SourceDownloadResponse(filename=document["filename"], mime_type=document["mime_type"], download_url=signed["signedURL"])
+
     def course_points(self, owner_id: UUID, course_id: UUID) -> CoursePointsResponse:
         course = self._course_for_owner(owner_id, course_id)
         version_id = course.get("active_version_id")
@@ -1704,7 +1787,7 @@ class SupabaseCourseRepository:
         return self._one(
             self._data(
                 self.client.table("courses")
-                .select("id,title,goal,status,active_version_id,updated_at,quiz_max_attempts,lesson_min,lesson_max")
+                .select("id,title,goal,status,active_version_id,updated_at,quiz_max_attempts,lesson_min,lesson_max,language")
                 .eq("id", str(course_id))
                 .eq("owner_id", str(owner_id)),
                 "load course",
@@ -1872,6 +1955,7 @@ class SupabaseCourseRepository:
             lesson_max=row["lesson_max"],
             lessons_completed=completed,
             lessons_total=total,
+            language=row.get("language", "python"),
         )
 
 

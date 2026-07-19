@@ -11,6 +11,7 @@ dependencies = [
   "fastapi>=0.115",
   "httpx>=0.28",
   "pydantic-settings>=2.6",
+  "reportlab>=4.2",
   "supabase>=2.0",
   "uvicorn[standard]>=0.32"
 ]

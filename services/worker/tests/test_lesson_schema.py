@@ -144,14 +144,14 @@ def test_bundle_rejects_test_file_colliding_with_workspace_path() -> None:
 
 
 def test_bundle_requires_a_discoverable_hidden_test_file() -> None:
-    with pytest.raises(ValueError, match="hidden test file must be pytest-discoverable"):
+    with pytest.raises(ValueError, match="hidden test file must be discoverable"):
         LessonBundle.model_validate(
             _assessment(_coding_bundle(), hidden_tests=[{"path": "checks.py", "content": "assert True\n"}])
         )
 
 
 def test_bundle_rejects_non_discoverable_visible_test_file() -> None:
-    with pytest.raises(ValueError, match="visible test file must be pytest-discoverable"):
+    with pytest.raises(ValueError, match="visible test file must be discoverable"):
         LessonBundle.model_validate(
             _assessment(_coding_bundle(), visible_tests=[{"path": "checks.py", "content": "assert True\n"}])
         )

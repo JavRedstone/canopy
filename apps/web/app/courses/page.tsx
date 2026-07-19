@@ -14,7 +14,7 @@ export default function CoursesPage() {
           <Typography color="text.secondary">Each course has its own source set, route, and mastery record.</Typography>
         </Stack>
         <Stack direction="row" sx={{ gap: 1.5 }}>
-          <LinkButton href="/playground" variant="outlined">Sandbox playground</LinkButton>
+          <LinkButton href="/courses/playground" variant="outlined">Sandbox playground</LinkButton>
           <LinkButton href="/courses/new" variant="contained">New course</LinkButton>
         </Stack>
       </Stack>

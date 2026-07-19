@@ -25,7 +25,7 @@ class FakeSandbox:
         self._results = list(results)
         self.runs: list[dict[str, str]] = []
 
-    def run_pytest(self, files: list) -> SandboxRunResult:
+    def run_pytest(self, files: list, *, environment_id: str = "python-basic") -> SandboxRunResult:
         snapshot = {f.path: f.content for f in files}
         self.runs.append(snapshot)
         return self._results.pop(0) if self._results else SandboxRunResult(exit_code=1, output="no more results", timed_out=False)

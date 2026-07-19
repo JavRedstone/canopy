@@ -63,6 +63,32 @@ def test_go_environment_does_not_override_a_caller_submitted_go_mod() -> None:
     assert members["go.mod"] == "module custom\n\ngo 1.22\n"
 
 
+def test_cpp_environment_injects_the_doctest_main_when_the_caller_did_not_submit_one() -> None:
+    environment = get_environment("cpp-basic")
+    assert environment is not None
+    files = [SandboxFile(path="example.cpp", content='#include "doctest.h"\n')]
+
+    archive = tarfile.open(fileobj=io.BytesIO(files_to_tar(files, environment)), mode="r")
+    members = {member.name: archive.extractfile(member).read().decode() for member in archive.getmembers()}
+
+    assert members["example.cpp"] == '#include "doctest.h"\n'
+    assert "DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN" in members["doctest_main.cpp"]
+
+
+def test_cpp_environment_does_not_override_a_caller_submitted_doctest_main() -> None:
+    environment = get_environment("cpp-basic")
+    assert environment is not None
+    files = [
+        SandboxFile(path="example.cpp", content='#include "doctest.h"\n'),
+        SandboxFile(path="doctest_main.cpp", content="// custom main\n"),
+    ]
+
+    archive = tarfile.open(fileobj=io.BytesIO(files_to_tar(files, environment)), mode="r")
+    members = {member.name: archive.extractfile(member).read().decode() for member in archive.getmembers()}
+
+    assert members["doctest_main.cpp"] == "// custom main\n"
+
+
 def test_files_to_tar_rejects_a_suffix_that_does_not_match_the_environment() -> None:
     environment = get_environment("javascript-basic")
     assert environment is not None

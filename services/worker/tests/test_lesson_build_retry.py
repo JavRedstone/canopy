@@ -196,7 +196,7 @@ class ScriptedSandbox:
     def ensure_available(self) -> None:
         return None
 
-    def run_pytest(self, _files: list) -> SimpleNamespace:
+    def run_pytest(self, _files: list, *, environment_id: str = "python-basic") -> SimpleNamespace:
         self.calls += 1
         return SimpleNamespace(passed=self.verdicts.pop(0), exit_code=0, output="", timed_out=False)
 

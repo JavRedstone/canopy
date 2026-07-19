@@ -32,6 +32,7 @@ import { CourseProgressSteps } from "@/components/course-progress";
 import { MasteryDashboard } from "@/components/mastery-dashboard";
 import { RecommendationsPanel } from "@/components/recommendations-panel";
 import { CourseSettingsDialog } from "@/components/course-settings-dialog";
+import { CourseSourcesDialog } from "@/components/course-sources-dialog";
 import { Icon } from "@/components/icon";
 import { SettingsMenu, SettingsMenuAction } from "@/components/settings-menu";
 import { conceptKindIcon } from "@/lib/concept-kind";
@@ -53,6 +54,7 @@ export function CourseDetail({ courseId }: { courseId: string }) {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string>();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [sourcesOpen, setSourcesOpen] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [detailTab, setDetailTab] = useState<"content" | "mastery">("content");
   const fullLoadRef = useRef<() => Promise<void>>(async () => {});
@@ -224,11 +226,13 @@ export function CourseDetail({ courseId }: { courseId: string }) {
               sx={{ "& .MuiChip-icon": { color: "#f5c518" } }}
             />
           ) : null}
+          <Button size="small" variant="outlined" startIcon={<Icon name="folder_open" />} onClick={() => setSourcesOpen(true)}>Sources</Button>
           <SettingsMenu actions={settingsActions} label="Course settings" />
         </Stack>
       </Stack>
 
       <CourseSettingsDialog course={course} open={settingsOpen} onOpenChange={setSettingsOpen} onSaved={setCourse} />
+      <CourseSourcesDialog courseId={courseId} open={sourcesOpen} onOpenChange={setSourcesOpen} />
 
       <Dialog open={confirmDeleteOpen} onClose={() => setConfirmDeleteOpen(false)}>
         <DialogTitle>Delete course?</DialogTitle>

@@ -22,7 +22,7 @@ from supabase import Client
 
 from worker.context import citation_chunks
 from worker.errors import RETRYABLE_ERRORS
-from worker.lesson_agent import generate_assessment_content, generate_coding_artifacts, generate_conceptual_content, generate_lesson_content, repair_bundle, strip_starter_solution
+from worker.lesson_agent import ENVIRONMENT_ID_BY_LANGUAGE, generate_assessment_content, generate_coding_artifacts, generate_conceptual_content, generate_lesson_content, repair_bundle, strip_starter_solution
 from worker.lesson_schema import Assessment, CodingArtifactsBundle, LessonBundle, LessonContentBundle, reference_workspace, starter_workspace, validate_lesson_content
 from worker.llm import LLMGatewayClient
 from worker.sandbox import SandboxFile, SandboxRunnerClient
@@ -103,7 +103,9 @@ class LessonBuilder:
         return rows[0]["kind"] if rows else "coding"
 
     def _coding_bundle(self, lesson_definition_id: str, claimed: dict[str, Any]) -> tuple[LessonBundle, str, str | None]:
-        content = self._content_from_checkpoint_or_generate(generate_lesson_content, self.settings.builder_model, claimed, lesson_definition_id)
+        language = claimed.get("language") or "python"
+        environment_id = ENVIRONMENT_ID_BY_LANGUAGE.get(language, "python-basic")
+        content = self._content_from_checkpoint_or_generate(generate_lesson_content, self.settings.builder_model, claimed, lesson_definition_id, language)
 
         artifacts = generate_coding_artifacts(
             self.openai,
@@ -111,6 +113,7 @@ class LessonBuilder:
             concept_title=claimed["concept_title"],
             concept_summary=claimed["summary_markdown"],
             lesson_explanation=content.lesson_content.explanation_markdown,
+            language=language,
         )
         bundle = _compose_bundle(content, artifacts)
 
@@ -119,7 +122,7 @@ class LessonBuilder:
         # workspace files. Strip it back to a stub with a targeted, sandbox-verified repair
         # loop instead of blindly regenerating the whole artifacts bundle.
         starter_files = {file.path: file.content for file in starter_workspace(bundle)}
-        starter_result = self.sandbox.run_pytest([SandboxFile(path, file_content) for path, file_content in starter_files.items()])
+        starter_result = self.sandbox.run_pytest([SandboxFile(path, file_content) for path, file_content in starter_files.items()], environment_id=environment_id)
         starter_attempts = 1
         while starter_result.passed and starter_attempts < self.settings.lesson_build_max_attempts:
             logger.warning(
@@ -134,6 +137,7 @@ class LessonBuilder:
                 artifacts.workspace.visible_paths,
                 starter_result,
                 self.settings.lesson_build_max_tool_calls,
+                environment_id,
             )
             starter_attempts += 1
         if starter_result.passed:
@@ -141,7 +145,7 @@ class LessonBuilder:
         bundle = _patch_starter_files(bundle, starter_files)
 
         files = {file.path: file.content for file in reference_workspace(bundle)}
-        result = self.sandbox.run_pytest([SandboxFile(path, file_content) for path, file_content in files.items()])
+        result = self.sandbox.run_pytest([SandboxFile(path, file_content) for path, file_content in files.items()], environment_id=environment_id)
 
         attempts = 1
         while not result.passed and attempts < self.settings.lesson_build_max_attempts:
@@ -153,6 +157,7 @@ class LessonBuilder:
                 {file.path for file in bundle.assessment.reference_solution_files},
                 result,
                 self.settings.lesson_build_max_tool_calls,
+                environment_id,
             )
             bundle = _patch_reference_solution(bundle, files)
             attempts += 1
@@ -171,11 +176,12 @@ class LessonBuilder:
         model: str,
         claimed: dict[str, Any],
         lesson_definition_id: str,
+        language: str | None = None,
     ) -> LessonContentBundle:
         pending = claimed.get("pending_content_json")
         if pending:
             return LessonContentBundle.model_validate(pending)
-        content = self._generate_content_validated(generate, model, claimed, lesson_definition_id)
+        content = self._generate_content_validated(generate, model, claimed, lesson_definition_id, language)
         self.client.rpc(
             "save_lesson_content_checkpoint",
             {"p_lesson_definition_id": lesson_definition_id, "p_content": content.model_dump(mode="json")},
@@ -188,8 +194,12 @@ class LessonBuilder:
         model: str,
         claimed: dict[str, Any],
         lesson_definition_id: str,
+        language: str | None = None,
     ) -> LessonContentBundle:
         feedback: str | None = None
+        # Only the coding-lesson generator (generate_lesson_content) accepts a language --
+        # conceptual/assessment content has no code in it, so there's nothing to vary.
+        language_kwargs = {"language": language} if language else {}
         for _ in range(BUNDLE_VALIDATION_ATTEMPTS):
             content = generate(
                 self.openai,
@@ -198,6 +208,7 @@ class LessonBuilder:
                 concept_summary=claimed["summary_markdown"],
                 chunks=citation_chunks(self.client, claimed["citations_json"]),
                 feedback=feedback,
+                **language_kwargs,
             )
             try:
                 validate_lesson_content(content, claimed["citations_json"])

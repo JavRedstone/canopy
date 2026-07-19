@@ -147,7 +147,7 @@ const HEADING_STYLES = {
 };
 
 /** A deliberately small, safe Markdown renderer for LLM-authored lesson text. */
-export function MarkdownText({ children, citations, highlightText, highlightParagraphId, highlightOccurrence = 0, highlightFlash = false, paragraphGroup = "lesson", onCitationClick }: { children: string; citations?: string[]; highlightText?: string; highlightParagraphId?: string; highlightOccurrence?: number; highlightFlash?: boolean; paragraphGroup?: string; onCitationClick?: (citationId: string) => void }) {
+export function MarkdownText({ children, citations, highlightText, highlightParagraphId, highlightOccurrence = 0, highlightFlash = false, paragraphGroup = "lesson", onCitationClick, variant, color }: { children: string; citations?: string[]; highlightText?: string; highlightParagraphId?: string; highlightOccurrence?: number; highlightFlash?: boolean; paragraphGroup?: string; onCitationClick?: (citationId: string) => void; variant?: "body1" | "body2" | "caption"; color?: string }) {
   // Some older generated lessons put list markers directly after a sentence. Make those readable too.
   const lines = children.replace(/(?<=\S)\s+- (?=\*\*|[A-Za-z0-9])/g, "\n- ").split("\n");
   const blocks: ReactNode[] = [];
@@ -161,14 +161,14 @@ export function MarkdownText({ children, citations, highlightText, highlightPara
       paragraphNumber += 1;
       const source = paragraph.join("\n");
       const paragraphId = `${paragraphGroup}-${paragraphNumber}`;
-      blocks.push(<Typography key={`p-${blocks.length}`} data-lesson-paragraph={paragraphId} data-lesson-source={source}>{inline(paragraph.join(" "), citations, paragraphId === highlightParagraphId ? highlightText : undefined, highlightFlash, highlightOccurrence, onCitationClick)}</Typography>);
+      blocks.push(<Typography variant={variant} color={color} key={`p-${blocks.length}`} data-lesson-paragraph={paragraphId} data-lesson-source={source}>{inline(paragraph.join(" "), citations, paragraphId === highlightParagraphId ? highlightText : undefined, highlightFlash, highlightOccurrence, onCitationClick)}</Typography>);
     }
     paragraph = [];
   };
   const flushList = () => {
     if (!list) return;
     const items = list.items.map((item, index) => (
-      <Typography component="li" key={index}>{inline(item, citations, highlightText, highlightFlash, 0, onCitationClick)}</Typography>
+      <Typography component="li" variant={variant} color={color} key={index}>{inline(item, citations, highlightText, highlightFlash, 0, onCitationClick)}</Typography>
     ));
     const ListTag = list.ordered ? "ol" : "ul";
     paragraphNumber += 1;

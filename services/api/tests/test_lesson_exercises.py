@@ -17,11 +17,12 @@ class ExerciseRepository:
 
     def lesson_workspace(
         self, owner_id: object, course_id: object, slug: str
-    ) -> tuple[list[LessonWorkspaceFile], list[LessonWorkspaceFile], list[LessonWorkspaceFile]]:
+    ) -> tuple[list[LessonWorkspaceFile], list[LessonWorkspaceFile], list[LessonWorkspaceFile], str]:
         return (
             [LessonWorkspaceFile(path="solution.py", content="def add(a, b):\n    return 0\n")],
             [LessonWorkspaceFile(path="test_basic.py", content="from solution import add\n\ndef test_add_two_positive_numbers():\n    assert add(1, 2) == 3\n")],
             [LessonWorkspaceFile(path="test_solution.py", content="from solution import add\n\ndef test_add():\n    assert add(1, 2) == 3\n")],
+            "python-basic",
         )
 
     def complete_coding_lesson(self, owner_id: object, course_id: object, slug: str) -> None:
@@ -44,11 +45,11 @@ class ExerciseSandbox:
         self.script_files: list[SandboxFile] = []
         self.entry_path: str | None = None
 
-    def run_pytest(self, files: list[SandboxFile]) -> SandboxRunResult:
+    def run_pytest(self, files: list[SandboxFile], *, environment_id: str = "python-basic") -> SandboxRunResult:
         self.files = files
         return SandboxRunResult(exit_code=0, output="1 passed", timed_out=False)
 
-    def run_script(self, files: list[SandboxFile], entry_path: str) -> SandboxRunResult:
+    def run_script(self, files: list[SandboxFile], entry_path: str, *, environment_id: str = "python-basic") -> SandboxRunResult:
         self.script_files = files
         self.entry_path = entry_path
         return SandboxRunResult(exit_code=0, output="hello from scratch\n", timed_out=False)

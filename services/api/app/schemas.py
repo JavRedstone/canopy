@@ -36,6 +36,9 @@ class SourceSummary(BaseModel):
     status: SourceStatus
 
 
+CourseLanguage = Literal["python", "cpp"]
+
+
 class CreateCourseRequest(BaseModel):
     title: str = Field(min_length=1, max_length=120)
     goal: str = Field(min_length=1, max_length=2000)
@@ -43,6 +46,10 @@ class CreateCourseRequest(BaseModel):
     lesson_min: int = Field(default=12, ge=6, le=24)
     lesson_max: int = Field(default=20, ge=6, le=24)
     quiz_max_attempts: int = Field(default=3, ge=1, le=10)
+    # Fixed at creation -- not on UpdateCourseRequest, since changing it after generation
+    # would leave a course with mixed-language labs. Coding labs target this language;
+    # conceptual/assessment concepts are unaffected either way.
+    language: CourseLanguage = "python"
 
 
 class UpdateCourseRequest(BaseModel):
@@ -76,6 +83,7 @@ class CourseSummary(BaseModel):
     lesson_max: int = 20
     lessons_completed: int = 0
     lessons_total: int = 0
+    language: CourseLanguage = "python"
 
 
 class CoursePointsResponse(BaseModel):
@@ -322,6 +330,21 @@ class CitationExcerptResponse(BaseModel):
     section: str | None
     page_number: int | None
     content: str
+
+
+class CourseSourceSummary(BaseModel):
+    id: UUID
+    filename: str
+    mime_type: SourceMimeType
+    byte_size: int
+    status: SourceStatus
+    position: int
+
+
+class SourceDownloadResponse(BaseModel):
+    filename: str
+    mime_type: SourceMimeType
+    download_url: str
 
 
 class LessonHelperRequest(BaseModel):

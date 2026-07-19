@@ -19,19 +19,42 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-# Relative, no leading "/", no ".." traversal, must be a .py file directly under the workspace.
-_SAFE_PY_PATH = r"^[A-Za-z0-9_][A-Za-z0-9_./-]*\.py$"
+# Relative, no leading "/", no ".." traversal, and one of the languages a coding lab can
+# target (see ENVIRONMENT_FILE_SUFFIXES below for which suffix belongs to which environment).
+_SAFE_WORKSPACE_PATH = r"^[A-Za-z0-9_][A-Za-z0-9_./-]*\.(py|cpp|h|hpp)$"
 _SLUG = r"^[a-z0-9]+(?:-[a-z0-9]+)*$"
+
+# Every file in a coding lesson's workspace/tests/reference solution must carry the one
+# suffix its sandbox environment actually compiles/runs -- see services/sandbox_runner/
+# sandbox_runner/runner.py's own per-environment `file_suffix`, which this mirrors.
+ENVIRONMENT_FILE_SUFFIXES: dict[str, tuple[str, ...]] = {
+    "python-basic": (".py",),
+    "cpp-basic": (".cpp", ".h", ".hpp"),
+}
 
 
 def _pytest_discoverable(path: str) -> bool:
     return path.startswith("test_") or path.endswith("_test.py")
 
 
+def _test_file_discoverable(path: str, environment_id: str) -> bool:
+    """Whether the sandbox's own test command will actually pick up this file. pytest
+    (python-basic) needs the test_*/*_test.py naming convention; doctest (cpp-basic)
+    auto-discovers every .cpp file compiled together, so the suffix alone is enough."""
+    if environment_id == "cpp-basic":
+        return path.endswith(".cpp")
+    return _pytest_discoverable(path)
+
+
+def _matches_environment_suffix(path: str, environment_id: str) -> bool:
+    suffixes = ENVIRONMENT_FILE_SUFFIXES.get(environment_id, (".py",))
+    return path.endswith(suffixes)
+
+
 class WorkspaceFile(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    path: str = Field(pattern=_SAFE_PY_PATH)
+    path: str = Field(pattern=_SAFE_WORKSPACE_PATH)
     content: str = Field(min_length=1, max_length=20_000)
 
     @model_validator(mode="after")
@@ -230,10 +253,13 @@ class CodingArtifactsBundle(BaseModel):
             raise ValueError("Test files must not collide with workspace file paths.")
         if visible_test_paths & hidden_test_paths:
             raise ValueError("Visible and hidden test files must not share a path.")
-        if not all(_pytest_discoverable(path) for path in visible_test_paths):
-            raise ValueError("Every visible test file must be pytest-discoverable (test_*.py) since learners run them individually.")
-        if not any(_pytest_discoverable(path) for path in hidden_test_paths):
-            raise ValueError("At least one hidden test file must be pytest-discoverable (test_*.py).")
+        environment_id = self.workspace.environment_id
+        if not all(_matches_environment_suffix(path, environment_id) for path in workspace_paths | visible_test_paths | hidden_test_paths | reference_paths):
+            raise ValueError(f"Every workspace, test, and reference solution file must match the '{environment_id}' environment's file type.")
+        if not all(_test_file_discoverable(path, environment_id) for path in visible_test_paths):
+            raise ValueError("Every visible test file must be discoverable by the environment's own test runner.")
+        if not any(_test_file_discoverable(path, environment_id) for path in hidden_test_paths):
+            raise ValueError("At least one hidden test file must be discoverable by the environment's own test runner.")
         return self
 
 
@@ -284,10 +310,13 @@ class LessonBundle(BaseModel):
             raise ValueError("Test files must not collide with workspace file paths.")
         if visible_test_paths & hidden_test_paths:
             raise ValueError("Visible and hidden test files must not share a path.")
-        if not all(_pytest_discoverable(path) for path in visible_test_paths):
-            raise ValueError("Every visible test file must be pytest-discoverable (test_*.py) since learners run them individually.")
-        if not any(_pytest_discoverable(path) for path in hidden_test_paths):
-            raise ValueError("At least one hidden test file must be pytest-discoverable (test_*.py).")
+        environment_id = self.workspace.environment_id
+        if not all(_matches_environment_suffix(path, environment_id) for path in workspace_paths | visible_test_paths | hidden_test_paths | reference_paths):
+            raise ValueError(f"Every workspace, test, and reference solution file must match the '{environment_id}' environment's file type.")
+        if not all(_test_file_discoverable(path, environment_id) for path in visible_test_paths):
+            raise ValueError("Every visible test file must be discoverable by the environment's own test runner.")
+        if not any(_test_file_discoverable(path, environment_id) for path in hidden_test_paths):
+            raise ValueError("At least one hidden test file must be discoverable by the environment's own test runner.")
 
         return self
 

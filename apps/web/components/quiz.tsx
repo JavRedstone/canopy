@@ -171,9 +171,9 @@ export function QuizQuestion({ courseId, slug, item, index, maxAttempts = DEFAUL
                   />
                 )}
                 <Box sx={{ display: "grid", gap: 0.5 }}>
-                  <Typography variant="body2">{option.text}</Typography>
+                  <MarkdownText variant="body2">{option.text}</MarkdownText>
                   {answered && optionGrade && isSelected ? (
-                    <Typography variant="caption" color="text.secondary">{optionGrade.explanation_markdown}</Typography>
+                    <MarkdownText variant="caption" color="text.secondary">{optionGrade.explanation_markdown}</MarkdownText>
                   ) : null}
                 </Box>
               </Paper>

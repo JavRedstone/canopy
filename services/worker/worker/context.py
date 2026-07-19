@@ -17,8 +17,18 @@ NO_SOURCES_CONTEXT = "No source documents were provided."
 
 
 def format_chunk_context(chunks: list[dict[str, Any]]) -> str:
-    """Render chunks as a `[chunk-id]` header over content — the shape every prompt cites."""
-    return "\n\n".join(f"[{chunk['id']}]\n{chunk['content']}" for chunk in chunks) or NO_SOURCES_CONTEXT
+    """Render chunks as a `[N]` header over content, numbered from 1 -- a short ordinal is
+    far more reliable for a model to reproduce exactly in a citation than a 36-character
+    chunk UUID, which is what these chunks are keyed by everywhere else. Pair with
+    ``chunk_label_map`` to translate the labels a citing caller gets back into real ids."""
+    return "\n\n".join(f"[{index}]\n{chunk['content']}" for index, chunk in enumerate(chunks, start=1)) or NO_SOURCES_CONTEXT
+
+
+def chunk_label_map(chunks: list[dict[str, Any]]) -> dict[str, str]:
+    """Maps each ordinal label shown by ``format_chunk_context`` (e.g. ``"3"``) back to the
+    chunk's real id, so citations collected from the model can be resolved to real chunk
+    ids before validation and storage."""
+    return {str(index): chunk["id"] for index, chunk in enumerate(chunks, start=1)}
 
 
 def citation_chunks(client: Client, citation_ids: list[str]) -> list[dict[str, Any]]:
