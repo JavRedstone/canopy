@@ -23,6 +23,9 @@ __pycache__/
 supabase/.branches/
 supabase/.temp/
 
+# Runtime logs
+.logs/
+
 # Editor and operating system files
 .DS_Store
 Thumbs.db

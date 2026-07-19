@@ -31,6 +31,15 @@ MASTERY_THRESHOLD = 0.95
 # the sequential course already routes the learner through them the first time.
 REVIEW_THRESHOLD = 0.6
 
+# A concept the learner is actively *struggling* on: its relevant track has been practiced at
+# least MIN_STRUGGLE_OPPORTUNITIES times yet still sits below STRUGGLE_THRESHOLD. This is the
+# trigger for surfacing a prerequisite-review recommendation -- repeated misses on the current
+# idea are the moment to suggest shoring up what it builds on. The bar sits below
+# REVIEW_THRESHOLD so we only intervene on genuine difficulty, and the minimum-opportunities
+# guard keeps a single unlucky slip from firing it.
+STRUGGLE_THRESHOLD = 0.5
+MIN_STRUGGLE_OPPORTUNITIES = 2
+
 
 @dataclass(frozen=True)
 class BktParams:
@@ -130,6 +139,28 @@ def prerequisite_needs_review(
     else:
         p, opportunities = p_understand, understand_opportunities
     return opportunities > 0 and p is not None and p < REVIEW_THRESHOLD
+
+
+def concept_struggling(
+    kind: str,
+    p_understand: float | None,
+    p_apply: float | None,
+    understand_opportunities: int,
+    apply_opportunities: int,
+) -> bool:
+    """True when the learner has practiced this concept's relevant track at least
+    ``MIN_STRUGGLE_OPPORTUNITIES`` times yet still sits below ``STRUGGLE_THRESHOLD`` -- the
+    signal that they are stuck on the current idea, not merely warming up. Evaluated on the
+    relevant track (applied code for a lab, understanding otherwise), the same track
+    ``prerequisite_needs_review`` uses, so the "struggling here" and "shaky there" judgements
+    are made consistently."""
+    if relevant_track(kind) == "apply":
+        p, opportunities = p_apply, apply_opportunities
+    else:
+        p, opportunities = p_understand, understand_opportunities
+    return (
+        opportunities >= MIN_STRUGGLE_OPPORTUNITIES and p is not None and p < STRUGGLE_THRESHOLD
+    )
 
 
 def concept_mastered(

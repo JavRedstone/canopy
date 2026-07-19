@@ -30,6 +30,7 @@ import { Breadcrumbs } from "@/components/breadcrumbs";
 import { CourseCategoryBadge } from "@/components/course-category-badge";
 import { CourseProgressSteps } from "@/components/course-progress";
 import { MasteryDashboard } from "@/components/mastery-dashboard";
+import { RecommendationsPanel } from "@/components/recommendations-panel";
 import { CourseSettingsDialog } from "@/components/course-settings-dialog";
 import { Icon } from "@/components/icon";
 import { SettingsMenu, SettingsMenuAction } from "@/components/settings-menu";
@@ -245,6 +246,8 @@ export function CourseDetail({ courseId }: { courseId: string }) {
       {progress.stage !== "ready" ? <CourseProgressSteps progress={progress} onResume={handleResumeRemainingLessons} /> : null}
       {refreshError ? <Alert severity="error" sx={{ mb: 2 }}>{refreshError} Retrying automatically…</Alert> : null}
       {deleteError ? <Alert severity="error" sx={{ mb: 2 }}>{deleteError}</Alert> : null}
+
+      {progress.stage === "ready" ? <RecommendationsPanel courseId={courseId} /> : null}
 
       {progress.stage === "ready" && map.modules.length > 0 ? (
         <Tabs

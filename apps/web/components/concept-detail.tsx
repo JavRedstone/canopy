@@ -13,6 +13,7 @@ import { PageShell } from "@/components/page-shell";
 import { QuizQuestion, QuizSection } from "@/components/quiz";
 import { MasteryCard } from "@/components/mastery-meter";
 import { PrerequisiteReview } from "@/components/prerequisite-review";
+import { PrerequisiteNudge } from "@/components/prerequisite-nudge";
 import { SettingsMenu } from "@/components/settings-menu";
 import { ConfettiBurst } from "@/components/confetti-burst";
 import { conceptKindColor, conceptKindIcon, conceptKindLabel } from "@/lib/concept-kind";
@@ -1154,6 +1155,9 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
                       <Typography variant="body2" color="text.secondary">
                         Run checks the visible tests only. Submit swaps in the full suite (hidden checks included) and updates your Apply mastery.
                       </Typography>
+                      {testResult.prerequisite_recommendation ? (
+                        <PrerequisiteNudge courseId={courseId} recommendation={testResult.prerequisite_recommendation} />
+                      ) : null}
                       {(() => {
                         const cases = parsePytestCases(testResult.output);
                         return cases.length > 0 ? (

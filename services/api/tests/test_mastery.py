@@ -1,11 +1,14 @@
 from app.mastery import (
     DEFAULT_PARAMS,
     MASTERY_THRESHOLD,
+    MIN_STRUGGLE_OPPORTUNITIES,
     REVIEW_THRESHOLD,
+    STRUGGLE_THRESHOLD,
     BktParams,
     assessment_for_quiz_kind,
     bkt_update,
     concept_mastered,
+    concept_struggling,
     params_for,
     prerequisite_needs_review,
     relevant_track,
@@ -98,6 +101,22 @@ def test_prerequisite_review_flags_only_practiced_but_shaky_concepts() -> None:
     assert prerequisite_needs_review("conceptual", None, None, understand_opportunities=0, apply_opportunities=0) is False
     # For a coding prereq the apply track decides; a weak quiz score alone doesn't flag it.
     assert prerequisite_needs_review("coding", low, high, understand_opportunities=2, apply_opportunities=1) is False
+
+
+def test_struggling_needs_enough_practice_and_a_low_relevant_track() -> None:
+    low = STRUGGLE_THRESHOLD - 0.1
+    high = STRUGGLE_THRESHOLD + 0.2
+    # Enough tries and still weak on the relevant track -> struggling.
+    assert concept_struggling("conceptual", low, None, MIN_STRUGGLE_OPPORTUNITIES, 0) is True
+    assert concept_struggling("coding", None, low, 0, MIN_STRUGGLE_OPPORTUNITIES) is True
+    # One unlucky slip is not yet struggling -- the minimum-opportunities guard holds it back.
+    assert concept_struggling("conceptual", low, None, MIN_STRUGGLE_OPPORTUNITIES - 1, 0) is False
+    # Practiced enough but coping -> not struggling.
+    assert concept_struggling("conceptual", high, None, MIN_STRUGGLE_OPPORTUNITIES + 1, 0) is False
+    # A coding concept is judged on apply; a weak quiz score alone doesn't count as struggling.
+    assert concept_struggling("coding", low, high, MIN_STRUGGLE_OPPORTUNITIES, 1) is False
+    # No observations on the relevant track -> nothing to call struggling.
+    assert concept_struggling("conceptual", None, None, 0, 0) is False
 
 
 def test_coding_concept_requires_the_apply_track() -> None:

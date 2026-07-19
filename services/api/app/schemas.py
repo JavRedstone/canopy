@@ -134,6 +134,43 @@ class PrerequisiteReviewResponse(BaseModel):
     review_recommended: bool = False
 
 
+class PrerequisiteRecommendation(BaseModel):
+    """Surfaced inline the moment a learner is struggling on a concept: the shaky
+    prerequisites that concept builds on, so the UI can nudge them to review first. A ``None``
+    value on a graded response means no recommendation -- either they are not struggling yet,
+    the concept has no prerequisites, or every prerequisite is already solid."""
+
+    concept_slug: str
+    concept_title: str
+    reason_markdown: str
+    prerequisites: list[PrerequisiteConcept]
+
+
+RecommendationDecision = Literal["accepted", "deferred", "declined"]
+
+
+class RecommendationSummary(BaseModel):
+    """One open prerequisite-review recommendation on the course-level panel: the concept the
+    learner is stuck on and the shaky prerequisites it builds on, resolved against *current*
+    mastery so an already-shored-up prerequisite drops off on its own."""
+
+    id: UUID
+    concept_slug: str
+    concept_title: str
+    prerequisites: list[PrerequisiteConcept]
+    created_at: datetime
+
+
+class RecommendationsResponse(BaseModel):
+    course_id: UUID
+    recommendations: list[RecommendationSummary]
+
+
+class RecommendationDecisionRequest(BaseModel):
+    # The learner's verdict on a recommendation: commit to it, snooze it, or dismiss it.
+    decision: RecommendationDecision
+
+
 class CourseMapConcept(BaseModel):
     slug: str
     title: str
@@ -212,6 +249,8 @@ class QuizGradeResponse(BaseModel):
     feedback_markdown: str | None = None
     attempts_used: int = 0
     attempts_remaining: int = 0
+    # Set when this answer leaves the learner struggling on a concept with shaky prerequisites.
+    prerequisite_recommendation: PrerequisiteRecommendation | None = None
 
 
 class QuizItemPreview(BaseModel):
@@ -251,6 +290,9 @@ class RunLessonResponse(BaseModel):
     passed: bool
     output: str
     timed_out: bool
+    # Set on a graded Submit that leaves the learner struggling with shaky prerequisites.
+    # Always None for a plain Run, which records no observation.
+    prerequisite_recommendation: PrerequisiteRecommendation | None = None
 
 
 class RunScriptRequest(BaseModel):

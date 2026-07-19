@@ -9,7 +9,7 @@ from app.llm import LLMGatewayClient, LLMGatewayError
 from app.quiz import grade_quiz_answer, withhold_answer
 from app.repository import CourseRepository, get_repository
 from app.sandbox import SandboxError, SandboxFile, SandboxRunnerClient
-from app.schemas import CitationExcerptResponse, ConceptDetailResponse, CoursePointsResponse, CourseMapResponse, CourseMasteryResponse, CourseProgressResponse, CourseSummary, CreateCourseRequest, LessonHelperRequest, LessonHelperResponse, LessonWorkspaceFile, PrerequisiteReviewResponse, QuizAnswerRequest, QuizGradeResponse, RunLessonRequest, RunLessonResponse, RunScriptRequest, RunScriptResponse, UpdateCourseRequest
+from app.schemas import CitationExcerptResponse, ConceptDetailResponse, CoursePointsResponse, CourseMapResponse, CourseMasteryResponse, CourseProgressResponse, CourseSummary, CreateCourseRequest, LessonHelperRequest, LessonHelperResponse, LessonWorkspaceFile, PrerequisiteReviewResponse, QuizAnswerRequest, QuizGradeResponse, RecommendationDecisionRequest, RecommendationsResponse, RunLessonRequest, RunLessonResponse, RunScriptRequest, RunScriptResponse, UpdateCourseRequest
 from app.settings import get_settings
 
 router = APIRouter(prefix="/courses", tags=["courses"])
@@ -125,6 +125,23 @@ def get_concept_prerequisites(course_id: UUID, slug: str, current_user: CurrentU
     return repository.concept_prerequisites(current_user, course_id, slug)
 
 
+@router.get("/{course_id}/recommendations", response_model=RecommendationsResponse)
+def get_course_recommendations(course_id: UUID, current_user: CurrentUser, repository: Repository) -> RecommendationsResponse:
+    """Open prerequisite-review recommendations for the learner to accept, defer, or decline."""
+    return repository.list_recommendations(current_user, course_id)
+
+
+@router.post("/{course_id}/recommendations/{event_id}/decision", status_code=status.HTTP_204_NO_CONTENT)
+def decide_course_recommendation(
+    course_id: UUID,
+    event_id: UUID,
+    request: RecommendationDecisionRequest,
+    current_user: CurrentUser,
+    repository: Repository,
+) -> None:
+    repository.decide_recommendation(current_user, course_id, event_id, request.decision)
+
+
 @router.get("/{course_id}/citations/{citation_id}", response_model=CitationExcerptResponse)
 def get_citation_excerpt(course_id: UUID, citation_id: UUID, current_user: CurrentUser, repository: Repository) -> CitationExcerptResponse:
     return repository.citation_excerpt(current_user, course_id, citation_id)
@@ -221,6 +238,9 @@ def submit_lesson(
     submitted = _validated_submission(request, starter_files)
     result = _run_pytest(sandbox, submitted, public_test_files + hidden_test_files)
     repository.record_coding_submission(current_user, course_id, slug, result.passed)
+    # A failed suite that leaves apply-mastery stuck surfaces a prerequisite-review nudge, from
+    # the observation just recorded. On a pass, apply-mastery climbs and this returns None.
+    result.prerequisite_recommendation = repository.prerequisite_recommendation(current_user, course_id, slug)
     return result
 
 
@@ -280,6 +300,9 @@ def answer_quiz_item(
         grade = withhold_answer(grade)
     grade.attempts_used = attempts_used
     grade.attempts_remaining = attempts_remaining
+    # If this attempt leaves the learner stuck on the concept and it builds on something shaky,
+    # hand back a review nudge to show inline. Computed from the mastery just recorded above.
+    grade.prerequisite_recommendation = repository.prerequisite_recommendation(current_user, course_id, slug)
     return grade
 
 

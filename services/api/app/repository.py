@@ -18,18 +18,62 @@ from app.mastery import (
     assessment_for_quiz_kind,
     bkt_update,
     concept_mastered,
+    concept_struggling,
     params_for,
     prerequisite_needs_review,
     track_for,
     MASTERY_THRESHOLD,
     REVIEW_THRESHOLD,
 )
-from app.schemas import CitationExcerptResponse, ConceptDetailResponse, ConceptMastery, CoursePointsResponse, CourseMapConcept, CourseMapModule, CourseMapResponse, CourseMasteryResponse, CourseProgressResponse, CourseSummary, CreateCourseRequest, CreateSourceRequest, LessonPreview, LessonWorkspaceFile, PrerequisiteConcept, PrerequisiteReviewResponse, QuizAnswerRequest, QuizGradeResponse, QuizItemPreview, SourceSummary, SourceUploadTarget, UpdateCourseRequest
+from app.schemas import CitationExcerptResponse, ConceptDetailResponse, ConceptMastery, CoursePointsResponse, CourseMapConcept, CourseMapModule, CourseMapResponse, CourseMasteryResponse, CourseProgressResponse, CourseSummary, CreateCourseRequest, CreateSourceRequest, LessonPreview, LessonWorkspaceFile, PrerequisiteConcept, PrerequisiteRecommendation, PrerequisiteReviewResponse, QuizAnswerRequest, QuizGradeResponse, QuizItemPreview, RecommendationDecision, RecommendationSummary, RecommendationsResponse, SourceSummary, SourceUploadTarget, UpdateCourseRequest
 from app.settings import get_settings
 from app.supabase import get_service_client
 
 
 logger = logging.getLogger(__name__)
+
+
+def _join_titles(titles: list[str]) -> str:
+    """Render titles as a bold, human-readable list -- ``**A**``; ``**A** and **B**``;
+    ``**A**, **B**, and **C**`` -- for a recommendation sentence."""
+    bold = [f"**{title}**" for title in titles]
+    if len(bold) == 1:
+        return bold[0]
+    if len(bold) == 2:
+        return f"{bold[0]} and {bold[1]}"
+    return ", ".join(bold[:-1]) + f", and {bold[-1]}"
+
+
+def _prerequisite_closure(adjacency: dict[str, list[str]], start: str) -> list[str]:
+    """Breadth-first walk of the prerequisite graph from ``start``, returning every transitive
+    prerequisite (ancestor) concept id in nearest-first order, each exactly once. ``adjacency``
+    maps a concept id to the ids it directly builds on. The planner keeps this graph acyclic, but
+    a ``seen`` guard makes the walk terminate regardless, so a future regression can't hang it."""
+    seen = {start}
+    order: list[str] = []
+    frontier = list(adjacency.get(start, []))
+    while frontier:
+        current = frontier.pop(0)
+        if current in seen:
+            continue
+        seen.add(current)
+        order.append(current)
+        frontier.extend(adjacency.get(current, []))
+    return order
+
+
+# When a struggle nudge lists shaky prerequisites, show at most this many -- weakest first -- so
+# a deep dependency chain doesn't bury the learner in links. The full set still shows in the
+# course-level recommendations panel.
+MAX_RECOMMENDED_PREREQS = 5
+
+
+def _relevant_p(entry: PrerequisiteConcept) -> float:
+    """The prerequisite's mastery on the track that decided it was shaky (applied code for a lab,
+    understanding otherwise). Used to order weakest-first; a missing estimate sorts last."""
+    p = entry.p_apply if entry.kind == "coding" else entry.p_understand
+    return p if p is not None else 1.0
+
 
 # A fixed award per lesson (a coding lab passed via Submit, or every item in a
 # conceptual lesson's mastery check answered correctly) -- a coarse, gamified
@@ -107,6 +151,19 @@ class CourseRepository(Protocol):
 
     def concept_prerequisites(self, owner_id: UUID, course_id: UUID, slug: str) -> PrerequisiteReviewResponse:
         """The concepts this one builds on, each with the learner's mastery and a review flag."""
+        ...
+
+    def prerequisite_recommendation(self, owner_id: UUID, course_id: UUID, slug: str) -> PrerequisiteRecommendation | None:
+        """A review nudge when the learner is struggling on this concept and it builds on a
+        shaky prerequisite; ``None`` otherwise. Call after a graded answer updates mastery."""
+        ...
+
+    def list_recommendations(self, owner_id: UUID, course_id: UUID) -> RecommendationsResponse:
+        """Open (proposed) prerequisite-review recommendations for the learner on this course."""
+        ...
+
+    def decide_recommendation(self, owner_id: UUID, course_id: UUID, event_id: UUID, decision: RecommendationDecision) -> None:
+        """Record the learner's accept/defer/decline verdict on a recommendation."""
         ...
 
     def citation_excerpt(self, owner_id: UUID, course_id: UUID, citation_id: UUID) -> CitationExcerptResponse:
@@ -307,6 +364,21 @@ class MemoryCourseRepository:
             course_id=course.id, slug=slug, threshold=MASTERY_THRESHOLD,
             review_threshold=REVIEW_THRESHOLD, prerequisites=[], review_recommended=False,
         )
+
+    def prerequisite_recommendation(self, owner_id: UUID, course_id: UUID, slug: str) -> PrerequisiteRecommendation | None:
+        # No mastery or prerequisite graph in memory mode, so there is never anything to recommend.
+        self._course_for_owner(owner_id, course_id)
+        return None
+
+    def list_recommendations(self, owner_id: UUID, course_id: UUID) -> RecommendationsResponse:
+        course = self._course_for_owner(owner_id, course_id)
+        return RecommendationsResponse(course_id=course.id, recommendations=[])
+
+    def decide_recommendation(
+        self, owner_id: UUID, course_id: UUID, event_id: UUID, decision: RecommendationDecision
+    ) -> None:
+        # No adaptation events exist in memory mode; validating ownership is all there is to do.
+        self._course_for_owner(owner_id, course_id)
 
     def citation_excerpt(self, owner_id: UUID, course_id: UUID, citation_id: UUID) -> CitationExcerptResponse:
         self._course_for_owner(owner_id, course_id)
@@ -1054,28 +1126,12 @@ class SupabaseCourseRepository:
         return CourseMasteryResponse(course_id=course_id, threshold=MASTERY_THRESHOLD, concepts=entries)
 
     def concept_prerequisites(self, owner_id: UUID, course_id: UUID, slug: str) -> PrerequisiteReviewResponse:
+        course = self._course_for_owner(owner_id, course_id)
+        version_id = course.get("active_version_id")
         concept = self._concept_for(owner_id, course_id, slug)
-        edges = self._data(
-            self.client.table("concept_prerequisites")
-            .select("prerequisite_concept_id")
-            .eq("concept_id", concept["id"]),
-            "load concept prerequisites",
-        )
-        prerequisite_ids = [row["prerequisite_concept_id"] for row in edges]
-        if not prerequisite_ids:
-            return PrerequisiteReviewResponse(
-                course_id=course_id, slug=slug, threshold=MASTERY_THRESHOLD,
-                review_threshold=REVIEW_THRESHOLD, prerequisites=[], review_recommended=False,
-            )
-        prerequisites = self._data(
-            self.client.table("concepts")
-            .select("id,slug,title,kind")
-            .in_("id", prerequisite_ids)
-            .order("slug"),
-            "load prerequisite concepts",
-        )
-        mastery = self._mastery_rows(owner_id, prerequisite_ids)
-        entries = [self._prerequisite_concept(prerequisite, mastery) for prerequisite in prerequisites]
+        # The whole transitive closure, not just direct parents: a lesson genuinely builds on the
+        # things its prerequisites build on, so a weakness two hops back is worth flagging too.
+        entries = self._ancestor_prerequisites(owner_id, version_id, concept["id"]) if version_id else []
         return PrerequisiteReviewResponse(
             course_id=course_id,
             slug=slug,
@@ -1083,6 +1139,206 @@ class SupabaseCourseRepository:
             review_threshold=REVIEW_THRESHOLD,
             prerequisites=entries,
             review_recommended=any(entry.needs_review for entry in entries),
+        )
+
+    def _ancestor_prerequisites(
+        self, owner_id: UUID, version_id: str, concept_id: str
+    ) -> list[PrerequisiteConcept]:
+        """Every transitive prerequisite of a concept -- nearest-first, each carrying the learner's
+        mastery and review flag. Loads the version's whole prerequisite graph once, walks the
+        acyclic closure from ``concept_id``, then hydrates just the reachable ancestors."""
+        version_concept_ids = [
+            row["id"]
+            for row in self._data(
+                self.client.table("concepts").select("id").eq("course_version_id", version_id),
+                "load version concepts",
+            )
+        ]
+        if concept_id not in set(version_concept_ids):
+            return []
+        edges = self._data(
+            self.client.table("concept_prerequisites")
+            .select("concept_id,prerequisite_concept_id")
+            .in_("concept_id", version_concept_ids),
+            "load prerequisite edges",
+        )
+        adjacency: dict[str, list[str]] = {}
+        for row in edges:
+            adjacency.setdefault(row["concept_id"], []).append(row["prerequisite_concept_id"])
+        ancestor_ids = _prerequisite_closure(adjacency, concept_id)
+        if not ancestor_ids:
+            return []
+        by_id = {
+            row["id"]: row
+            for row in self._data(
+                self.client.table("concepts").select("id,slug,title,kind").in_("id", ancestor_ids),
+                "load prerequisite concepts",
+            )
+        }
+        mastery = self._mastery_rows(owner_id, ancestor_ids)
+        return [self._prerequisite_concept(by_id[cid], mastery) for cid in ancestor_ids if cid in by_id]
+
+    def prerequisite_recommendation(
+        self, owner_id: UUID, course_id: UUID, slug: str
+    ) -> PrerequisiteRecommendation | None:
+        """A prerequisite-review nudge for a learner who is struggling on this concept, or
+        ``None`` when they are coping or nothing it builds on is shaky.
+
+        Meant to be called right after a graded answer/submission has rolled mastery forward,
+        so it reads the just-updated estimate. It combines two judgements the mastery model
+        already makes: is the learner ``concept_struggling`` on *this* concept, and does it
+        have a prerequisite that ``needs_review``. Only when both hold is a recommendation
+        returned -- and logged as a proposed adaptation event for the audit trail."""
+        concept = self._concept_for(owner_id, course_id, slug)
+        own = self._mastery_rows(owner_id, [concept["id"]])
+        understand = own.get((concept["id"], "understand"))
+        apply = own.get((concept["id"], "apply"))
+        if not concept_struggling(
+            concept["kind"],
+            understand["p_l"] if understand else None,
+            apply["p_l"] if apply else None,
+            understand["opportunities"] if understand else 0,
+            apply["opportunities"] if apply else 0,
+        ):
+            return None
+        course = self._course_for_owner(owner_id, course_id)
+        version_id = course.get("active_version_id")
+        if not version_id:
+            return None
+        # Walk the full prerequisite closure, then keep the shaky ones weakest-first so the most
+        # broken foundation leads -- capped so a deep chain doesn't produce a wall of links.
+        weak = [entry for entry in self._ancestor_prerequisites(owner_id, version_id, concept["id"]) if entry.needs_review]
+        if not weak:
+            return None
+        weak.sort(key=_relevant_p)
+        weak = weak[:MAX_RECOMMENDED_PREREQS]
+        self._log_prerequisite_recommendation(owner_id, course_id, concept, weak)
+        names = _join_titles([entry.title for entry in weak])
+        return PrerequisiteRecommendation(
+            concept_slug=concept["slug"],
+            concept_title=concept["title"],
+            reason_markdown=(
+                f"This builds on {names}, which still looks shaky for you. "
+                "A quick review there should make this concept click faster."
+            ),
+            prerequisites=weak,
+        )
+
+    def _log_prerequisite_recommendation(
+        self, owner_id: UUID, course_id: UUID, concept: dict[str, Any], weak: list[PrerequisiteConcept]
+    ) -> None:
+        """Record the recommendation as a ``proposed`` adaptation event, deduped so a learner
+        who keeps missing the same concept accrues one open proposal rather than one per
+        attempt. Best-effort: a failure here is logged, never surfaced -- the inline nudge does
+        not depend on the event being written."""
+        try:
+            course = self._course_for_owner(owner_id, course_id)
+            version_id = course.get("active_version_id")
+            if not version_id:
+                return
+            existing = (
+                self.client.table("adaptation_events")
+                .select("reason_json")
+                .eq("user_id", str(owner_id))
+                .eq("course_version_id", version_id)
+                .eq("event_type", "prerequisite_review_recommended")
+                .eq("decision", "proposed")
+                .execute()
+                .data
+                or []
+            )
+            if any((row.get("reason_json") or {}).get("concept_slug") == concept["slug"] for row in existing):
+                return
+            self.client.table("adaptation_events").insert(
+                {
+                    "user_id": str(owner_id),
+                    "course_version_id": version_id,
+                    "event_type": "prerequisite_review_recommended",
+                    "reason_json": {
+                        "concept_slug": concept["slug"],
+                        "prerequisite_slugs": [entry.slug for entry in weak],
+                    },
+                    "decision": "proposed",
+                }
+            ).execute()
+        except (APIError, HTTPError):
+            logger.exception(
+                "Could not log prerequisite recommendation", extra={"concept_slug": concept["slug"]}
+            )
+
+    def list_recommendations(self, owner_id: UUID, course_id: UUID) -> RecommendationsResponse:
+        """Open (``proposed``) prerequisite-review recommendations for the learner on this course,
+        newest first. Each event stores only the target concept slug; its shaky prerequisites are
+        re-resolved against *current* mastery, so a recommendation whose prerequisites have since
+        been shored up simply drops out of the list instead of nagging."""
+        course = self._course_for_owner(owner_id, course_id)
+        version_id = course.get("active_version_id")
+        if not version_id:
+            return RecommendationsResponse(course_id=course_id, recommendations=[])
+        events = self._data(
+            self.client.table("adaptation_events")
+            .select("id,reason_json,created_at")
+            .eq("user_id", str(owner_id))
+            .eq("course_version_id", version_id)
+            .eq("event_type", "prerequisite_review_recommended")
+            .eq("decision", "proposed")
+            .order("created_at", desc=True),
+            "load recommendations",
+        )
+        recommendations: list[RecommendationSummary] = []
+        seen_concepts: set[str] = set()
+        for event in events:
+            concept_slug = (event.get("reason_json") or {}).get("concept_slug")
+            if not concept_slug or concept_slug in seen_concepts:
+                continue
+            seen_concepts.add(concept_slug)
+            concept_rows = self._data(
+                self.client.table("concepts")
+                .select("id,slug,title,kind")
+                .eq("course_version_id", version_id)
+                .eq("slug", concept_slug),
+                "load recommendation concept",
+            )
+            if not concept_rows:
+                continue
+            concept = concept_rows[0]
+            weak = [
+                entry
+                for entry in self._ancestor_prerequisites(owner_id, version_id, concept["id"])
+                if entry.needs_review
+            ]
+            if not weak:
+                continue
+            weak.sort(key=_relevant_p)
+            recommendations.append(
+                RecommendationSummary(
+                    id=event["id"],
+                    concept_slug=concept["slug"],
+                    concept_title=concept["title"],
+                    prerequisites=weak,
+                    created_at=event["created_at"],
+                )
+            )
+        return RecommendationsResponse(course_id=course_id, recommendations=recommendations)
+
+    def decide_recommendation(
+        self, owner_id: UUID, course_id: UUID, event_id: UUID, decision: RecommendationDecision
+    ) -> None:
+        """Record the learner's verdict on a recommendation (accept / defer / decline). Verifies
+        the event is the learner's own before updating so one learner can't act on another's."""
+        self._course_for_owner(owner_id, course_id)
+        owned = self._data(
+            self.client.table("adaptation_events")
+            .select("id")
+            .eq("id", str(event_id))
+            .eq("user_id", str(owner_id)),
+            "load recommendation",
+        )
+        if not owned:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recommendation not found.")
+        self._data(
+            self.client.table("adaptation_events").update({"decision": decision}).eq("id", str(event_id)),
+            "decide recommendation",
         )
 
     def citation_excerpt(self, owner_id: UUID, course_id: UUID, citation_id: UUID) -> CitationExcerptResponse:

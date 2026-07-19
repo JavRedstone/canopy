@@ -166,6 +166,10 @@ class QuizRepository:
         self.responses.append((item_id, grade.correct))
         return len([recorded_id for recorded_id, _ in self.responses if recorded_id == item_id])
 
+    def prerequisite_recommendation(self, owner_id: object, course_id: object, slug: str) -> None:
+        # These tests exercise attempt enforcement, not the struggle heuristic -> never recommends.
+        return None
+
 
 def test_answer_endpoint_grades_and_reveals_feedback() -> None:
     repository = QuizRepository()

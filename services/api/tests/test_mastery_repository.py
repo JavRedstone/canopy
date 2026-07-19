@@ -7,7 +7,7 @@ from uuid import uuid4
 from postgrest.exceptions import APIError
 
 from app.mastery import DEFAULT_PARAMS, bkt_update
-from app.repository import SupabaseCourseRepository
+from app.repository import SupabaseCourseRepository, _prerequisite_closure
 
 
 class FakeQuery:
@@ -155,3 +155,15 @@ def test_prerequisite_concept_with_no_observations_is_not_flagged() -> None:
     assert entry.p_understand is None
     assert entry.needs_review is False
     assert entry.mastered is False
+
+
+def test_prerequisite_closure_walks_the_whole_graph_nearest_first() -> None:
+    # Linear chain a -> b -> c: from a, b then c are transitive prerequisites, nearest first.
+    assert _prerequisite_closure({"a": ["b"], "b": ["c"]}, "a") == ["b", "c"]
+    # Diamond a -> {b, c} -> d: d is reachable two ways but listed once, after its own parents.
+    assert _prerequisite_closure({"a": ["b", "c"], "b": ["d"], "c": ["d"]}, "a") == ["b", "c", "d"]
+    # A leaf concept (nothing it builds on) has an empty closure.
+    assert _prerequisite_closure({"a": ["b"]}, "b") == []
+    # A cycle would never occur by construction, but the seen-guard still terminates and never
+    # re-lists the start node.
+    assert _prerequisite_closure({"a": ["b"], "b": ["a"]}, "a") == ["b"]

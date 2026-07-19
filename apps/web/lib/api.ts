@@ -148,6 +148,15 @@ export interface PrerequisiteReviewResponse {
   review_recommended: boolean;
 }
 
+// Returned inline on a graded answer/submission when the learner is struggling on a concept
+// that builds on shaky prerequisites -- the shape behind the "review this first" nudge.
+export interface PrerequisiteRecommendation {
+  concept_slug: string;
+  concept_title: string;
+  reason_markdown: string;
+  prerequisites: PrerequisiteConcept[];
+}
+
 export async function getConceptPrerequisites(courseId: string, slug: string, accessToken: string): Promise<PrerequisiteReviewResponse> {
   const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/concepts/${slug}/prerequisites`, {
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -155,6 +164,41 @@ export async function getConceptPrerequisites(courseId: string, slug: string, ac
   });
   if (!response.ok) throw new Error(`Unable to load prerequisites (HTTP ${response.status}).`);
   return response.json();
+}
+
+// One open prerequisite-review recommendation on the course panel: the concept the learner is
+// stuck on and the shaky prerequisites (transitive) it builds on, weakest first.
+export interface RecommendationSummary {
+  id: string;
+  concept_slug: string;
+  concept_title: string;
+  prerequisites: PrerequisiteConcept[];
+  created_at: string;
+}
+
+export interface RecommendationsResponse {
+  course_id: string;
+  recommendations: RecommendationSummary[];
+}
+
+export type RecommendationDecision = "accepted" | "deferred" | "declined";
+
+export async function getCourseRecommendations(courseId: string, accessToken: string): Promise<RecommendationsResponse> {
+  const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/recommendations`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: "no-store"
+  });
+  if (!response.ok) throw new Error(`Unable to load recommendations (HTTP ${response.status}).`);
+  return response.json();
+}
+
+export async function decideRecommendation(courseId: string, eventId: string, decision: RecommendationDecision, accessToken: string): Promise<void> {
+  const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/recommendations/${eventId}/decision`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ decision })
+  });
+  if (!response.ok) throw new Error(`Unable to update the recommendation (HTTP ${response.status}).`);
 }
 
 export interface UpdateCourseRequest {
@@ -241,6 +285,7 @@ export interface QuizGradeResponse {
   feedback_markdown: string | null;
   attempts_used: number;
   attempts_remaining: number;
+  prerequisite_recommendation?: PrerequisiteRecommendation | null;
 }
 
 export interface LessonPreview {
@@ -300,6 +345,8 @@ export interface LessonRunResult {
   passed: boolean;
   output: string;
   timed_out: boolean;
+  // Set only by Submit (not Run) when the failed suite leaves apply-mastery stuck.
+  prerequisite_recommendation?: PrerequisiteRecommendation | null;
 }
 
 export async function getConceptDetail(courseId: string, slug: string, accessToken: string): Promise<ConceptDetailResponse> {

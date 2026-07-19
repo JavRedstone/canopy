@@ -17,6 +17,7 @@ import { alpha } from "@mui/material/styles";
 import { QuizAnswerRequest, QuizGradeResponse, QuizItemPreview, answerQuizItem } from "@/lib/api";
 import { MarkdownText } from "@/components/markdown-text";
 import { ConfettiBurst } from "@/components/confetti-burst";
+import { PrerequisiteNudge } from "@/components/prerequisite-nudge";
 import { createClient } from "@/lib/supabase/client";
 
 function answerFor(item: QuizItemPreview, selected: number[], text: string): QuizAnswerRequest | null {
@@ -227,6 +228,11 @@ export function QuizQuestion({ courseId, slug, item, index, maxAttempts = DEFAUL
                 )
               ) : null}
             </Alert>
+            {grade.prerequisite_recommendation ? (
+              <Box sx={{ mt: 1 }}>
+                <PrerequisiteNudge courseId={courseId} recommendation={grade.prerequisite_recommendation} />
+              </Box>
+            ) : null}
           </motion.div>
         </AnimatePresence>
       )}

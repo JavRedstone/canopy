@@ -7,6 +7,8 @@
 - [`COMPETITIVE_DIFFERENTIATION.md`](./product/COMPETITIVE_DIFFERENTIATION.md) — a scannable head-to-head table vs. NotebookLM, ChatGPT, Codecademy/DataCamp, and GitHub Copilot/Cody, distilled from `MARKET_EXPLORATION.md` and `USE_CASES.md`.
 - [`USE_CASES.md`](./product/USE_CASES.md) — candidate use cases compared against what the product can actually do today, not just the plan's intent.
 - [`SAMPLE_COURSES.md`](./product/SAMPLE_COURSES.md) — example course-creation inputs (goal text) and what they produce.
+- [`PEDAGOGY_EVALUATION.md`](./product/PEDAGOGY_EVALUATION.md) — Canopy's teaching model evaluated against the learning-science literature: benefits, shortcomings, and prioritized fixes, with citations.
+- [`ROADMAP.md`](./product/ROADMAP.md) — candidate features and improvements not yet scheduled, as a checklist.
 
 ## [`architecture/`](./architecture/) — architecture & security
 
