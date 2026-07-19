@@ -67,6 +67,14 @@ export async function getCourseMap(courseId: string, accessToken: string): Promi
   return response.json();
 }
 
+export async function exportCoursebook(courseId: string, accessToken: string): Promise<Blob> {
+  const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/export/coursebook`, {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  if (!response.ok) throw new Error(`Unable to export the coursebook (HTTP ${response.status}).`);
+  return response.blob();
+}
+
 export type CourseProgressStage = "ingesting_sources" | "planning" | "building_lessons" | "ready" | "failed";
 
 export interface CourseProgressResponse {

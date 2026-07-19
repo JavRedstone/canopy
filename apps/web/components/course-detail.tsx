@@ -25,7 +25,7 @@ import DialogContent from "@mui/material/DialogContent";
 import DialogContentText from "@mui/material/DialogContentText";
 import DialogActions from "@mui/material/DialogActions";
 import Button from "@mui/material/Button";
-import { CoursePlanningNotStartedError, CourseMapResponse, CoursePointsResponse, CourseProgressResponse, CourseSummary, deleteCourse, getCourse, getCourseMap, getCoursePoints, getCourseProgress, regenerateCourse, resumeCourseLessons } from "@/lib/api";
+import { CoursePlanningNotStartedError, CourseMapResponse, CoursePointsResponse, CourseProgressResponse, CourseSummary, deleteCourse, exportCoursebook, getCourse, getCourseMap, getCoursePoints, getCourseProgress, regenerateCourse, resumeCourseLessons } from "@/lib/api";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { CourseCategoryBadge } from "@/components/course-category-badge";
 import { CourseProgressSteps } from "@/components/course-progress";
@@ -55,6 +55,7 @@ export function CourseDetail({ courseId }: { courseId: string }) {
   const [deleteError, setDeleteError] = useState<string>();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [detailTab, setDetailTab] = useState<"content" | "mastery">("content");
   const fullLoadRef = useRef<() => Promise<void>>(async () => {});
@@ -171,6 +172,26 @@ export function CourseDetail({ courseId }: { courseId: string }) {
     }
   }
 
+  async function handleExportTextbook() {
+    try {
+      setExporting(true);
+      const supabase = createClient();
+      const { data } = await supabase.auth.getSession();
+      if (!data.session) throw new Error("Your session has expired. Please sign in again.");
+      const pdf = await exportCoursebook(courseId, data.session.access_token);
+      const url = URL.createObjectURL(pdf);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${course?.title.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "") || "course"}-coursebook.pdf`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (caught) {
+      setRefreshError(caught instanceof Error ? caught.message : "Unable to export the coursebook.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   async function handleDelete() {
     if (!course) return;
     setConfirmDeleteOpen(false);
@@ -198,6 +219,7 @@ export function CourseDetail({ courseId }: { courseId: string }) {
   if (state === "error") return <Alert severity="error">{errorMessage ?? "We could not load this course."}</Alert>;
   if (!course || !progress || !map) return null;
 
+  const coursebookConcepts = map.modules.flatMap((module) => module.concepts);
   const settingsActions: SettingsMenuAction[] = [
     { label: "Modify", icon: "edit", onClick: () => setSettingsOpen(true), disabled: regenerating || deleting },
     { label: regenerating ? "Regenerating…" : "Regenerate", icon: "refresh", onClick: handleRegenerate, disabled: regenerating || deleting },
@@ -252,6 +274,48 @@ export function CourseDetail({ courseId }: { courseId: string }) {
       {deleteError ? <Alert severity="error" sx={{ mb: 2 }}>{deleteError}</Alert> : null}
 
       {progress.stage === "ready" ? <RecommendationsPanel courseId={courseId} /> : null}
+
+      {progress.stage === "ready" && coursebookConcepts.length > 0 ? (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
+          <Box
+            sx={{
+              position: "relative", overflow: "hidden", mb: 3, p: { xs: 2.25, sm: 3 }, borderRadius: 3,
+              color: "white", background: "linear-gradient(120deg, #312e81 0%, #4338ca 52%, #0f766e 130%)",
+              boxShadow: "0 18px 40px rgba(49, 46, 129, 0.22)"
+            }}
+          >
+            <Box sx={{ position: "absolute", width: 260, height: 260, borderRadius: "50%", bgcolor: "rgba(255,255,255,0.08)", top: -130, right: -70 }} />
+            <Stack direction={{ xs: "column", sm: "row" }} sx={{ position: "relative", alignItems: { sm: "center" }, justifyContent: "space-between", gap: 3 }}>
+              <Stack sx={{ gap: 1.1, maxWidth: 610 }}>
+                <Stack direction="row" sx={{ alignItems: "center", gap: 0.75 }}>
+                  <Icon name="auto_stories" />
+                  <Typography variant="overline" sx={{ letterSpacing: "0.13em", fontWeight: 700, color: "#c7d2fe" }}>Your coursebook</Typography>
+                </Stack>
+                <Typography variant="h4" sx={{ fontWeight: 750, letterSpacing: "-0.025em" }}>{course.title}</Typography>
+                <Typography sx={{ color: "#e0e7ff", lineHeight: 1.55 }}>
+                  A polished reading edition with {map.modules.length} modules and {coursebookConcepts.length} learning sections, including linked references.
+                </Typography>
+                <Stack direction="row" sx={{ flexWrap: "wrap", gap: 0.75, mt: 0.5 }}>
+                  {map.modules.slice(0, 3).map((module) => <Chip key={module.position} size="small" label={module.title} sx={{ bgcolor: "rgba(255,255,255,0.13)", color: "white", border: "1px solid rgba(255,255,255,0.18)" }} />)}
+                  {map.modules.length > 3 ? <Chip size="small" label={`+${map.modules.length - 3} more`} sx={{ bgcolor: "rgba(255,255,255,0.13)", color: "white" }} /> : null}
+                </Stack>
+                <Stack direction="row" sx={{ gap: 1, flexWrap: "wrap", mt: 1 }}>
+                  <Button variant="contained" color="inherit" startIcon={exporting ? <CircularProgress size={16} /> : <Icon name="download" />} onClick={() => void handleExportTextbook()} disabled={exporting} sx={{ color: "#312e81", bgcolor: "white", fontWeight: 700, "&:hover": { bgcolor: "#eef2ff" } }}>
+                    {exporting ? "Preparing PDF…" : "Download coursebook"}
+                  </Button>
+                  <Button variant="text" startIcon={<Icon name="folder_open" />} onClick={() => setSourcesOpen(true)} sx={{ color: "#e0e7ff" }}>Browse sources</Button>
+                </Stack>
+              </Stack>
+              <Box sx={{ alignSelf: { xs: "flex-start", sm: "center" }, width: 135, minHeight: 174, p: 1.5, borderRadius: 1.5, bgcolor: "#f8fafc", color: "#172554", boxShadow: "0 14px 25px rgba(15, 23, 42, 0.27)", transform: { sm: "rotate(3deg)" } }}>
+                <Icon name="menu_book" />
+                <Typography sx={{ mt: 3, fontWeight: 800, lineHeight: 1.18, fontSize: "0.95rem" }}>{course.title}</Typography>
+                <Box sx={{ height: 3, width: 38, bgcolor: "#2dd4bf", mt: 1.2, mb: 1 }} />
+                <Typography variant="caption" color="text.secondary">Canopy Coursebook</Typography>
+              </Box>
+            </Stack>
+          </Box>
+        </motion.div>
+      ) : null}
 
       {progress.stage === "ready" && map.modules.length > 0 ? (
         <Tabs

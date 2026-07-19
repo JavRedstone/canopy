@@ -1,7 +1,9 @@
 from typing import Annotated
+import re
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from app.dependencies import CurrentUser
@@ -11,6 +13,7 @@ from app.repository import CourseRepository, get_repository
 from app.sandbox import SandboxError, SandboxFile, SandboxRunnerClient
 from app.schemas import CitationExcerptResponse, ConceptDetailResponse, CoursePointsResponse, CourseMapResponse, CourseMasteryResponse, CourseProgressResponse, CourseSourceSummary, CourseSummary, CreateCourseRequest, LessonHelperRequest, LessonHelperResponse, LessonWorkspaceFile, PrerequisiteReviewResponse, QuizAnswerRequest, QuizGradeResponse, RecommendationDecisionRequest, RecommendationsResponse, RunLessonRequest, RunLessonResponse, RunScriptRequest, RunScriptResponse, SourceDownloadResponse, UpdateCourseRequest
 from app.settings import get_settings
+from app.textbook_pdf import render_textbook_pdf
 
 router = APIRouter(prefix="/courses", tags=["courses"])
 Repository = Annotated[CourseRepository, Depends(get_repository)]
@@ -88,6 +91,39 @@ def update_course(course_id: UUID, request: UpdateCourseRequest, current_user: C
 @router.get("/{course_id}/map", response_model=CourseMapResponse)
 def get_course_map(course_id: UUID, current_user: CurrentUser, repository: Repository) -> CourseMapResponse:
     return repository.course_map(current_user, course_id)
+
+
+@router.get("/{course_id}/export/coursebook", response_class=Response)
+def export_coursebook(course_id: UUID, current_user: CurrentUser, repository: Repository) -> Response:
+    """Download the course's learner-visible material as a real PDF coursebook."""
+    course = repository.get_course(current_user, course_id)
+    course_map = repository.course_map(current_user, course_id)
+    details = {
+        concept.slug: repository.concept_detail(current_user, course_id, concept.slug)
+        for module in course_map.modules
+        for concept in module.concepts
+    }
+    references = []
+    seen_citation_ids: set[str] = set()
+    for detail in details.values():
+        for citation_id in detail.citations:
+            if citation_id in seen_citation_ids:
+                continue
+            seen_citation_ids.add(citation_id)
+            try:
+                references.append(repository.citation_excerpt(current_user, course_id, UUID(citation_id)))
+            except (ValueError, HTTPException) as exc:
+                # A deleted or legacy citation should not prevent exporting the rest of
+                # an otherwise readable course. Authorization and service errors remain
+                # meaningful to the caller.
+                if isinstance(exc, HTTPException) and exc.status_code != status.HTTP_404_NOT_FOUND:
+                    raise
+    filename = re.sub(r"[^a-zA-Z0-9._-]+", "-", course.title).strip("-.") or "course"
+    return Response(
+        content=render_textbook_pdf(course, course_map, details, references),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}-coursebook.pdf"'},
+    )
 
 
 @router.get("/{course_id}/progress", response_model=CourseProgressResponse)

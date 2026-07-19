@@ -32,6 +32,12 @@ def test_course_vertical_slice() -> None:
     assert len(course_map.json()["modules"]) == 1
     assert len(course_map.json()["modules"][0]["concepts"]) == 4
 
+    coursebook = client.get(f"/api/v1/courses/{course_id}/export/coursebook")
+    assert coursebook.status_code == 200
+    assert coursebook.headers["content-type"].startswith("application/pdf")
+    assert coursebook.content.startswith(b"%PDF-")
+    assert "attachment;" in coursebook.headers["content-disposition"]
+
     sources = client.get(f"/api/v1/courses/{course_id}/sources")
     assert sources.status_code == 200
     assert sources.json() == [
