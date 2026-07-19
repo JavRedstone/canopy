@@ -5,6 +5,7 @@ import { SignOutButton } from "@/components/sign-out-button";
 import { BrandLink } from "@/components/brand-link";
 import { LinkButton } from "@/components/link-button";
 import { PageShell } from "@/components/page-shell";
+import { ProfileNameButton } from "@/components/profile-name-button";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function HomePage() {
@@ -17,7 +18,7 @@ export default async function HomePage() {
         <BrandLink size="large" />
         {user ? (
           <Stack direction="row" sx={{ alignItems: "center", gap: 2 }}>
-            <Typography color="text.secondary">{user.email}</Typography>
+            <ProfileNameButton email={user.email ?? "Signed in"} />
             <SignOutButton />
           </Stack>
         ) : (
