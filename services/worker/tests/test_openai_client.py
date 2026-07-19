@@ -16,6 +16,7 @@ def _outline_dict(modules: list[dict] | None = None) -> dict:
         "source_set_hash": "source-hash",
         "audience": "Developers new to authentication.",
         "objectives": ["Understand tokens", "Validate requests safely"],
+        "language": "python",
         "modules": modules or [{"id": "basics", "title": "Basics", "focus": "Token fundamentals.", "lesson_count": 6}],
     }
 

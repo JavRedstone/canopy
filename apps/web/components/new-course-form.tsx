@@ -65,7 +65,6 @@ export function NewCourseForm() {
   const [lessonMin, setLessonMin] = useState(12);
   const [lessonMax, setLessonMax] = useState(20);
   const [quizMaxAttempts, setQuizMaxAttempts] = useState(3);
-  const [language, setLanguage] = useState<"python" | "python-ml" | "cpp">("python");
   const [sourceTab, setSourceTab] = useState<"file" | "text">("file");
   const [error, setError] = useState<string>();
   const [progress, setProgress] = useState<string>();
@@ -133,7 +132,7 @@ export function NewCourseForm() {
       }
 
       setProgress("Creating your draft course…");
-      const courseResponse = await fetch(`${apiUrl}/api/v1/courses`, { method: "POST", headers, body: JSON.stringify({ title, goal, source_ids: sourceIds, lesson_min: lessonMin, lesson_max: lessonMax, quiz_max_attempts: quizMaxAttempts, language }) });
+      const courseResponse = await fetch(`${apiUrl}/api/v1/courses`, { method: "POST", headers, body: JSON.stringify({ title, goal, source_ids: sourceIds, lesson_min: lessonMin, lesson_max: lessonMax, quiz_max_attempts: quizMaxAttempts }) });
       if (!courseResponse.ok) throw new Error("Unable to create your course.");
       router.push("/courses"); router.refresh();
     } catch (caught) {
@@ -175,20 +174,6 @@ export function NewCourseForm() {
           <span>Deep dive<br />24 lessons</span>
         </Stack>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>Each topic includes several short lectures, focused labs, and a final assessment.</Typography>
-      </Box>
-
-      <Box>
-        <Typography gutterBottom>Lab language</Typography>
-        <Tabs value={language} onChange={(_event: SyntheticEvent, value: "python" | "python-ml" | "cpp") => setLanguage(value)}>
-          <Tab value="python" label="Python" sx={{ textTransform: "none" }} />
-          <Tab value="python-ml" label="Python (ML/DL)" sx={{ textTransform: "none" }} />
-          <Tab value="cpp" label="C++" sx={{ textTransform: "none" }} />
-        </Tabs>
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-          {language === "python-ml"
-            ? "Labs run with numpy, pandas, scipy, scikit-learn, matplotlib, seaborn, and a GPU-capable PyTorch/torchvision -- exercises use the real libraries instead of implementing them from scratch."
-            : "The language every coding lab is generated and run in."} Fixed once the course is created.
-        </Typography>
       </Box>
 
       <TextField

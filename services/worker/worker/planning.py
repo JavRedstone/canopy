@@ -39,7 +39,7 @@ GOAL_ONLY_INSTRUCTION = (
 OUTLINE_SYSTEM_PROMPT = (
     "Design the outline for a technical course centered on the learner's goal. {source_instruction} "
     "Identify the intended audience and assumed prior knowledge, 3-6 concrete course-level learning "
-    "objectives, and an ordered list of modules. For each module write a short focus (1-2 sentences on "
+    "objectives, the language its coding labs should run in, and an ordered list of modules. For each module write a short focus (1-2 sentences on "
     "what it covers and how it differs from the other modules) and a lesson_count -- the number of "
     "activities that topic will contain. A module ideally mixes a short lecture or two, a focused coding lab, "
     "and an assessment checkpoint, but this is guidance, not a quota: size each module's lesson_count to its "
@@ -128,6 +128,9 @@ class CoursePlanner:
                 self._retrieve(version_ids, goal, self.settings.planner_context_chunk_limit)
             )
             outline = self._generate_course_outline(goal, source_set_hash, outline_context, source_instruction, lesson_min, lesson_max)
+            # Overwrites the placeholder set at course creation (services/api/app/repository.py)
+            # with the planner's inference, before any lesson build can read it.
+            self.client.table("courses").update({"language": outline.language}).eq("id", course_id).execute()
             outline_summary = _format_outline(outline)
 
             module_rows = self.client.rpc(

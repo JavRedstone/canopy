@@ -46,9 +46,10 @@ class CreateCourseRequest(BaseModel):
     lesson_min: int = Field(default=12, ge=6, le=24)
     lesson_max: int = Field(default=20, ge=6, le=24)
     quiz_max_attempts: int = Field(default=3, ge=1, le=10)
-    # Fixed at creation -- not on UpdateCourseRequest, since changing it after generation
-    # would leave a course with mixed-language labs. Coding labs target this language;
-    # conceptual/assessment concepts are unaffected either way.
+    # Not caller-provided: this is a placeholder overwritten by the course planner's own
+    # inference (services/worker/worker/planning.py) once it has seen the goal and source
+    # material, before any lesson build can read it. Not on UpdateCourseRequest either,
+    # since changing it after generation would leave a course with mixed-language labs.
     language: CourseLanguage = "python"
 
 
