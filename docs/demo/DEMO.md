@@ -45,7 +45,8 @@ implementation-focused coding course, rather than a static summary.
 
 ### Learner goal
 
-> Understand and implement scaled dot-product attention from Attention Is All You Need.
+> Understand, implement, and reproduce the Transformer architecture from Attention Is All
+> You Need.
 
 ### Problem credibility
 
@@ -86,18 +87,26 @@ without waiting on a live model call.
 > producing capability. Canopy transforms technical sources into structured lessons,
 > hands-on labs, adaptive feedback, and measurable mastery."
 
+> "Here the source is Attention Is All You Need. The goal is not just to read the paper;
+> it is to understand the architecture, implement its core components, and reproduce key
+> ideas from the work."
+
 > "The hard part is not generating text. It is generating a learning system that remains
 > connected to the source, produces executable practice, and verifies that the learner
 > can succeed."
 
 ### 3. Source to demonstrated skill — 45s
 
-Open a conceptual lesson. Click an inline citation marker to open its source reference.
-Answer a quiz question (mcq or fill-in-blank; Markdown and math render properly,
-including code blocks in the options).
+Show the generated progression: **Paper thesis and Transformer fundamentals**, **Core
+Transformer components**, **Training the translation model**, and **Experiments,
+ablations, and reproduction**.
 
-Move quickly into the coding lab. Show an incomplete implementation and pause on the
-failing run.
+Open **Scaled dot-product attention**. Click its inline citation marker to open the
+source reference. Answer a quiz question (mcq or fill-in-blank; Markdown and math render
+properly, including code blocks in the options).
+
+Move quickly into the **Transformer block implementation** lab. Show an incomplete
+implementation and pause on the failing run.
 
 > "This is where most AI learning stops. It explains the answer. Canopy makes the learner
 > do the work."
@@ -108,6 +117,9 @@ feedback, repair, and result are the demo's magic moment.
 > "Lessons stay connected to the source, so learners can verify where concepts came from
 > instead of trusting an opaque AI summary. The quiz is the first check that they actually
 > understand it."
+
+> "Canopy does not just summarize the paper. It builds a learning path from reading its
+> ideas to implementing and reproducing them."
 
 ### 4. Evidence of learning — 25s
 
@@ -122,6 +134,9 @@ if one is showing.
 > "Underneath, Canopy uses evidence-based mastery tracking: conceptual checks update
 > understanding, and coding submissions update applied skill. These are not completion
 > percentages."
+
+For this course, frame the Apply track as evidence from implementation and reproduction
+work. Do not claim that the mastery model has a separate reproduction score.
 
 ### 5. Prerequisite-aware adaptation — 25s
 
@@ -183,6 +198,9 @@ The existing product already supports all of this end to end — see
 [`USE_CASES.md`](../product/USE_CASES.md) for exactly what's verified against the code.
 If any generation step is unreliable on the day, prepare the course ahead of time and
 spend the live segment on the learning/practice loop, not generation latency.
+
+Do not show the dev-only demo auto-complete control in the recording. It is a testing
+utility, not part of the learner experience.
 
 ## What to simulate or defer
 

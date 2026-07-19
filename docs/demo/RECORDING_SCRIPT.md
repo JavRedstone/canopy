@@ -6,8 +6,10 @@ longer judging narrative, preparation checklist, and rationale, see [DEMO.md](./
 ## Setup before recording
 
 - Use a prepared course from a real primary source, such as "Attention Is All You Need."
-- Use the goal: "Understand and implement scaled dot-product attention."
-- Prepare a lab state that fails once, then passes after a small fix.
+- For the strongest visible goal, use: "Understand, implement, and reproduce the
+  Transformer architecture from Attention Is All You Need."
+- Prepare the **Transformer block implementation** lab to fail once, then pass after a
+  small fix.
 - Confirm the course has a cited lesson, mastery data, and a prerequisite recommendation.
 - Keep Docker, the worker, sandbox runner, API, gateway, and web app running.
 - Keep one real Codex-assisted diff or test result ready for the technical proof beat.
@@ -35,32 +37,42 @@ longer judging narrative, preparation checklist, and rationale, see [DEMO.md](./
 > Canopy transforms technical sources into a complete learning system: structured
 > lessons, hands-on labs, adaptive feedback, and measurable mastery.
 
-Upload "Attention Is All You Need" with the goal: "Understand and implement scaled
-dot-product attention."
+> Here we start with Attention Is All You Need. The goal is not just to read the paper.
+> It is to understand the architecture, implement its core components, and reproduce key
+> ideas from the work.
 
 ### 0:50 - 1:35: Source to demonstrated skill
 
-**Screen:** Prepared course modules, cited lesson, then the coding lab.
+**Screen:** Prepared course modules, scaled dot-product attention lesson, then the
+Transformer block implementation lab.
 
-> A learner starts with any technical source and a learning objective. Canopy creates a
-> structured path from that source, then asks the learner to demonstrate understanding, not just
-> consume content.
+> A learner starts with a difficult source and a goal. Canopy breaks it into the concepts,
+> practice, and assessments needed to reach mastery.
 
-Briefly show the generated modules and open a citation.
+Show the actual progression:
+
+> Paper thesis and Transformer fundamentals. Core Transformer components. Training the
+> translation model. Experiments, ablations, and reproduction.
+
+> The learner first understands why the authors introduced the Transformer, then learns
+> the mechanisms behind it, implements the system, and finally works toward reproduction.
+
+Open **Scaled dot-product attention** and its source reference.
 
 > The lesson remains connected to the original source, so the learner can verify where a
 > concept came from instead of trusting an opaque AI summary.
 
-Open the attention lab. Run the incomplete implementation and pause briefly on the failure.
+Open **Transformer block implementation**. Run the incomplete implementation and pause
+briefly on the failure.
 
 > This is where most AI learning stops. It explains the answer. Canopy makes the learner
 > do the work.
 
 Open the **Learning helper**, click **Give me a hint**, apply the small fix, and rerun.
 
-> The learner does not just receive generated code. They encounter a real implementation
-> failure, get lesson-aware guidance without the answer being handed over, and iterate
-> until it works.
+> The learner moves from reading the attention mechanism to implementing the mechanism
+> described in the paper. They encounter a real implementation failure, get lesson-aware
+> guidance without the answer being handed over, and iterate until it works.
 
 ### 1:35 - 2:00: Evidence of learning
 
@@ -70,8 +82,9 @@ Open the **Learning helper**, click **Give me a hint**, apply the small fix, and
 
 Show the separate **Understand** and **Apply** signals.
 
-> A learner can understand the theory but fail to implement it, or write working code
-> without understanding why it works. Canopy separates those signals.
+> In this course, Canopy distinguishes understanding Transformer concepts from applying
+> them in implementation and reproduction work. A learner can understand the theory but
+> still struggle to build it, or write working code without understanding why it works.
 
 > Underneath, Canopy uses evidence-based mastery tracking: conceptual checks update
 > understanding, and coding submissions update applied skill. These are not completion
@@ -117,3 +130,5 @@ or test result.
   attempting a live run.
 - If a prerequisite recommendation is unavailable, show the separate Understand and
   Apply values and say that recommendations are triggered by learner evidence.
+- Keep the dev-only auto-complete dialog out of the recording. It is a test utility, not
+  part of the learner experience.
