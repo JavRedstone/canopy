@@ -54,7 +54,7 @@ export function PrerequisiteReview({ courseId, slug }: { courseId: string; slug:
     >
       <AlertTitle sx={{ fontWeight: 700, mb: 0 }}>Review recommended first</AlertTitle>
       <Typography variant="body2">
-        This builds on {weak.length === 1 ? "a concept" : "concepts"} you&apos;re still shaky on. A quick review will make it click faster.
+        {`This builds on ${weak.length === 1 ? "a concept" : "concepts"} you're still shaky on. A quick review will make it click faster.`}
       </Typography>
       <Stack sx={{ gap: 1, mt: 0.5, minWidth: 0 }}>
         {weak.map((prerequisite) => {

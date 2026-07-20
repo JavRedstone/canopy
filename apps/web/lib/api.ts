@@ -617,6 +617,17 @@ export async function cancelDemoAutoComplete(courseId: string, jobId: string, ac
   if (!response.ok) throw new Error(`Unable to cancel auto-complete (HTTP ${response.status}).`);
 }
 
+// Dev-only: the undo for startDemoAutoComplete. conceptSlugs omitted clears the whole
+// course; otherwise only those lessons' mastery/observations/assignment state is wiped.
+export async function clearDemoProgress(courseId: string, conceptSlugs: string[] | undefined, accessToken: string): Promise<void> {
+  const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/demo/clear`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ concept_slugs: conceptSlugs ?? null })
+  });
+  if (!response.ok) throw new Error(`Unable to clear demo progress (HTTP ${response.status}).`);
+}
+
 export async function runLessonScript(
   courseId: string,
   slug: string,

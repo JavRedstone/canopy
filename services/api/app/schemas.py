@@ -426,6 +426,15 @@ class DemoAutoCompleteRequest(BaseModel):
     include_labs: bool = True
 
 
+class DemoClearRequest(BaseModel):
+    """Dev-only: the undo for DemoAutoCompleteRequest -- wipes mastery, observations, and
+    lesson-assignment state back to a blank, never-attempted course."""
+
+    # None clears every concept in the course; otherwise only these slugs are touched --
+    # lets a demo reset one lesson without losing progress on the rest.
+    concept_slugs: list[str] | None = None
+
+
 class DemoConceptResult(BaseModel):
     concept_slug: str
     concept_title: str

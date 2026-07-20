@@ -25,7 +25,7 @@ import DialogContent from "@mui/material/DialogContent";
 import DialogContentText from "@mui/material/DialogContentText";
 import DialogActions from "@mui/material/DialogActions";
 import Button from "@mui/material/Button";
-import { CoursePlanningNotStartedError, CourseMapResponse, CoursePointsResponse, CourseProgressResponse, CourseSummary, DemoAutoCompleteOptions, DemoJobStatus, cancelDemoAutoComplete, deleteCourse, exportCoursebook, getCourse, getCourseMap, getCoursePoints, getCourseProgress, getDemoAutoCompleteStatus, regenerateCourse, resumeCourseLessons, startDemoAutoComplete } from "@/lib/api";
+import { CoursePlanningNotStartedError, CourseMapResponse, CoursePointsResponse, CourseProgressResponse, CourseSummary, DemoAutoCompleteOptions, DemoJobStatus, cancelDemoAutoComplete, clearDemoProgress, deleteCourse, exportCoursebook, getCourse, getCourseMap, getCoursePoints, getCourseProgress, getDemoAutoCompleteStatus, regenerateCourse, resumeCourseLessons, startDemoAutoComplete } from "@/lib/api";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { CertificateDialog } from "@/components/certificate-dialog";
 import { CourseCategoryBadge } from "@/components/course-category-badge";
@@ -62,6 +62,8 @@ export function CourseDetail({ courseId }: { courseId: string }) {
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [demoOpen, setDemoOpen] = useState(false);
   const [demoJob, setDemoJob] = useState<DemoJobStatus>();
+  const [clearingDemo, setClearingDemo] = useState(false);
+  const [confirmClearDemoOpen, setConfirmClearDemoOpen] = useState(false);
   const [certificateOpen, setCertificateOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
@@ -206,6 +208,21 @@ export function CourseDetail({ courseId }: { courseId: string }) {
     await cancelDemoAutoComplete(courseId, demoJob.job_id, data.session.access_token);
   }
 
+  async function handleClearDemo() {
+    setConfirmClearDemoOpen(false);
+    setClearingDemo(true);
+    try {
+      const { data } = await createClient().auth.getSession();
+      if (!data.session) throw new Error("Your session has expired. Please sign in again.");
+      await clearDemoProgress(courseId, undefined, data.session.access_token);
+      await fullLoadRef.current();
+    } catch (caught) {
+      setRefreshError(caught instanceof Error ? caught.message : "Unable to clear demo progress.");
+    } finally {
+      setClearingDemo(false);
+    }
+  }
+
   async function handleRegenerate() {
     setRegenerating(true);
     try {
@@ -312,7 +329,15 @@ export function CourseDetail({ courseId }: { courseId: string }) {
     // The API 404s this outside local development regardless -- hidden here too so a
     // production build never even shows an action that can't work.
     ...(process.env.NODE_ENV === "development"
-      ? [{ label: "Demo: auto-complete", icon: "smart_toy", onClick: () => setDemoOpen(true) }]
+      ? [
+          { label: "Demo: auto-complete", icon: "smart_toy", onClick: () => setDemoOpen(true) },
+          {
+            label: clearingDemo ? "Clearing…" : "Demo: clear progress",
+            icon: "restart_alt",
+            onClick: () => setConfirmClearDemoOpen(true),
+            disabled: clearingDemo,
+          },
+        ]
       : []),
   ];
 
@@ -400,6 +425,22 @@ export function CourseDetail({ courseId }: { courseId: string }) {
           <Button variant="contained" color="error" onClick={handleDelete}>Delete</Button>
         </DialogActions>
       </Dialog>
+
+      {process.env.NODE_ENV === "development" ? (
+        <Dialog open={confirmClearDemoOpen} onClose={() => setConfirmClearDemoOpen(false)}>
+          <DialogTitle>Clear demo progress?</DialogTitle>
+          <DialogContent>
+            <DialogContentText>
+              Resets every lesson in &quot;{course.title}&quot; back to never-attempted -- mastery, quiz answers, and
+              lab completion all clear. The course content itself is untouched. This cannot be undone.
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button variant="text" onClick={() => setConfirmClearDemoOpen(false)}>Cancel</Button>
+            <Button variant="contained" color="error" onClick={handleClearDemo}>Clear progress</Button>
+          </DialogActions>
+        </Dialog>
+      ) : null}
 
       {progress.stage !== "ready" ? <CourseProgressSteps progress={progress} onResume={handleResumeRemainingLessons} /> : null}
       {refreshError ? <Alert severity="error" sx={{ mb: 2 }}>{refreshError} Retrying automatically…</Alert> : null}

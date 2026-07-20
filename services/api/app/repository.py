@@ -205,6 +205,12 @@ class CourseRepository(Protocol):
 
     def regenerate_lesson(self, owner_id: UUID, course_id: UUID, slug: str) -> None: ...
 
+    def clear_demo_progress(self, owner_id: UUID, course_id: UUID, concept_slugs: list[str] | None) -> None:
+        """Dev-only: the undo for a demo auto-complete run. Wipes mastery, observations,
+        and lesson-assignment state for the given concepts (every concept when None) back
+        to a blank, never-attempted state."""
+        ...
+
 
 @dataclass
 class SourceRecord:
@@ -493,6 +499,11 @@ class MemoryCourseRepository:
         self._course_for_owner(owner_id, course_id)
         if slug not in {"core-pattern", "robustness"}:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Concept not found.")
+
+    def clear_demo_progress(self, owner_id: UUID, course_id: UUID, concept_slugs: list[str] | None) -> None:
+        # No mastery/observations/assignments exist in memory mode; validating ownership is
+        # all there is to do.
+        self._course_for_owner(owner_id, course_id)
 
     def _source_for_owner(self, owner_id: UUID, source_id: UUID) -> SourceRecord:
         source = self.sources.get(source_id)
@@ -1962,6 +1973,51 @@ class SupabaseCourseRepository:
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="The course service is temporarily unavailable.",
             ) from exc
+
+    def clear_demo_progress(self, owner_id: UUID, course_id: UUID, concept_slugs: list[str] | None) -> None:
+        course = self._course_for_owner(owner_id, course_id)
+        version_id = course.get("active_version_id")
+        if not version_id:
+            return
+        concepts_query = self.client.table("concepts").select("id").eq("course_version_id", version_id)
+        if concept_slugs is not None:
+            concepts_query = concepts_query.in_("slug", concept_slugs)
+        concept_ids = [row["id"] for row in self._data(concepts_query, "load concepts for demo clear")]
+        if not concept_ids:
+            return
+        definition_ids = [
+            row["id"]
+            for row in self._data(
+                self.client.table("lesson_definitions").select("id").in_("concept_id", concept_ids),
+                "load lesson definitions for demo clear",
+            )
+        ]
+        if definition_ids:
+            revision_ids = [
+                row["id"]
+                for row in self._data(
+                    self.client.table("lesson_revisions").select("id").in_("lesson_definition_id", definition_ids),
+                    "load lesson revisions for demo clear",
+                )
+            ]
+            # Deleting the assignment cascades its quiz_responses and submissions rows too
+            # (both FKs are ON DELETE CASCADE), so neither needs a separate delete here.
+            if revision_ids:
+                self._data(
+                    self.client.table("learner_lesson_assignments")
+                    .delete()
+                    .eq("user_id", str(owner_id))
+                    .in_("lesson_revision_id", revision_ids),
+                    "clear lesson assignments for demo clear",
+                )
+        self._data(
+            self.client.table("observations").delete().eq("user_id", str(owner_id)).in_("concept_id", concept_ids),
+            "clear observations for demo clear",
+        )
+        self._data(
+            self.client.table("mastery").delete().eq("user_id", str(owner_id)).in_("concept_id", concept_ids),
+            "clear mastery for demo clear",
+        )
 
     def _source_for_owner(self, owner_id: UUID, source_id: UUID) -> dict[str, Any]:
         return self._one(

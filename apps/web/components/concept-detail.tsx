@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { ConceptDetailResponse, ConceptMastery, CourseMapResponse, CourseMasteryResponse, CourseSummary, LessonRunResult, LessonWorkspaceFile, QuizItemPreview, ScriptRunResult, WorkedExamplePreview, askLessonHelper, getConceptDetail, getCourse, getCourseMap, getCourseMastery, regenerateLesson, runLesson, runLessonScript, submitLesson } from "@/lib/api";
+import { ConceptDetailResponse, ConceptMastery, CourseMapResponse, CourseMasteryResponse, CourseSummary, LessonRunResult, LessonWorkspaceFile, QuizItemPreview, ScriptRunResult, WorkedExamplePreview, askLessonHelper, clearDemoProgress, getConceptDetail, getCourse, getCourseMap, getCourseMastery, getDemoAutoCompleteStatus, regenerateLesson, runLesson, runLessonScript, startDemoAutoComplete, submitLesson } from "@/lib/api";
 import { useFullBleed } from "@/components/app-shell";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { CitationExcerptDialog } from "@/components/citation-excerpt-dialog";
@@ -488,6 +488,8 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
   const [celebrateNonce, setCelebrateNonce] = useState(0);
   const [assessmentComplete, setAssessmentComplete] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [demoFilling, setDemoFilling] = useState(false);
+  const [demoClearing, setDemoClearing] = useState(false);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [activeFilePath, setActiveFilePath] = useState<string>();
   const [scratchCode, setScratchCode] = useState("");
@@ -811,6 +813,53 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
     }
   }
 
+  // Dev-only: answers this lesson's quizzes and submits its lab as an LLM standing in for
+  // the learner, through the real grading/sandbox paths -- scoped to just this concept, so
+  // it starts immediately instead of opening the course-wide auto-complete dialog.
+  async function handleDemoFillLesson() {
+    setDemoFilling(true);
+    setErrorMessage(undefined);
+    try {
+      const { data } = await createClient().auth.getSession();
+      if (!data.session) throw new Error("Your session has expired. Please sign in again.");
+      const token = data.session.access_token;
+      let job = await startDemoAutoComplete(
+        courseId,
+        { target: "mastered", correctRate: 1, conceptSlugs: [slug], includeQuizzes: true, includeLabs: true },
+        token
+      );
+      while (job.state === "running") {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        job = await getDemoAutoCompleteStatus(courseId, job.job_id, token);
+      }
+      if (job.state === "failed") throw new Error(job.error ?? "Demo fill failed.");
+      setReloadNonce((current) => current + 1);
+      await refreshProgress();
+    } catch (caught) {
+      setErrorMessage(caught instanceof Error ? caught.message : "Unable to demo-fill this lesson.");
+    } finally {
+      setDemoFilling(false);
+    }
+  }
+
+  // The undo for handleDemoFillLesson: wipes this concept's mastery/observations/
+  // assignment state back to never-attempted.
+  async function handleDemoClearLesson() {
+    setDemoClearing(true);
+    setErrorMessage(undefined);
+    try {
+      const { data } = await createClient().auth.getSession();
+      if (!data.session) throw new Error("Your session has expired. Please sign in again.");
+      await clearDemoProgress(courseId, [slug], data.session.access_token);
+      setReloadNonce((current) => current + 1);
+      await refreshProgress();
+    } catch (caught) {
+      setErrorMessage(caught instanceof Error ? caught.message : "Unable to clear this lesson's demo progress.");
+    } finally {
+      setDemoClearing(false);
+    }
+  }
+
   if (state === "loading") {
     return (
       <PageShell maxWidth={{ xs: 1040, xl: helperOpen ? 1360 : 1040 }}>
@@ -853,7 +902,20 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
   );
 
   const lessonSettingsMenu = (
-    <SettingsMenu actions={[{ label: regenerating ? "Regenerating…" : "Regenerate lesson", icon: "refresh", onClick: handleRegenerateLesson, disabled: regenerating }]} label="Lesson settings" />
+    <SettingsMenu
+      actions={[
+        { label: regenerating ? "Regenerating…" : "Regenerate lesson", icon: "refresh", onClick: handleRegenerateLesson, disabled: regenerating },
+        // The API 404s these outside local development regardless -- hidden here too so a
+        // production build never even shows an action that can't work.
+        ...(process.env.NODE_ENV === "development"
+          ? [
+              { label: demoFilling ? "Filling…" : "Demo: fill this lesson", icon: "smart_toy", onClick: () => void handleDemoFillLesson(), disabled: demoFilling || demoClearing },
+              { label: demoClearing ? "Clearing…" : "Demo: clear this lesson", icon: "restart_alt", onClick: () => void handleDemoClearLesson(), disabled: demoFilling || demoClearing },
+            ]
+          : []),
+      ]}
+      label="Lesson settings"
+    />
   );
 
   if (concept.kind !== "coding") {

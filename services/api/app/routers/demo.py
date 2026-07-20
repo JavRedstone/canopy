@@ -34,6 +34,7 @@ from app.schemas import (
     ConceptDetailResponse,
     CourseMapConcept,
     DemoAutoCompleteRequest,
+    DemoClearRequest,
     DemoConceptResult,
     DemoJobStatus,
     LessonWorkspaceFile,
@@ -394,3 +395,16 @@ def cancel_auto_complete(course_id: UUID, job_id: str, current_user: CurrentUser
     with _jobs_lock:
         if job.state == "running":
             job.cancel_requested = True
+
+
+@router.post("/clear", status_code=status.HTTP_204_NO_CONTENT)
+def clear_demo_progress(
+    course_id: UUID,
+    request: DemoClearRequest,
+    current_user: CurrentUser,
+    repository: Repository,
+) -> None:
+    """The undo for /auto-complete: wipes mastery, observations, and lesson-assignment
+    state for the given concepts (or the whole course) back to never-attempted."""
+    _require_development()
+    repository.clear_demo_progress(current_user, course_id, request.concept_slugs)

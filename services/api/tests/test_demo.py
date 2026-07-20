@@ -41,6 +41,7 @@ class DemoRepository:
     def __init__(self) -> None:
         self.quiz_responses: list[tuple[str, bool]] = []
         self.lab_submissions: list[bool] = []
+        self.clear_calls: list[list[str] | None] = []
 
     def course_map(self, owner_id: object, course_id: object) -> CourseMapResponse:
         return CourseMapResponse(
@@ -116,6 +117,9 @@ class DemoRepository:
 
     def prerequisite_recommendation(self, owner_id: object, course_id: object, slug: str) -> None:
         return None
+
+    def clear_demo_progress(self, owner_id: object, course_id: object, concept_slugs: list[str] | None) -> None:
+        self.clear_calls.append(concept_slugs)
 
 
 class DemoSandbox:
@@ -400,3 +404,49 @@ def test_auto_complete_status_404s_for_an_unknown_job() -> None:
         app.dependency_overrides.clear()
 
     assert response.status_code == 404
+
+
+def test_clear_demo_progress_is_not_found_outside_development(monkeypatch) -> None:
+    monkeypatch.setattr(demo_module, "get_settings", lambda: SimpleNamespace(environment="production"))
+    repository = DemoRepository()
+    app.dependency_overrides[get_repository] = lambda: repository
+    app.dependency_overrides[get_lesson_sandbox] = lambda: DemoSandbox()
+    app.dependency_overrides[get_quiz_grader] = lambda: DemoGrader()
+    try:
+        response = TestClient(app).post(f"/api/v1/courses/{uuid4()}/demo/clear", json={})
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 404
+
+
+def test_clear_demo_progress_defaults_to_the_whole_course() -> None:
+    repository = DemoRepository()
+    app.dependency_overrides[get_repository] = lambda: repository
+    app.dependency_overrides[get_lesson_sandbox] = lambda: DemoSandbox()
+    app.dependency_overrides[get_quiz_grader] = lambda: DemoGrader()
+    client = TestClient(app)
+    course_id = uuid4()
+    try:
+        response = client.post(f"/api/v1/courses/{course_id}/demo/clear", json={})
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 204
+    assert repository.clear_calls == [None]
+
+
+def test_clear_demo_progress_respects_concept_slugs_scope() -> None:
+    repository = DemoRepository()
+    app.dependency_overrides[get_repository] = lambda: repository
+    app.dependency_overrides[get_lesson_sandbox] = lambda: DemoSandbox()
+    app.dependency_overrides[get_quiz_grader] = lambda: DemoGrader()
+    client = TestClient(app)
+    course_id = uuid4()
+    try:
+        response = client.post(f"/api/v1/courses/{course_id}/demo/clear", json={"concept_slugs": ["lab-concept"]})
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 204
+    assert repository.clear_calls == [["lab-concept"]]
