@@ -519,6 +519,87 @@ export async function answerQuizItem(
   return response.json();
 }
 
+export interface PracticeQuestion {
+  id: string;
+  concept_slug: string;
+  concept_title: string;
+  kind: QuizKind;
+  prompt_markdown: string;
+  options: QuizOptionPreview[];
+}
+
+export interface PracticeSessionResponse {
+  course_id: string;
+  questions: PracticeQuestion[];
+  concepts_low_on_questions: string[];
+  scope_empty: boolean;
+}
+
+export interface PracticeGradeResponse {
+  item_id: string;
+  concept_slug: string;
+  correct: boolean;
+  explanation_markdown: string;
+  options: QuizOptionGrade[];
+  correct_answers: string[];
+  feedback_markdown?: string | null;
+  // The concept's refreshed understand estimate, set only when a correct answer moved it.
+  p_understand?: number | null;
+}
+
+export interface PracticeSessionOptions {
+  scope?: "done" | "modules" | "concepts";
+  ids?: string[];
+  count?: number;
+  order?: "shuffle" | "weakest" | "course";
+  filter?: "unseen" | "all" | "missed";
+}
+
+export async function getPracticeSession(
+  courseId: string,
+  options: PracticeSessionOptions,
+  accessToken: string
+): Promise<PracticeSessionResponse> {
+  const query = new URLSearchParams();
+  if (options.scope) query.set("scope", options.scope);
+  if (options.ids?.length) query.set("ids", options.ids.join(","));
+  if (options.count) query.set("count", String(options.count));
+  if (options.order) query.set("order", options.order);
+  if (options.filter) query.set("filter", options.filter);
+  const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/practice?${query.toString()}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: "no-store"
+  });
+  if (!response.ok) throw new Error(`Unable to load practice questions (HTTP ${response.status}).`);
+  return response.json();
+}
+
+export async function answerPracticeQuestion(
+  courseId: string,
+  itemId: string,
+  answer: QuizAnswerRequest,
+  accessToken: string
+): Promise<PracticeGradeResponse> {
+  const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/practice/${itemId}/answer`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(answer)
+  });
+  if (!response.ok) throw new Error(`Unable to check your answer (HTTP ${response.status}).`);
+  return response.json();
+}
+
+export async function topUpPracticePool(courseId: string, conceptSlugs: string[], accessToken: string): Promise<string[]> {
+  const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/practice/top-up`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ concept_slugs: conceptSlugs })
+  });
+  if (!response.ok) throw new Error(`Unable to request more practice questions (HTTP ${response.status}).`);
+  const body: { concepts_queued: string[] } = await response.json();
+  return body.concepts_queued;
+}
+
 export async function regenerateLesson(courseId: string, slug: string, accessToken: string): Promise<void> {
   const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/concepts/${slug}/regenerate`, {
     method: "POST",

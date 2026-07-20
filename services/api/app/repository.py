@@ -20,12 +20,20 @@ from app.mastery import (
     concept_mastered,
     concept_struggling,
     params_for,
+    practice_update,
     prerequisite_needs_review,
     track_for,
     MASTERY_THRESHOLD,
     REVIEW_THRESHOLD,
 )
-from app.schemas import CitationExcerptResponse, ConceptDetailResponse, ConceptMastery, CoursePointsResponse, CourseMapConcept, CourseMapModule, CourseMapResponse, CourseMasteryResponse, CourseProgressResponse, CourseSourceSummary, CourseSummary, CreateCourseRequest, CreateSourceRequest, LessonPreview, LessonWorkspaceFile, PrerequisiteConcept, PrerequisiteRecommendation, PrerequisiteReviewResponse, QuizAnswerRequest, QuizGradeResponse, QuizItemPreview, RecommendationDecision, RecommendationSummary, RecommendationsResponse, SourceDownloadResponse, SourceSummary, SourceUploadTarget, UpdateCourseRequest
+from app.practice import (
+    PracticeAttempt,
+    PracticeItem,
+    PracticeSession,
+    concepts_needing_top_up,
+    select_practice_items,
+)
+from app.schemas import CitationExcerptResponse, ConceptDetailResponse, ConceptMastery, CoursePointsResponse, CourseMapConcept, CourseMapModule, CourseMapResponse, CourseMasteryResponse, CourseProgressResponse, CourseSourceSummary, CourseSummary, CreateCourseRequest, CreateSourceRequest, LessonPreview, LessonWorkspaceFile, PracticeFilter, PracticeOrder, PracticeQuestion, PracticeScope, PracticeSessionResponse, PrerequisiteConcept, PrerequisiteRecommendation, PrerequisiteReviewResponse, QuizAnswerRequest, QuizGradeResponse, QuizItemPreview, QuizOptionPreview, RecommendationDecision, RecommendationSummary, RecommendationsResponse, SourceDownloadResponse, SourceSummary, SourceUploadTarget, UpdateCourseRequest
 from app.settings import get_settings
 from app.supabase import get_service_client
 
@@ -138,6 +146,37 @@ class CourseRepository(Protocol):
         """Persists one attempt (answer and full grade reveal) and marks the lesson's
         assignment completed once every quiz item in it has been answered correctly.
         Returns the new attempts_used count."""
+        ...
+
+    def practice_session(
+        self,
+        owner_id: UUID,
+        course_id: UUID,
+        scope: PracticeScope,
+        ids: list[str],
+        count: int,
+        order: PracticeOrder,
+        filter: PracticeFilter,
+        seed: int,
+    ) -> PracticeSessionResponse:
+        """A batch of answer-stripped pool questions over the concepts in scope, chosen by
+        the pure engine in ``practice.py``. Bounded by what the learner has actually
+        started, so practice never runs ahead of the course."""
+        ...
+
+    def practice_item(self, owner_id: UUID, course_id: UUID, item_id: UUID) -> tuple[dict[str, Any], dict[str, Any]]:
+        """The stored pool question (grading material included) and its concept row."""
+        ...
+
+    def record_practice_answer(
+        self, owner_id: UUID, course_id: UUID, item_id: UUID, concept: dict[str, Any], correct: bool
+    ) -> float | None:
+        """Log one practice attempt and, when it was correct, award capped positive credit.
+        Returns the concept's refreshed ``p_understand`` if the answer moved it."""
+        ...
+
+    def request_practice_top_up(self, owner_id: UUID, course_id: UUID, concept_slugs: list[str]) -> list[str]:
+        """Queue another generated batch for each named concept; returns those queued."""
         ...
 
     def complete_coding_lesson(self, owner_id: UUID, course_id: UUID, slug: str) -> None:
@@ -389,6 +428,36 @@ class MemoryCourseRepository:
     ) -> int:
         self._course_for_owner(owner_id, course_id)
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A generated lesson is required before its quiz can be answered.")
+
+    def practice_session(
+        self,
+        owner_id: UUID,
+        course_id: UUID,
+        scope: PracticeScope,
+        ids: list[str],
+        count: int,
+        order: PracticeOrder,
+        filter: PracticeFilter,
+        seed: int,
+    ) -> PracticeSessionResponse:
+        # No generated pool in memory mode, so the scope is simply empty rather than an error --
+        # the practice surface degrades to "nothing to drill yet" like the rest of the UI.
+        course = self._course_for_owner(owner_id, course_id)
+        return PracticeSessionResponse(course_id=course.id, questions=[], scope_empty=True)
+
+    def practice_item(self, owner_id: UUID, course_id: UUID, item_id: UUID) -> tuple[dict[str, Any], dict[str, Any]]:
+        self._course_for_owner(owner_id, course_id)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A generated practice pool is required before it can be answered.")
+
+    def record_practice_answer(
+        self, owner_id: UUID, course_id: UUID, item_id: UUID, concept: dict[str, Any], correct: bool
+    ) -> float | None:
+        self._course_for_owner(owner_id, course_id)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A generated practice pool is required before it can be answered.")
+
+    def request_practice_top_up(self, owner_id: UUID, course_id: UUID, concept_slugs: list[str]) -> list[str]:
+        self._course_for_owner(owner_id, course_id)
+        return []
 
     def complete_coding_lesson(self, owner_id: UUID, course_id: UUID, slug: str) -> None:
         self._course_for_owner(owner_id, course_id)
@@ -1178,6 +1247,319 @@ class SupabaseCourseRepository:
             self._maybe_complete_assignment(assignment)
         return attempts_used
 
+    def practice_session(
+        self,
+        owner_id: UUID,
+        course_id: UUID,
+        scope: PracticeScope,
+        ids: list[str],
+        count: int,
+        order: PracticeOrder,
+        filter: PracticeFilter,
+        seed: int,
+    ) -> PracticeSessionResponse:
+        course = self._course_for_owner(owner_id, course_id)
+        version_id = course.get("active_version_id")
+        if not version_id:
+            return PracticeSessionResponse(course_id=course_id, questions=[], scope_empty=True)
+
+        concepts = self._practiceable_concepts(owner_id, version_id, scope, ids)
+        if not concepts:
+            return PracticeSessionResponse(course_id=course_id, questions=[], scope_empty=True)
+
+        concept_by_id = {concept["id"]: concept for concept in concepts}
+        rows = self._data(
+            self.client.table("practice_items")
+            .select("id,concept_id,kind,item_json")
+            .in_("concept_id", list(concept_by_id))
+            .order("batch")
+            .order("created_at"),
+            "load practice items",
+        )
+        # Items must reach the engine in course order: it treats their order as the course's.
+        position = {concept["id"]: index for index, concept in enumerate(concepts)}
+        rows.sort(key=lambda row: position[row["concept_id"]])
+        items = [
+            PracticeItem(id=row["id"], concept_id=row["concept_id"], kind=row["kind"])
+            for row in rows
+        ]
+        attempts = self._practice_attempts(owner_id, list(concept_by_id))
+
+        selected = select_practice_items(
+            items,
+            attempts,
+            PracticeSession(count=count, order=order, filter=filter, seed=seed),
+        )
+        item_by_id = {row["id"]: row for row in rows}
+        questions = [
+            self._practice_question(item_by_id[item.id], concept_by_id[item.concept_id])
+            for item in selected
+        ]
+        low = concepts_needing_top_up(items, attempts, concept_ids=list(concept_by_id))
+        return PracticeSessionResponse(
+            course_id=course_id,
+            questions=questions,
+            concepts_low_on_questions=[concept_by_id[concept_id]["slug"] for concept_id in low],
+        )
+
+    def practice_item(self, owner_id: UUID, course_id: UUID, item_id: UUID) -> tuple[dict[str, Any], dict[str, Any]]:
+        course = self._course_for_owner(owner_id, course_id)
+        version_id = course.get("active_version_id")
+        if not version_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Practice question not found.")
+        # Scoped to the caller's active version, so an item id from someone else's course --
+        # or from a version this learner no longer sits on -- is a 404, not a leak.
+        row = self._one(
+            self._data(
+                self.client.table("practice_items")
+                .select("id,concept_id,item_json")
+                .eq("id", str(item_id))
+                .eq("course_version_id", version_id),
+                "load practice item",
+            ),
+            "Practice question",
+        )
+        concept = self._one(
+            self._data(
+                self.client.table("concepts").select("id,slug,title,kind").eq("id", row["concept_id"]),
+                "load practice concept",
+            ),
+            "Concept",
+        )
+        return row["item_json"], concept
+
+    def record_practice_answer(
+        self, owner_id: UUID, course_id: UUID, item_id: UUID, concept: dict[str, Any], correct: bool
+    ) -> float | None:
+        course = self._course_for_owner(owner_id, course_id)
+        version_id = course["active_version_id"]
+        # Every answer lands in the ledger, right or wrong: it drives non-repeat rotation,
+        # weakest-first ordering, and the "retry my misses" filter.
+        self._data(
+            self.client.table("practice_attempts").insert(
+                {
+                    "user_id": str(owner_id),
+                    "course_version_id": version_id,
+                    "concept_id": concept["id"],
+                    "practice_item_id": str(item_id),
+                    "correct": correct,
+                }
+            ),
+            "record practice attempt",
+        )
+        self._bump_practice_item_stats(item_id, correct)
+        if not correct:
+            # Positive-only: a wrong low-stakes answer records no observation, so practising
+            # can never lower an estimate. The ledger row above still captures the struggle.
+            return None
+        self._record_observation(owner_id, concept["id"], "practice", True)
+        rows = self._data(
+            self.client.table("mastery")
+            .select("p_l")
+            .eq("user_id", str(owner_id))
+            .eq("concept_id", concept["id"])
+            .eq("track", "understand"),
+            "load practice mastery",
+        )
+        return rows[0]["p_l"] if rows else None
+
+    def request_practice_top_up(self, owner_id: UUID, course_id: UUID, concept_slugs: list[str]) -> list[str]:
+        course = self._course_for_owner(owner_id, course_id)
+        version_id = course.get("active_version_id")
+        if not version_id or not concept_slugs:
+            return []
+        concepts = self._data(
+            self.client.table("concepts")
+            .select("id,slug")
+            .eq("course_version_id", version_id)
+            .in_("slug", concept_slugs),
+            "load concepts for practice top-up",
+        )
+        if not concepts:
+            return []
+        definitions = self._data(
+            self.client.table("lesson_definitions")
+            .select("id,concept_id")
+            .eq("course_version_id", version_id)
+            .eq("kind", "lesson")
+            .eq("build_status", "built")
+            .in_("concept_id", [concept["id"] for concept in concepts]),
+            "load lesson definitions for practice top-up",
+        )
+        slug_by_concept = {concept["id"]: concept["slug"] for concept in concepts}
+        queued: list[str] = []
+        for definition in definitions:
+            try:
+                self.client.rpc(
+                    "enqueue_practice_pool_build",
+                    {"p_lesson_definition_id": definition["id"]},
+                ).execute()
+            except (APIError, HTTPError):
+                # Best-effort: a queue hiccup means no new batch this time, not a failed
+                # practice session. The learner keeps whatever questions they already had.
+                logger.exception(
+                    "Could not enqueue a practice pool top-up",
+                    extra={"lesson_definition_id": definition["id"]},
+                )
+                continue
+            queued.append(slug_by_concept[definition["concept_id"]])
+        return queued
+
+    def _practiceable_concepts(
+        self, owner_id: UUID, version_id: str, scope: PracticeScope, ids: list[str]
+    ) -> list[dict[str, Any]]:
+        """The concepts in scope that the learner has actually started, in course order.
+
+        "Started" means they have an assignment for the lesson -- which is created the first
+        time they answer a question or submit a lab. That is the closest thing this schema
+        has to a progress marker (there is no ordering column on concepts), and it is what
+        keeps practice from serving questions about a lesson the learner has not reached.
+        """
+        concepts = self._data(
+            self.client.table("concepts").select("id,slug,title,kind").eq("course_version_id", version_id),
+            "load concepts for practice",
+        )
+        if not concepts:
+            return []
+        ordered = self._concepts_in_course_order(version_id, concepts)
+        started = self._started_concept_ids(owner_id, version_id)
+        practiceable = [concept for concept in ordered if concept["id"] in started]
+        if scope == "done":
+            return practiceable
+        if scope == "concepts":
+            wanted = set(ids)
+            return [concept for concept in practiceable if concept["slug"] in wanted]
+        # scope == "modules": ids are module positions, which is what the course map shows.
+        wanted_modules = {value for value in ids if value.isdigit()}
+        modules = self._data(
+            self.client.table("modules").select("id,position").eq("course_version_id", version_id),
+            "load modules for practice",
+        )
+        module_ids = {module["id"] for module in modules if str(module["position"]) in wanted_modules}
+        definitions = self._data(
+            self.client.table("lesson_definitions")
+            .select("concept_id,module_id")
+            .eq("course_version_id", version_id)
+            .eq("kind", "lesson"),
+            "load lesson modules for practice",
+        )
+        in_modules = {row["concept_id"] for row in definitions if row["module_id"] in module_ids}
+        return [concept for concept in practiceable if concept["id"] in in_modules]
+
+    def _concepts_in_course_order(self, version_id: str, concepts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Concepts sorted the way the course map presents them: by module position, then by
+        the concept-kind phase, then slug. The engine reads this ordering as "course order"."""
+        modules = self._data(
+            self.client.table("modules").select("id,position").eq("course_version_id", version_id),
+            "load modules for practice order",
+        )
+        position_by_module = {module["id"]: module["position"] for module in modules}
+        definitions = self._data(
+            self.client.table("lesson_definitions")
+            .select("concept_id,module_id")
+            .eq("course_version_id", version_id)
+            .eq("kind", "lesson"),
+            "load lesson definitions for practice order",
+        )
+        module_by_concept = {row["concept_id"]: row["module_id"] for row in definitions}
+        return sorted(
+            concepts,
+            key=lambda concept: (
+                position_by_module.get(module_by_concept.get(concept["id"]), 0),
+                CONCEPT_KIND_PHASE.get(concept["kind"], 0),
+                concept["slug"],
+            ),
+        )
+
+    def _started_concept_ids(self, owner_id: UUID, version_id: str) -> set[str]:
+        definitions = self._data(
+            self.client.table("lesson_definitions")
+            .select("id,concept_id")
+            .eq("course_version_id", version_id)
+            .eq("kind", "lesson"),
+            "load lesson definitions for practice scope",
+        )
+        if not definitions:
+            return set()
+        revisions = self._data(
+            self.client.table("lesson_revisions")
+            .select("id,lesson_definition_id")
+            .in_("lesson_definition_id", [definition["id"] for definition in definitions]),
+            "load lesson revisions for practice scope",
+        )
+        if not revisions:
+            return set()
+        assignments = self._data(
+            self.client.table("learner_lesson_assignments")
+            .select("lesson_revision_id")
+            .eq("user_id", str(owner_id))
+            .in_("lesson_revision_id", [revision["id"] for revision in revisions]),
+            "load assignments for practice scope",
+        )
+        assigned_revisions = {row["lesson_revision_id"] for row in assignments}
+        definition_by_revision = {revision["id"]: revision["lesson_definition_id"] for revision in revisions}
+        concept_by_definition = {definition["id"]: definition["concept_id"] for definition in definitions}
+        return {
+            concept_by_definition[definition_by_revision[revision_id]]
+            for revision_id in assigned_revisions
+            if revision_id in definition_by_revision
+        }
+
+    def _practice_attempts(self, owner_id: UUID, concept_ids: list[str]) -> list[PracticeAttempt]:
+        rows = self._data(
+            self.client.table("practice_attempts")
+            .select("practice_item_id,concept_id,correct,created_at")
+            .eq("user_id", str(owner_id))
+            .in_("concept_id", concept_ids),
+            "load practice attempts",
+        )
+        return [
+            PracticeAttempt(
+                item_id=row["practice_item_id"],
+                concept_id=row["concept_id"],
+                correct=row["correct"],
+                created_at=self._timestamp(row["created_at"]),
+            )
+            for row in rows
+        ]
+
+    @staticmethod
+    def _practice_question(row: dict[str, Any], concept: dict[str, Any]) -> PracticeQuestion:
+        """Strip the stored question down to what the learner may see -- the same cut
+        ``bundle_view`` makes for lesson quiz items."""
+        item = row["item_json"]
+        return PracticeQuestion(
+            id=UUID(row["id"]),
+            concept_slug=concept["slug"],
+            concept_title=concept["title"],
+            kind=item["kind"],
+            prompt_markdown=item["prompt_markdown"],
+            options=[QuizOptionPreview(text=option["text"]) for option in item.get("options") or []],
+        )
+
+    def _bump_practice_item_stats(self, item_id: UUID, correct: bool) -> None:
+        """Roll this answer into the item's aggregate difficulty counters. Best-effort: the
+        ledger row is the real record, and these are only a convenience for later tuning."""
+        try:
+            rows = (
+                self.client.table("practice_items")
+                .select("times_served,times_correct")
+                .eq("id", str(item_id))
+                .execute()
+                .data
+                or []
+            )
+            if not rows:
+                return
+            self.client.table("practice_items").update(
+                {
+                    "times_served": rows[0]["times_served"] + 1,
+                    "times_correct": rows[0]["times_correct"] + (1 if correct else 0),
+                }
+            ).eq("id", str(item_id)).execute()
+        except (APIError, HTTPError):
+            logger.exception("Could not update practice item statistics", extra={"practice_item_id": str(item_id)})
+
     def complete_coding_lesson(self, owner_id: UUID, course_id: UUID, slug: str) -> None:
         assignment = self._ensure_assignment(owner_id, course_id, slug)
         if assignment["status"] != "completed":
@@ -1684,6 +2066,11 @@ class SupabaseCourseRepository:
         Best-effort: the graded answer / submission it derives from is already durable, and
         ``observations`` is an immutable ledger from which ``mastery`` could be recomputed, so
         a bookkeeping hiccup here is logged rather than surfaced as a failed answer."""
+        if assessment_kind == "practice" and not correct:
+            # Positive-only credit: a wrong answer in a low-stakes drill is how practice is
+            # meant to work, so it records nothing at all rather than lowering the estimate.
+            # The practice_attempts ledger is where that miss is remembered.
+            return
         track = track_for(assessment_kind)
         params = params_for(assessment_kind)
         try:
@@ -1699,7 +2086,11 @@ class SupabaseCourseRepository:
             )
             current_p_l = existing[0]["p_l"] if existing else params.p_l0
             opportunities = (existing[0]["opportunities"] if existing else 0) + 1
-            p_l_new = bkt_update(current_p_l, correct, params)
+            p_l_new = (
+                practice_update(current_p_l, params)
+                if assessment_kind == "practice"
+                else bkt_update(current_p_l, correct, params)
+            )
             self.client.table("observations").insert(
                 {
                     "user_id": str(owner_id),

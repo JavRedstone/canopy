@@ -1,17 +1,19 @@
 from typing import Annotated
 import re
+from random import randrange
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from app.dependencies import CurrentUser
 from app.llm import LLMGatewayClient, LLMGatewayError
+from app.practice import DEFAULT_SESSION_COUNT
 from app.quiz import grade_quiz_answer, withhold_answer
 from app.repository import CourseRepository, get_repository
 from app.sandbox import SandboxError, SandboxFile, SandboxRunnerClient
-from app.schemas import CitationExcerptResponse, ConceptDetailResponse, CoursePointsResponse, CourseMapResponse, CourseMasteryResponse, CourseProgressResponse, CourseSourceSummary, CourseSummary, CreateCourseRequest, ImportCourseRequest, LessonHelperRequest, LessonHelperResponse, LessonWorkspaceFile, PrerequisiteReviewResponse, QuizAnswerRequest, QuizGradeResponse, RecommendationDecisionRequest, RecommendationsResponse, RunLessonRequest, RunLessonResponse, RunScriptRequest, RunScriptResponse, SourceDownloadResponse, UpdateCourseRequest
+from app.schemas import CitationExcerptResponse, ConceptDetailResponse, CoursePointsResponse, CourseMapResponse, CourseMasteryResponse, CourseProgressResponse, CourseSourceSummary, CourseSummary, CreateCourseRequest, ImportCourseRequest, LessonHelperRequest, LessonHelperResponse, LessonWorkspaceFile, PracticeFilter, PracticeGradeResponse, PracticeOrder, PracticeScope, PracticeSessionResponse, PracticeTopUpRequest, PracticeTopUpResponse, PrerequisiteReviewResponse, QuizAnswerRequest, QuizGradeResponse, RecommendationDecisionRequest, RecommendationsResponse, RunLessonRequest, RunLessonResponse, RunScriptRequest, RunScriptResponse, SourceDownloadResponse, UpdateCourseRequest
 from app.settings import get_settings
 from app.textbook_pdf import render_textbook_pdf
 
@@ -387,6 +389,89 @@ def answer_quiz_item(
     # hand back a review nudge to show inline. Computed from the mastery just recorded above.
     grade.prerequisite_recommendation = repository.prerequisite_recommendation(current_user, course_id, slug)
     return grade
+
+
+@router.get("/{course_id}/practice", response_model=PracticeSessionResponse)
+def practice_session(
+    course_id: UUID,
+    current_user: CurrentUser,
+    repository: Repository,
+    scope: PracticeScope = "done",
+    ids: str = "",
+    count: int = Query(default=DEFAULT_SESSION_COUNT, ge=1, le=50),
+    order: PracticeOrder = "shuffle",
+    filter: PracticeFilter = "unseen",
+    seed: int | None = None,
+) -> PracticeSessionResponse:
+    """A batch of low-stakes drill questions over the concepts in scope.
+
+    ``scope=done`` (the default) covers everything the learner has started; ``concepts``
+    and ``modules`` narrow it, with ``ids`` a comma-separated list of concept slugs or
+    module positions. The concept-page practice panel is just ``scope=concepts`` with a
+    single slug. An empty ``questions`` list is a real answer, not an error: the learner
+    has either drilled the scope dry or has not started anything yet, and
+    ``scope_empty``/``concepts_low_on_questions`` tell the client which.
+    """
+    selected_ids = [value.strip() for value in ids.split(",") if value.strip()]
+    return repository.practice_session(
+        current_user,
+        course_id,
+        scope,
+        selected_ids,
+        count,
+        order,
+        filter,
+        # A fresh seed per request unless the caller pins one, so "shuffle" actually varies
+        # between sessions while staying reproducible for anyone who wants to replay it.
+        seed if seed is not None else randrange(2**31),
+    )
+
+
+@router.post("/{course_id}/practice/{item_id}/answer", response_model=PracticeGradeResponse)
+def answer_practice_question(
+    course_id: UUID,
+    item_id: UUID,
+    request: QuizAnswerRequest,
+    current_user: CurrentUser,
+    repository: Repository,
+    grader: QuizGrader,
+) -> PracticeGradeResponse:
+    """Grade one practice question and reveal the answer immediately.
+
+    Deliberately unlike the graded quiz path: no attempt cap, nothing withheld, and no
+    ``quiz_responses`` row. A correct answer earns capped positive mastery credit; a wrong
+    one costs nothing. Either way the attempt is logged, which is what drives non-repeat
+    rotation and the weakest-first / retry-my-misses options.
+    """
+    item, concept = repository.practice_item(current_user, course_id, item_id)
+    grade = grade_quiz_answer(item, request, grader)
+    p_understand = repository.record_practice_answer(current_user, course_id, item_id, concept, grade.correct)
+    return PracticeGradeResponse(
+        # The stored row's id, not the batch-local id inside item_json, so the client can
+        # keep addressing the question it just answered.
+        item_id=item_id,
+        concept_slug=concept["slug"],
+        correct=grade.correct,
+        explanation_markdown=grade.explanation_markdown,
+        options=grade.options,
+        correct_answers=grade.correct_answers,
+        feedback_markdown=grade.feedback_markdown,
+        p_understand=p_understand,
+    )
+
+
+@router.post("/{course_id}/practice/top-up", response_model=PracticeTopUpResponse, status_code=status.HTTP_202_ACCEPTED)
+def top_up_practice_pool(
+    course_id: UUID,
+    request: PracticeTopUpRequest,
+    current_user: CurrentUser,
+    repository: Repository,
+) -> PracticeTopUpResponse:
+    """Queue another generated batch for the named concepts, for when a learner has drilled
+    a concept's pool dry. Enqueue-only: the batch lands asynchronously, and asking twice for
+    the same batch is discarded server-side rather than duplicated."""
+    queued = repository.request_practice_top_up(current_user, course_id, request.concept_slugs)
+    return PracticeTopUpResponse(course_id=course_id, concepts_queued=queued)
 
 
 @router.post("/{course_id}/concepts/{slug}/regenerate", status_code=status.HTTP_202_ACCEPTED)

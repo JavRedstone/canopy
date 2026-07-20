@@ -2,6 +2,7 @@ from app.mastery import (
     DEFAULT_PARAMS,
     MASTERY_THRESHOLD,
     MIN_STRUGGLE_OPPORTUNITIES,
+    PRACTICE_CEILING,
     REVIEW_THRESHOLD,
     STRUGGLE_THRESHOLD,
     BktParams,
@@ -10,6 +11,7 @@ from app.mastery import (
     concept_mastered,
     concept_struggling,
     params_for,
+    practice_update,
     prerequisite_needs_review,
     relevant_track,
     track_for,
@@ -73,9 +75,42 @@ def test_tracks_route_quiz_to_understand_and_coding_to_apply() -> None:
 
 
 def test_every_assessment_kind_has_default_params() -> None:
-    for kind in ("quiz_mcq", "quiz_fill", "coding_submission", "transfer_exercise"):
+    for kind in ("quiz_mcq", "quiz_fill", "coding_submission", "transfer_exercise", "practice"):
         assert isinstance(params_for(kind), BktParams)
-    assert set(DEFAULT_PARAMS) == {"quiz_mcq", "quiz_fill", "coding_submission", "transfer_exercise"}
+    assert set(DEFAULT_PARAMS) == {"quiz_mcq", "quiz_fill", "coding_submission", "transfer_exercise", "practice"}
+
+
+def test_practice_feeds_the_understand_track_with_the_highest_guess_rate() -> None:
+    assert track_for("practice") == "understand"
+    # Retryable, self-revealing, low-stakes: one correct practice answer is the weakest
+    # evidence of mastery any assessment kind produces.
+    assert params_for("practice").p_g > max(
+        params_for(kind).p_g for kind in ("quiz_mcq", "quiz_fill", "coding_submission", "transfer_exercise")
+    )
+
+
+def test_practice_credit_raises_a_low_estimate() -> None:
+    assert practice_update(0.2, params_for("practice")) > 0.2
+
+
+def test_practice_credit_cannot_cross_the_practice_ceiling() -> None:
+    p = 0.2
+    for _ in range(50):
+        p = practice_update(p, params_for("practice"))
+    assert p <= PRACTICE_CEILING
+    # Drilling forever must never certify mastery -- that still needs graded evidence.
+    assert p < MASTERY_THRESHOLD
+
+
+def test_practice_credit_never_lowers_an_already_stronger_estimate() -> None:
+    # A learner who cleared the ceiling on graded work keeps it; practice does not drag
+    # them back down to 0.85.
+    earned = 0.97
+    assert practice_update(earned, params_for("practice")) >= earned
+
+
+def test_practice_ceiling_sits_below_the_mastery_bar() -> None:
+    assert PRACTICE_CEILING < MASTERY_THRESHOLD
 
 
 def test_conceptual_concept_masters_on_understanding_alone() -> None:

@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 GatewayTask = Literal[
-    "course_outline", "module_concepts", "lesson_build", "lesson_repair", "concept_regeneration", "quiz_grading", "lesson_helper", "embedding"
+    "course_outline", "module_concepts", "lesson_build", "lesson_repair", "concept_regeneration", "quiz_grading", "lesson_helper", "practice_pool", "embedding"
 ]
 
 
@@ -38,6 +38,12 @@ class GatewaySettings(BaseSettings):
     # The on-page lesson helper answers learner questions in-context; moved onto the
     # newest-generation Luna tier so its guidance keeps pace with the builder's content.
     openai_helper_model: str = "gpt-5.6-luna"
+    # Practice-pool batches are the same kind of work the builder already does for a
+    # lesson's quiz items and run once per concept, so they share the builder's Luna tier.
+    # Split out as its own task because answer-key correctness is what the pool lives or
+    # dies on: if eval shows weak distractors or near-duplicates, this is the one dial to
+    # turn up to Sol without moving lesson generation with it.
+    openai_practice_pool_model: str = "gpt-5.6-luna"
 
     azure_openai_endpoint: str | None = None
     azure_openai_planner_deployment: str | None = None
@@ -46,6 +52,7 @@ class GatewaySettings(BaseSettings):
     # Optional; repair reuses the builder deployment when this is unset.
     azure_openai_repair_deployment: str | None = None
     azure_openai_helper_deployment: str | None = None
+    azure_openai_practice_pool_deployment: str | None = None
 
     # AWS Bedrock (Converse API). Credentials come from the standard boto3
     # chain (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / profile / role).
@@ -55,6 +62,7 @@ class GatewaySettings(BaseSettings):
     # Optional; repair reuses the builder model when unset (Bedrock has no Sol tier).
     aws_bedrock_repair_model: str | None = None
     aws_bedrock_helper_model: str | None = None
+    aws_bedrock_practice_pool_model: str | None = None
     aws_bedrock_embedding_model: str = "amazon.titan-embed-text-v2:0"
 
     # Only used when llm_provider=aws_openai: a long-term Bedrock API key for
@@ -66,6 +74,7 @@ class GatewaySettings(BaseSettings):
     # Only used when llm_provider=aws_openai: repair reuses the builder model when unset.
     aws_openai_repair_model: str | None = None
     aws_openai_helper_model: str | None = None
+    aws_openai_practice_pool_model: str | None = None
 
     def require_runtime_configuration(self) -> None:
         if self.environment != "development" and not self.internal_service_token:
@@ -132,6 +141,15 @@ class GatewaySettings(BaseSettings):
                 self.azure_openai_helper_deployment or self.azure_openai_builder_deployment,
                 self.aws_bedrock_helper_model or self.aws_bedrock_builder_model,
                 self.aws_openai_helper_model or self.aws_openai_builder_model,
+            )
+        if task == "practice_pool":
+            # Independently tunable, but defaults to the builder tier on every provider so
+            # the pool tracks lesson generation until eval says otherwise.
+            return self._provider_model(
+                self.openai_practice_pool_model,
+                self.azure_openai_practice_pool_deployment or self.azure_openai_builder_deployment,
+                self.aws_bedrock_practice_pool_model or self.aws_bedrock_builder_model,
+                self.aws_openai_practice_pool_model or self.aws_openai_builder_model,
             )
         return self._provider_model(
             self.openai_builder_model,

@@ -8,6 +8,7 @@ from worker.ingestion import SourceIngestor
 from worker.lesson_build import LessonBuilder
 from worker.llm import LLMGatewayClient
 from worker.planning import CoursePlanner
+from worker.practice_pool_build import PracticePoolBuilder
 from worker.queues import QueueAdapter, QueueMessage
 from worker.sandbox import SandboxRunnerClient
 from worker.settings import WorkerSettings
@@ -30,7 +31,8 @@ class Worker:
         self.queue = QueueAdapter(client, settings.queue_visibility_seconds)
         self.ingestor = SourceIngestor(settings, client, openai, self.queue)
         self.planner = CoursePlanner(settings, client, openai)
-        self.lesson_builder = LessonBuilder(settings, client, openai, sandbox)
+        self.lesson_builder = LessonBuilder(settings, client, openai, sandbox, self.queue)
+        self.practice_pool_builder = PracticePoolBuilder(settings, client, openai)
 
     def run_once(self) -> bool:
         did_work = False
@@ -76,6 +78,15 @@ class Worker:
                 lesson_definition_id = str(message.payload.get("lesson_definition_id", ""))
                 UUID(lesson_definition_id)
                 if not self.lesson_builder.build_lesson(lesson_definition_id):
+                    return
+            elif job_type == "practice_pool_build":
+                # Deliberately absent from the retry_lesson_build branch below: a failed pool
+                # must never spend the lesson's retry budget or mark a shipped lesson failed.
+                # A permanent failure just leaves the concept without a pool, and the API's
+                # top-up path re-enqueues the next time a learner practices it.
+                lesson_definition_id = str(message.payload.get("lesson_definition_id", ""))
+                UUID(lesson_definition_id)
+                if not self.practice_pool_builder.build_pool(lesson_definition_id):
                     return
             else:
                 raise ValueError("Unsupported generation job.")

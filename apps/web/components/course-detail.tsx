@@ -25,11 +25,13 @@ import DialogContent from "@mui/material/DialogContent";
 import DialogContentText from "@mui/material/DialogContentText";
 import DialogActions from "@mui/material/DialogActions";
 import Button from "@mui/material/Button";
+import { alpha, darken } from "@mui/material/styles";
 import { CoursePlanningNotStartedError, CourseMapResponse, CoursePointsResponse, CourseProgressResponse, CourseSummary, deleteCourse, exportCoursebook, getCourse, getCourseMap, getCoursePoints, getCourseProgress, regenerateCourse, resumeCourseLessons } from "@/lib/api";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { CourseCategoryBadge } from "@/components/course-category-badge";
 import { CourseProgressSteps } from "@/components/course-progress";
 import { MasteryDashboard } from "@/components/mastery-dashboard";
+import { PracticeDrill } from "@/components/practice-drill";
 import { RecommendationsPanel } from "@/components/recommendations-panel";
 import { CourseSettingsDialog } from "@/components/course-settings-dialog";
 import { CourseShareDialog } from "@/components/course-share-dialog";
@@ -60,7 +62,7 @@ export function CourseDetail({ courseId }: { courseId: string }) {
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
-  const [detailTab, setDetailTab] = useState<"content" | "mastery">("content");
+  const [detailTab, setDetailTab] = useState<"content" | "practice" | "mastery">("content");
   const fullLoadRef = useRef<() => Promise<void>>(async () => {});
   const progressRefreshRef = useRef<() => Promise<void>>(async () => {});
   const pollCountRef = useRef(0);
@@ -235,6 +237,14 @@ export function CourseDetail({ courseId }: { courseId: string }) {
     default: "linear-gradient(120deg, #334155 0%, #475569 58%, #64748b 130%)"
   };
   const coursebookGradient = coursebookGradients[courseCategory.key] ?? coursebookGradients.default;
+  // The category `color` is a pale badge pastel, which looks washed out as a book spine on a
+  // white cover -- pair each category with the vivid end of its card gradient so the cover's
+  // spine, icon, and rule read as saturated and coordinate with the gradient behind them.
+  const coursebookAccents: Record<string, string> = {
+    security: "#be123c", ml: "#7c3aed", data: "#d97706", web: "#0284c7",
+    backend: "#16a34a", cloud: "#0d9488", code: "#65a30d", default: "#475569"
+  };
+  const coursebookAccent = coursebookAccents[courseCategory.key] ?? coursebookAccents.default;
   const settingsActions: SettingsMenuAction[] = [
     { label: "Modify", icon: "edit", onClick: () => setSettingsOpen(true), disabled: regenerating || deleting },
     { label: regenerating ? "Regenerating…" : "Regenerate", icon: "refresh", onClick: handleRegenerate, disabled: regenerating || deleting },
@@ -331,11 +341,44 @@ export function CourseDetail({ courseId }: { courseId: string }) {
                   <Button variant="text" startIcon={<Icon name="folder_open" />} onClick={() => setSourcesOpen(true)} sx={{ color: "#e0e7ff" }}>Browse sources</Button>
                 </Stack>
               </Stack>
-              <Box sx={{ alignSelf: { xs: "flex-start", sm: "center" }, width: 135, minHeight: 174, p: 1.5, borderRadius: 1.5, bgcolor: "#f8fafc", color: "#172554", boxShadow: "0 14px 25px rgba(15, 23, 42, 0.27)", transform: { sm: "rotate(3deg)" } }}>
-                <Icon name="menu_book" />
-                <Typography sx={{ mt: 3, fontWeight: 800, lineHeight: 1.18, fontSize: "0.95rem" }}>{course.title}</Typography>
-                <Box sx={{ height: 3, width: 38, bgcolor: courseCategory.color, mt: 1.2, mb: 1 }} />
-                <Typography variant="caption" color="text.secondary">Canopy Coursebook</Typography>
+              <Box sx={{ display: { xs: "none", sm: "block" }, alignSelf: "center", flexShrink: 0, perspective: "1000px" }}>
+                <Box
+                  sx={{
+                    position: "relative",
+                    width: 156,
+                    height: 208,
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                    pl: 2.5,
+                    pr: 1.75,
+                    py: 2.25,
+                    color: "#0f172a",
+                    borderRadius: "3px 10px 10px 3px",
+                    background: "linear-gradient(145deg, #ffffff 0%, #eef2f6 100%)",
+                    boxShadow: "0 24px 44px -16px rgba(2, 6, 23, 0.6), 0 10px 20px -12px rgba(2, 6, 23, 0.45)",
+                    transform: "rotateY(-14deg)",
+                    transformOrigin: "center left",
+                    transition: "transform .5s cubic-bezier(.2,.8,.2,1), box-shadow .5s ease",
+                    "&:hover": { transform: "rotateY(-5deg)", boxShadow: "0 30px 54px -16px rgba(2, 6, 23, 0.66), 0 12px 22px -12px rgba(2, 6, 23, 0.5)" }
+                  }}
+                >
+                  {/* Spine */}
+                  <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 11, borderRadius: "3px 0 0 3px", background: `linear-gradient(to right, ${darken(coursebookAccent, 0.28)} 0%, ${coursebookAccent} 72%, rgba(255,255,255,0.55) 100%)` }} />
+                  {/* Page fore-edge */}
+                  <Box sx={{ position: "absolute", right: 3, top: 12, bottom: 12, width: 4, borderRadius: 0.5, background: "repeating-linear-gradient(to bottom, rgba(148,163,184,0.5) 0 1px, transparent 1px 3px)" }} />
+                  <Stack sx={{ gap: 0.85, alignItems: "flex-start" }}>
+                    <Box sx={{ width: 30, height: 30, display: "grid", placeItems: "center", borderRadius: 1.5, bgcolor: alpha(coursebookAccent, 0.14), color: coursebookAccent, "& .material-symbol": { fontSize: 18 } }}>
+                      <Icon name="menu_book" />
+                    </Box>
+                    <Typography sx={{ fontSize: "0.5rem", fontWeight: 800, letterSpacing: "0.2em", color: "#64748b" }}>COURSEBOOK</Typography>
+                  </Stack>
+                  <Stack sx={{ gap: 1 }}>
+                    <Typography sx={{ fontWeight: 800, lineHeight: 1.2, fontSize: "0.9rem", letterSpacing: "-0.01em", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{course.title}</Typography>
+                    <Box sx={{ height: 3, width: 32, borderRadius: 2, bgcolor: coursebookAccent }} />
+                    <Typography sx={{ fontSize: "0.6rem", fontWeight: 700, letterSpacing: "0.08em", color: "#94a3b8" }}>CANOPY</Typography>
+                  </Stack>
+                </Box>
               </Box>
             </Stack>
           </Box>
@@ -349,12 +392,15 @@ export function CourseDetail({ courseId }: { courseId: string }) {
           sx={{ minHeight: 36, mb: 2, borderBottom: 1, borderColor: "divider" }}
         >
           <Tab value="content" icon={<Icon name="menu_book" />} iconPosition="start" label="Content" sx={{ minHeight: 36, py: 1, textTransform: "none" }} />
+          <Tab value="practice" icon={<Icon name="fitness_center" />} iconPosition="start" label="Practice" sx={{ minHeight: 36, py: 1, textTransform: "none" }} />
           <Tab value="mastery" icon={<Icon name="insights" />} iconPosition="start" label="Mastery" sx={{ minHeight: 36, py: 1, textTransform: "none" }} />
         </Tabs>
       ) : null}
 
       {detailTab === "mastery" && progress.stage === "ready" && map.modules.length > 0 ? (
         <MasteryDashboard courseId={courseId} />
+      ) : detailTab === "practice" && progress.stage === "ready" && map.modules.length > 0 ? (
+        <PracticeDrill courseId={courseId} />
       ) : map.modules.length === 0 ? (
         progress.stage === "ready" ? <Typography color="text.secondary">This course has no modules yet.</Typography> : null
       ) : (

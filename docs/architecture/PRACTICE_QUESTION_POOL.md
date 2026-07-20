@@ -1,8 +1,9 @@
 # Practice Question Pool — build doc
 
-> Status: **design, pre-implementation.** Captures the decisions reached so far plus a
-> concrete build plan. Settled decisions are marked ✅; open decisions needing a call are
-> marked ❓ with a recommendation.
+> Status: **implemented (M0–M4), migration not yet applied.** The engine, generation pass,
+> storage/orchestration, API, and UI are all in. What remains is running the migration
+> against a live database and the M5 quality pass. Sections below describe the shipped
+> design; where implementation changed a decision, the change is called out inline.
 
 ## 1. Why / current state
 
@@ -80,18 +81,46 @@ The three gaps a pool closes: **fixed/small**, **no rotation/variety**, **all gr
   `p_understand` can never drop. Separately, **every** answer (right and wrong) is logged for
   struggle analytics — see the `practice_attempts` ledger in §3.2.
 
-### Open ❓ (need a call before/while building)
+- **Generation timing: separate async job (resolved 2026-07-19).** A new `practice_pool_build`
+  generation job is enqueued **after `lesson_build` finishes**, so the lesson renders immediately
+  and the pool backfills behind it. It rides the existing generation queue rather than a new one:
+  a new `type` branch in `WorkerRunner._handle_generation` (`services/worker/worker/runner.py:60`,
+  alongside `course_planning` / `lesson_build`), enqueued through a new
+  `enqueue_practice_pool_build` RPC + `QueueAdapter` method (`services/worker/worker/queues.py`,
+  mirroring `enqueue_course_planning`). Payload is just `lesson_definition_id` — **no batch
+  number** (changed during implementation): the worker resolves the next batch at claim time
+  via `practice_pool_context`, so two racing top-ups converge on the same number and the
+  second is discarded by `apply_practice_pool` instead of double-inserting.
 
-1. **Generation timing.** ❓ *Recommend: separate async job* (`practice_pool_build`) enqueued
-   after `lesson_build` finishes, so the lesson renders immediately and the pool backfills.
-   Alternative: inline as a third step in `lesson_build` (simpler, but adds latency to first
-   render).
-2. **Pool size + top-up policy.** ❓ Suggest N ≈ 10–15 per concept initially, with a
-   server-side top-up endpoint that appends another batch on demand.
+  **Failure isolation (revised during implementation).** The pool job is deliberately absent
+  from the `retry_lesson_build` branch in `runner._handle_generation`, so it can never spend
+  the lesson's retry budget or mark a shipped lesson failed. It gets *no* bounded retry of its
+  own either: transient errors leave the message queued (the existing `RETRYABLE_ERRORS` path),
+  and a permanent failure simply leaves the concept without a pool. That self-heals — the first
+  learner to practise it finds an empty pool, and the top-up path enqueues a fresh job — which
+  is simpler than a retry counter and bounded by real user action rather than a timer.
+- **Pool size + top-up policy: 10–15 per concept, top-up on demand (resolved 2026-07-19).** The
+  initial batch targets **N = 10–15** items per concept (`batch = 0`), configured by
+  `practice_pool_batch_size` (default 12, bounded 10–15 so a stray env value cannot configure a
+  batch the schema would reject). When a learner exhausts a concept's unseen items, a
+  server-side top-up appends another batch (`batch = n+1`) by re-enqueueing
+  `practice_pool_build` with the existing prompts passed in context for non-overlap. Top-up is
+  the same generation pass, not a separate code path.
+
+  **Batch size is enforced as a floor, not an exact count (implementation detail).** A batch is
+  accepted at `practice_pool_min_batch_size` (default 10) or above even when it undershoots the
+  target — regenerating a whole batch to chase an exact number costs a call for no learner
+  benefit. Falling *under* the floor means the model ignored the instruction, which regeneration
+  can actually fix, so that is rejected with feedback.
 
 *Resolved 2026-07-19:* mastery effect (positive-only, capped ≈0.85, + struggle ledger); storage
 (dedicated `practice_items` table + `practice_attempts` rotation/struggle ledger, §3.2); scope
-(both concept + course level); non-repeat (per-learner via `practice_attempts`).
+(both concept + course level); non-repeat (per-learner via `practice_attempts`); generation timing
+(async `practice_pool_build` after `lesson_build`); pool size + top-up (10–15, batched top-up).
+
+### Open ❓
+
+None outstanding — the design is ready to build (§5).
 
 ## 3. Architecture
 
@@ -112,8 +141,14 @@ The three gaps a pool closes: **fixed/small**, **no rotation/variety**, **all gr
 
 ### 3.2 Storage
 
-Target (recommended): migration adding `practice_items` keyed by `(course_version_id,
-concept_id)`:
+Shipped as `supabase/migrations/20260719020000_practice_question_pool.sql`. `practice_items` is
+keyed by `(course_version_id, concept_id)`:
+
+**Row ids, not generated ids (implementation detail).** `practice_items.id` is a database
+`uuid`, and it is what the API serves and grades against. The `id` the generator writes inside
+`item_json` is only unique *within* a batch — batches accumulate per concept, so a top-up could
+legitimately reuse a slug. Keeping the row id authoritative means a collision there is
+harmless, and no cross-batch id coordination is needed at generation time.
 
 | column | purpose |
 |---|---|
@@ -138,10 +173,15 @@ This one table does triple duty: **non-repeat rotation** (prefer items with no /
 my misses" filter, and later the `concept_struggling` → prereq-recommendation loop), and
 **per-item difficulty** in aggregate (rolls up into the optional `times_served` / `times_correct`
 above). Positive-only mastery is separate: a correct answer *also* writes a capped `practice`
-observation (§2); a wrong answer touches only `practice_attempts`. RLS: rows are owned by the
-learner (`user_id`) and scoped like `observations` — the API writes one row per answered question.
-The pool itself (`practice_items`) is service-written on the worker and read scoped by course
-ownership, as elsewhere.
+observation (§2); a wrong answer touches only `practice_attempts`. RLS: `practice_attempts` gets
+one `for select` policy on `user_id = auth.uid()`, matching `observations` — every write goes
+through the service role, as everywhere else in this schema.
+
+**`practice_items` gets RLS with no policy at all (changed during implementation).** The design
+originally said "read scoped by course ownership", but `item_json` carries answer keys and
+rubrics, so exposing the table to `authenticated` would hand the answers to anyone willing to
+query PostgREST directly. It is service-role only, exactly like `lesson_revisions`; the API
+serves answer-stripped previews and is the only reader.
 
 MVP shortcut (if we defer the migration): `Assessment.practice_items: list[QuizItem]` in
 `lesson_schema.py` + `packages/contracts/schemas/lesson-bundle.schema.json`, patched into the
@@ -156,14 +196,23 @@ Practice is **course-scoped** with a filter; the concept page just pins the scop
   reuse the `QuizItemPreview` stripping already in `lesson_bundle.py` / `bundle_view`), selected by
   the pure engine (§3.4). `scope=done` (default) is bounded by the learner's progress so it never
   serves an un-reached lesson. The concept-page panel calls this with `scope=concepts&ids=<slug>`.
+
+  **"Reached" means the learner has an assignment for the lesson (implementation detail).**
+  There is no ordering column on `concepts`, so a linear "has got as far as lesson N" predicate
+  isn't available. `learner_lesson_assignments` is the one real progress marker the schema has
+  — a row is created the first time a learner answers a question or submits a lab — so the
+  practiceable set is exactly the lessons they have engaged with. The bound is applied to
+  *every* scope, not just `done`, so naming a concept explicitly cannot bypass it. The known
+  limitation: reading a lesson without answering anything leaves it unpracticeable.
 - `POST /courses/{id}/practice/{item_id}/answer` → grade with the **existing**
   `grade_quiz_answer(item, answer, grader)` (`quiz.py`) — pure and kind-complete, reused as-is.
   **Practice path:** do NOT call `record_quiz_response` and do NOT count against the attempt cap.
   Always write a `practice_attempts` row; on a **correct** answer *additionally* write the capped
   positive `practice` observation (§2). Reveal grade + explanation immediately (no
   `withhold_answer`). Returns `QuizGradeResponse`.
-- Optional `POST /courses/{id}/practice/refresh` (or a `top_up` flag) to trigger another generated
-  batch for a concept when its pool is exhausted.
+- `POST /courses/{id}/practice/top-up` `{concept_id}` → enqueues a `practice_pool_build` job for
+  the next batch (§2) when a concept's unseen items run low. Idempotent per concept: if a batch is
+  already queued/in flight, return the pending status instead of enqueueing a second one.
 
 ### 3.4 Selection / non-repeat engine (pure)
 
@@ -214,25 +263,27 @@ The pool's marginal-quality dimensions (what Luna must do well, where Sol would 
 
 ## 5. Implementation plan
 
+**M0–M4 are implemented.** M5 remains, as does applying the migration to a live database.
 Milestones, most-leverage first:
 
-- **M0 — pure selection engine + tests.** `practice.py` cross-concept next-batch selection with
+- ✅ **M0 — pure selection engine + tests.** `practice.py` cross-concept next-batch selection with
   session config (order / filter / count) + non-repeat, unit tested (no IO). Cheapest,
   highest-leverage, mirrors `mastery.py`/`placement.py`.
-- **M1 — generation pass.** `PRACTICE_POOL_SYSTEM_PROMPT` + `generate_practice_pool` in
+- ✅ **M1 — generation pass.** `PRACTICE_POOL_SYSTEM_PROMPT` + `generate_practice_pool` in
   `lesson_agent.py`; validation (citations, uniqueness, dedup); worker test like
   `services/worker/tests/test_planner.py`. `practice_pool` gateway task.
-- **M2 — storage + orchestration.** Table migration (or bundle field for the shortcut);
-  wire generation (async `practice_pool_build` job, or inline in `lesson_build.py`);
-  checkpoint separately.
-- **M3 — API + `practice_attempts` migration.** Course-level `GET /courses/{id}/practice`
+- ✅ **M2 — storage + orchestration.** `practice_items` table migration (or bundle field for the
+  shortcut); `enqueue_practice_pool_build` RPC + `QueueAdapter` method; enqueue at the end of
+  `lesson_build.py`; `practice_pool_build` branch in `runner._handle_generation` with its own
+  bounded retry; batch 0 targets 10–15 items; checkpoint separately from the lesson.
+- ✅ **M3 — API + `practice_attempts` migration.** Course-level `GET /courses/{id}/practice`
   (scope / order / filter / count) + `POST /courses/{id}/practice/{item_id}/answer` (positive-only:
   always write `practice_attempts`, capped `practice` observation on correct, no attempt-cap) +
-  optional refresh. Preview-stripping reused from `lesson_bundle.py`.
-- **M4 — UI.** Practice variant of `QuizSection`; **both** entry points — concept panel on
+  `POST /courses/{id}/practice/top-up`. Preview-stripping reused from `lesson_bundle.py`.
+- ✅ **M4 — UI.** Practice variant of `QuizSection`; **both** entry points — concept panel on
   `concept-detail.tsx` and a Practice tab + config panel on `course-detail.tsx` — plus
   `lib/api.ts` clients. Next-question / new-set.
-- **M5 — quality.** Per-item stats, difficulty tags, top-up UX; consider Sol for the pool
+- ⬜ **M5 — quality.** Per-item stats, difficulty tags, top-up UX; consider Sol for the pool
   task if distractor/dedup eval is weak.
 
 ## 6. Testing
@@ -241,8 +292,13 @@ Milestones, most-leverage first:
   deterministic.
 - Generation (worker): validates a sample structured output — citations subset, unique ids,
   no near-duplicate stems, no overlap with the lesson quiz.
-- Grading reuse: `grade_quiz_answer` already covered; add a route test asserting the
-  low-stakes path writes **no** observation / leaves mastery unchanged.
+- Grading reuse: `grade_quiz_answer` already covered; add route tests asserting the positive-only
+  path (§2): a **correct** answer writes a `practice_attempts` row **and** a capped
+  `assessment_kind='practice'` observation that cannot push `p_understand` past ≈0.85; a **wrong**
+  answer writes **only** the `practice_attempts` row and leaves mastery unchanged. Neither calls
+  `record_quiz_response` nor counts against the attempt cap.
+- Orchestration: `lesson_build` enqueues `practice_pool_build` on success; a failing pool build
+  leaves the shipped lesson intact and retries on its own bounded budget.
 
 ## 7. Non-goals / risks / future
 
