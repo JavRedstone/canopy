@@ -232,11 +232,18 @@ all IO.
   positive-only, a correct answer *may* refresh the mastery meter (it can only go up); a wrong
   answer does not.
 - **Two entry points, one surface:**
-  - **Concept-level** — a "Practice this concept" affordance on the concept page
-    (`components/concept-detail.tsx`), opening the drill panel pinned to that concept.
-  - **Course-level** — a "Practice" tab on the course overview (`components/course-detail.tsx`)
-    with a **config panel**: scope (everything I've done / pick modules / pick lessons), length,
-    order, and filter (incl. "retry the ones I missed"). Un-reached lessons appear disabled.
+  - **Concept-level** — a "Practise this concept" affordance on the concept page
+    (`components/concept-detail.tsx`), opening the drill panel pinned to that concept. The
+    disclosure stays so the panel does not fetch a batch under every lesson the learner opens.
+  - **Course-level** — a "Practice" tab on the course overview (`components/course-detail.tsx`).
+
+- **No setup step (revised 2026-07-19 after review).** The drill originally opened on a config
+  card — length, order, and filter — gated behind a "Start practising" button. That put three
+  rows of decisions in front of the thing least in need of them: practice is supposed to be the
+  low-friction option you take without deciding anything. The panel now loads the defaults
+  immediately (10 questions, shuffled, unseen only) and opens **on a question**; the session
+  options live behind an "Options" toggle and can be changed mid-session, which restarts the
+  batch in place rather than dropping back to a setup screen.
 - Client calls in `apps/web/lib/api.ts`.
 
 ### 3.6 Model tiering (`services/llm_gateway`)

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
@@ -10,6 +10,7 @@ import TextField from "@mui/material/TextField";
 import Button from "@mui/material/Button";
 import Alert from "@mui/material/Alert";
 import Chip from "@mui/material/Chip";
+import Collapse from "@mui/material/Collapse";
 import LinearProgress from "@mui/material/LinearProgress";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
@@ -28,13 +29,23 @@ import { MarkdownText } from "@/components/markdown-text";
 import { QuizOptionList } from "@/components/quiz";
 import { createClient } from "@/lib/supabase/client";
 
+type Order = NonNullable<PracticeSessionOptions["order"]>;
+type Filter = NonNullable<PracticeSessionOptions["filter"]>;
+
+interface SessionConfig {
+  length: number;
+  order: Order;
+  filter: Filter;
+}
+
 const SESSION_LENGTHS = [5, 10, 20] as const;
 // "Endless" is not a special server mode -- it just keeps asking for another batch when the
 // current one runs out, so the engine's non-repeat rotation still applies across batches.
 const ENDLESS = 0;
+const BATCH_SIZE = 10;
 
-type Order = NonNullable<PracticeSessionOptions["order"]>;
-type Filter = NonNullable<PracticeSessionOptions["filter"]>;
+// What you get without touching anything: a short shuffled set of questions you haven't seen.
+const DEFAULT_CONFIG: SessionConfig = { length: 10, order: "shuffle", filter: "unseen" };
 
 const ORDER_LABELS: Record<Order, string> = {
   shuffle: "Shuffle",
@@ -185,7 +196,13 @@ function PracticeQuestionCard({
 
 /**
  * The drill surface, used from two places over the same machinery: pinned to a single
- * concept on the concept page, or course-wide with a scope picker on the course page.
+ * concept on the concept page, or course-wide on the course page.
+ *
+ * It opens directly on a question rather than a setup screen. Practice is meant to be the
+ * low-friction thing you do without deciding anything, so the defaults load immediately and
+ * the session options sit behind a toggle for the minority of sessions that want them.
+ * Changing one restarts the batch in place, since a half-answered set chosen under different
+ * options is not a set anyone asked for.
  */
 export function PracticeDrill({
   courseId,
@@ -193,17 +210,15 @@ export function PracticeDrill({
   onMasteryChange
 }: {
   courseId: string;
-  // Set on the concept page: pins the session to one concept and hides the scope picker.
+  // Set on the concept page: pins the session to one concept.
   conceptSlug?: string;
   onMasteryChange?: () => void;
 }) {
-  const [length, setLength] = useState<number>(10);
-  const [order, setOrder] = useState<Order>("shuffle");
-  const [filter, setFilter] = useState<Filter>("unseen");
+  const [config, setConfig] = useState<SessionConfig>(DEFAULT_CONFIG);
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const [questions, setQuestions] = useState<PracticeQuestion[]>([]);
   const [position, setPosition] = useState(0);
-  const [started, setStarted] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [scopeEmpty, setScopeEmpty] = useState(false);
   const [lowConcepts, setLowConcepts] = useState<string[]>([]);
@@ -213,27 +228,26 @@ export function PracticeDrill({
   const [correctCount, setCorrectCount] = useState(0);
 
   const loadBatch = useCallback(
-    async (append: boolean) => {
+    async (session: SessionConfig, append: boolean) => {
       setLoading(true);
       setError(undefined);
       try {
-        const session = await getPracticeSession(
+        const result = await getPracticeSession(
           courseId,
           {
             scope: conceptSlug ? "concepts" : "done",
             ids: conceptSlug ? [conceptSlug] : undefined,
-            // Endless pulls a full batch at a time and asks again when it runs dry.
-            count: length === ENDLESS ? 10 : length,
-            order,
-            filter
+            // Endless pulls a batch at a time and asks again when it runs dry.
+            count: session.length === ENDLESS ? BATCH_SIZE : session.length,
+            order: session.order,
+            filter: session.filter
           },
           await accessToken()
         );
-        setScopeEmpty(session.scope_empty);
-        setLowConcepts(session.concepts_low_on_questions);
-        setQuestions((current) => (append ? [...current, ...session.questions] : session.questions));
-        if (!append) setPosition(0);
-        return session.questions.length;
+        setScopeEmpty(result.scope_empty);
+        setLowConcepts(result.concepts_low_on_questions);
+        setQuestions((current) => (append ? [...current, ...result.questions] : result.questions));
+        return result.questions.length;
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : "Unable to load practice questions.");
         return 0;
@@ -241,15 +255,35 @@ export function PracticeDrill({
         setLoading(false);
       }
     },
-    [courseId, conceptSlug, length, order, filter]
+    [courseId, conceptSlug]
   );
 
-  async function handleStart() {
-    setStarted(true);
-    setAnsweredCount(0);
-    setCorrectCount(0);
-    setToppedUp(false);
-    await loadBatch(false);
+  const startSession = useCallback(
+    async (session: SessionConfig) => {
+      setPosition(0);
+      setAnsweredCount(0);
+      setCorrectCount(0);
+      setToppedUp(false);
+      await loadBatch(session, false);
+    },
+    [loadBatch]
+  );
+
+  const startedRef = useRef<string>(undefined);
+  useEffect(() => {
+    // Load the first batch on mount so the panel opens on a question, not a setup screen.
+    // Guarded by identity rather than left to fire on every option change -- those reload
+    // explicitly through changeConfig, and re-firing here would double-fetch each toggle.
+    const identity = `${courseId}:${conceptSlug ?? ""}`;
+    if (startedRef.current === identity) return;
+    startedRef.current = identity;
+    void startSession(DEFAULT_CONFIG);
+  }, [courseId, conceptSlug, startSession]);
+
+  function changeConfig(patch: Partial<SessionConfig>) {
+    const next = { ...config, ...patch };
+    setConfig(next);
+    void startSession(next);
   }
 
   function handleAnswered(grade: PracticeGradeResponse) {
@@ -263,14 +297,12 @@ export function PracticeDrill({
 
   async function handleNext() {
     const nextPosition = position + 1;
-    if (nextPosition < questions.length) {
-      setPosition(nextPosition);
-      return;
-    }
-    if (length === ENDLESS) {
-      const added = await loadBatch(true);
-      if (added > 0) setPosition(nextPosition);
-      return;
+    if (nextPosition >= questions.length && config.length === ENDLESS) {
+      const added = await loadBatch(config, true);
+      if (added === 0) {
+        setPosition(nextPosition);
+        return;
+      }
     }
     setPosition(nextPosition);
   }
@@ -279,8 +311,7 @@ export function PracticeDrill({
     setToppingUp(true);
     setError(undefined);
     try {
-      const slugs = conceptSlug ? [conceptSlug] : lowConcepts;
-      await topUpPracticePool(courseId, slugs, await accessToken());
+      await topUpPracticePool(courseId, conceptSlug ? [conceptSlug] : lowConcepts, await accessToken());
       setToppedUp(true);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to request more questions.");
@@ -289,32 +320,36 @@ export function PracticeDrill({
     }
   }
 
-  function reconfigure(apply: () => void) {
-    // Changing an option invalidates the batch on screen, so drop back to the setup card
-    // rather than mixing questions chosen under two different configurations.
-    apply();
-    setStarted(false);
-    setQuestions([]);
-  }
-
   const current = questions[position];
-  const finished = started && !loading && !current;
+  const finished = !loading && !current;
+  const progress = questions.length > 0 ? Math.min((position / questions.length) * 100, 100) : 0;
 
-  if (!started) {
-    return (
-      <Paper variant="outlined" sx={{ p: 2, display: "grid", gap: 2 }}>
-        <Box sx={{ display: "grid", gap: 0.5 }}>
-          <Typography sx={{ fontWeight: 700 }}>Practice</Typography>
-          <Typography variant="body2" color="text.secondary">
-            Low-stakes drilling{conceptSlug ? " on this concept" : " across what you've worked through"}. Getting one wrong never
-            counts against you; getting them right builds your mastery.
-          </Typography>
-        </Box>
+  return (
+    <Stack sx={{ gap: 1.5 }}>
+      <Stack direction="row" sx={{ gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+        <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
+          {answeredCount > 0 ? `${correctCount} of ${answeredCount} correct` : "Low-stakes drilling — a miss never counts against you"}
+        </Typography>
+        <Button
+          size="small"
+          variant="text"
+          startIcon={<Icon name="tune" />}
+          onClick={() => setOptionsOpen((open) => !open)}
+        >
+          Options
+        </Button>
+      </Stack>
 
-        <Box sx={{ display: "grid", gap: 1.5 }}>
+      <Collapse in={optionsOpen} unmountOnExit>
+        <Paper variant="outlined" sx={{ p: 1.5, display: "grid", gap: 1.5 }}>
           <Box sx={{ display: "grid", gap: 0.5 }}>
             <Typography variant="overline" color="text.secondary">Length</Typography>
-            <ToggleButtonGroup size="small" exclusive value={length} onChange={(_event, value) => { if (value !== null) reconfigure(() => setLength(value)); }}>
+            <ToggleButtonGroup
+              size="small"
+              exclusive
+              value={config.length}
+              onChange={(_event, value) => { if (value !== null) changeConfig({ length: value }); }}
+            >
               {SESSION_LENGTHS.map((option) => (
                 <ToggleButton key={option} value={option}>{option}</ToggleButton>
               ))}
@@ -324,7 +359,12 @@ export function PracticeDrill({
 
           <Box sx={{ display: "grid", gap: 0.5 }}>
             <Typography variant="overline" color="text.secondary">Order</Typography>
-            <ToggleButtonGroup size="small" exclusive value={order} onChange={(_event, value) => { if (value !== null) reconfigure(() => setOrder(value)); }}>
+            <ToggleButtonGroup
+              size="small"
+              exclusive
+              value={config.order}
+              onChange={(_event, value) => { if (value !== null) changeConfig({ order: value }); }}
+            >
               {(Object.keys(ORDER_LABELS) as Order[]).map((option) => (
                 <ToggleButton key={option} value={option}>{ORDER_LABELS[option]}</ToggleButton>
               ))}
@@ -333,38 +373,26 @@ export function PracticeDrill({
 
           <Box sx={{ display: "grid", gap: 0.5 }}>
             <Typography variant="overline" color="text.secondary">Questions</Typography>
-            <ToggleButtonGroup size="small" exclusive value={filter} onChange={(_event, value) => { if (value !== null) reconfigure(() => setFilter(value)); }}>
+            <ToggleButtonGroup
+              size="small"
+              exclusive
+              value={config.filter}
+              onChange={(_event, value) => { if (value !== null) changeConfig({ filter: value }); }}
+            >
               {(Object.keys(FILTER_LABELS) as Filter[]).map((option) => (
                 <ToggleButton key={option} value={option}>{FILTER_LABELS[option]}</ToggleButton>
               ))}
             </ToggleButtonGroup>
           </Box>
-        </Box>
+        </Paper>
+      </Collapse>
 
-        {error ? <Alert severity="error">{error}</Alert> : null}
-        <Box>
-          <Button variant="contained" startIcon={<Icon name="fitness_center" />} onClick={handleStart} disabled={loading}>
-            {loading ? "Loading…" : "Start practising"}
-          </Button>
-        </Box>
-      </Paper>
-    );
-  }
-
-  return (
-    <Stack sx={{ gap: 1.5 }}>
-      <Stack direction="row" sx={{ gap: 1, alignItems: "center", flexWrap: "wrap" }}>
-        <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
-          {answeredCount > 0 ? `${correctCount} of ${answeredCount} correct` : "Answer to see how you're doing"}
-        </Typography>
-        <Button size="small" variant="text" onClick={() => setStarted(false)}>Change options</Button>
-      </Stack>
-      {length !== ENDLESS && questions.length > 0 ? (
-        <LinearProgress variant="determinate" value={Math.min((position / questions.length) * 100, 100)} />
+      {config.length !== ENDLESS && questions.length > 0 ? (
+        <LinearProgress variant="determinate" value={progress} />
       ) : null}
 
-      {loading && !current ? <Typography color="text.secondary">Loading questions…</Typography> : null}
       {error ? <Alert severity="error">{error}</Alert> : null}
+      {loading && !current ? <Typography color="text.secondary">Loading questions…</Typography> : null}
 
       {current ? (
         <>
@@ -376,9 +404,7 @@ export function PracticeDrill({
             onAnswered={handleAnswered}
           />
           <Box>
-            <Button variant="outlined" onClick={handleNext} disabled={loading}>
-              Next question
-            </Button>
+            <Button variant="outlined" onClick={handleNext} disabled={loading}>Next question</Button>
           </Box>
         </>
       ) : null}
@@ -392,13 +418,13 @@ export function PracticeDrill({
                 Practice draws on lessons you&apos;ve already started. Work through a lesson first and its questions will show up here.
               </Typography>
             </>
-          ) : questions.length === 0 && filter === "unseen" ? (
+          ) : questions.length === 0 && config.filter === "unseen" ? (
             <>
               <Typography sx={{ fontWeight: 700 }}>You&apos;ve seen every question here</Typography>
               <Typography variant="body2" color="text.secondary">
                 {toppedUp
                   ? "More questions are being written now — check back in a moment."
-                  : "Ask for a fresh batch, or switch to “Everything” to drill the ones you've already answered."}
+                  : "Ask for a fresh batch, or switch “Questions” to Everything to drill the ones you've already answered."}
               </Typography>
               {!toppedUp ? (
                 <Box>
@@ -412,21 +438,20 @@ export function PracticeDrill({
             <>
               <Typography sx={{ fontWeight: 700 }}>No questions match</Typography>
               <Typography variant="body2" color="text.secondary">
-                {filter === "missed" ? "You haven't missed anything here yet." : "There are no questions in this scope yet."}
+                {config.filter === "missed" ? "You haven't missed anything here yet." : "There are no questions in this scope yet."}
               </Typography>
             </>
           ) : (
             <>
               <Typography sx={{ fontWeight: 700 }}>Session complete</Typography>
-              <Typography variant="body2" color="text.secondary">
-                {correctCount} of {answeredCount} correct.
-              </Typography>
+              <Typography variant="body2" color="text.secondary">{correctCount} of {answeredCount} correct.</Typography>
             </>
           )}
-          <Stack direction="row" sx={{ gap: 1, flexWrap: "wrap" }}>
-            <Button variant="outlined" onClick={handleStart} disabled={loading}>New set</Button>
-            <Button variant="text" onClick={() => setStarted(false)}>Change options</Button>
-          </Stack>
+          <Box>
+            <Button variant="outlined" onClick={() => void startSession(config)} disabled={loading}>
+              {questions.length === 0 ? "Try again" : "New set"}
+            </Button>
+          </Box>
         </Paper>
       ) : null}
     </Stack>
