@@ -6,7 +6,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 GatewayTask = Literal[
-    "course_outline", "module_concepts", "lesson_build", "lesson_repair", "concept_regeneration", "quiz_grading", "lesson_helper", "practice_pool", "embedding"
+    "course_outline", "module_concepts", "lesson_build", "lesson_repair", "concept_regeneration", "quiz_grading",
+    "lesson_helper", "practice_pool", "embedding", "demo_autocomplete"
 ]
 
 

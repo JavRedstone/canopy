@@ -89,6 +89,32 @@ def test_cpp_environment_does_not_override_a_caller_submitted_doctest_main() -> 
     assert members["doctest_main.cpp"] == "// custom main\n"
 
 
+def test_c_environment_injects_sandbox_main_when_the_caller_did_not_submit_one() -> None:
+    environment = get_environment("c-basic")
+    assert environment is not None
+    files = [SandboxFile(path="example.c", content='#include "sandbox_test.h"\n')]
+
+    archive = tarfile.open(fileobj=io.BytesIO(files_to_tar(files, environment)), mode="r")
+    members = {member.name: archive.extractfile(member).read().decode() for member in archive.getmembers()}
+
+    assert members["example.c"] == '#include "sandbox_test.h"\n'
+    assert "int main(void)" in members["sandbox_main.c"]
+
+
+def test_c_environment_does_not_override_a_caller_submitted_sandbox_main() -> None:
+    environment = get_environment("c-basic")
+    assert environment is not None
+    files = [
+        SandboxFile(path="example.c", content='#include "sandbox_test.h"\n'),
+        SandboxFile(path="sandbox_main.c", content="// custom main\n"),
+    ]
+
+    archive = tarfile.open(fileobj=io.BytesIO(files_to_tar(files, environment)), mode="r")
+    members = {member.name: archive.extractfile(member).read().decode() for member in archive.getmembers()}
+
+    assert members["sandbox_main.c"] == "// custom main\n"
+
+
 def test_files_to_tar_rejects_a_suffix_that_does_not_match_the_environment() -> None:
     environment = get_environment("javascript-basic")
     assert environment is not None

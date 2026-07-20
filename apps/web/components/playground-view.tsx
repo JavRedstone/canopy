@@ -36,6 +36,13 @@ const ENVIRONMENTS: Record<PlaygroundEnvironmentId, EnvironmentConfig> = {
     filePath: "test_example.py",
     defaultContent: `def add(a, b):\n    return a + b\n\n\ndef test_add_passes():\n    assert add(2, 3) == 5\n\n\ndef test_add_fails():\n    assert add(2, 2) == 5\n`
   },
+  "python-ml": {
+    label: "Python (ML/DL)",
+    monacoLanguage: "python",
+    framework: "pytest",
+    filePath: "test_example.py",
+    defaultContent: `import numpy as np\n\n\ndef normalize(x: np.ndarray) -> np.ndarray:\n    return (x - x.mean()) / x.std()\n\n\ndef test_normalize_passes():\n    result = normalize(np.array([1.0, 2.0, 3.0]))\n    assert np.isclose(result.mean(), 0.0)\n\n\ndef test_normalize_fails():\n    result = normalize(np.array([1.0, 2.0, 3.0]))\n    assert np.isclose(result.std(), 5.0)\n`
+  },
   "javascript-basic": {
     label: "JavaScript",
     monacoLanguage: "javascript",
@@ -56,6 +63,13 @@ const ENVIRONMENTS: Record<PlaygroundEnvironmentId, EnvironmentConfig> = {
     framework: "doctest",
     filePath: "example.cpp",
     defaultContent: `#include "doctest.h"\n\nint add(int a, int b) {\n    return a + b;\n}\n\nTEST_CASE("add passes") {\n    CHECK(add(2, 3) == 5);\n}\n\nTEST_CASE("add fails") {\n    CHECK(add(2, 2) == 5);\n}\n`
+  },
+  "c-basic": {
+    label: "C",
+    monacoLanguage: "c",
+    framework: "sandbox_test.h",
+    filePath: "example.c",
+    defaultContent: `#include "sandbox_test.h"\n\nint add(int a, int b) {\n    return a + b;\n}\n\nTEST_CASE(add_passes) {\n    CHECK(add(2, 3) == 5);\n}\n\nTEST_CASE(add_fails) {\n    CHECK(add(2, 2) == 5);\n}\n`
   }
 };
 

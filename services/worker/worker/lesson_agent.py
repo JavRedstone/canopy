@@ -67,6 +67,23 @@ CODING_ARTIFACTS_SYSTEM_PROMPT = (
     "reuse a workspace file path."
 )
 
+PYTHON_ML_CODING_CONTENT_SYSTEM_PROMPT = (
+    "Create the reading half of a self-contained Python machine-learning/deep-learning coding lesson for one "
+    "concept -- a matching coding exercise will be generated separately from what you write here, so describe "
+    "the exercise clearly enough that it can be built from your description alone. Write explanation_markdown as "
+    "a focused 250-500 word activity with clear Markdown headings for the objective, core idea, a guided "
+    "walkthrough, exercise requirements, and common mistakes; make it useful on its own but never reveal a "
+    "working implementation verbatim. Add 1-2 worked_examples, each a short, complete illustration with a fenced "
+    "code block, distinct from the exercise itself. Add 1-2 quiz_items that check understanding of the concept, "
+    "not trivia. "
+    f"{QUIZ_KINDS_INSTRUCTION} {INTERLEAVE_INSTRUCTION} "
+    "Include 1-2 actionable hints that progressively guide the learner without giving away the final "
+    f"implementation. {MATH_FORMATTING_INSTRUCTION} This track is about applying real ML/DL tooling, not "
+    "reimplementing it: exercises should exercise numpy/pandas/scikit-learn/matplotlib/seaborn for classical ML "
+    "and data work, or PyTorch/torchvision for deep learning, as the lesson calls for -- lean on the library's "
+    "real API rather than hand-rolling what it already provides."
+)
+
 CPP_CODING_CONTENT_SYSTEM_PROMPT = (
     "Create the reading half of a self-contained C++ coding lesson for one concept -- a matching coding "
     "exercise will be generated separately from what you write here, so describe the exercise clearly enough "
@@ -79,6 +96,24 @@ CPP_CODING_CONTENT_SYSTEM_PROMPT = (
     "Include 1-2 actionable hints that progressively guide the learner without giving away the final "
     f"implementation. {MATH_FORMATTING_INSTRUCTION} Favor modern, idiomatic C++17, and call out any "
     "memory-safety or pointer/reference pitfalls the exercise touches on."
+)
+
+PYTHON_ML_CODING_ARTIFACTS_SYSTEM_PROMPT = (
+    "You are given a lesson's explanation. Build the matching Python coding exercise it describes: in "
+    "workspace, provide 1-2 files with visibility 'visible' and editable_regions null; each visible file must "
+    "compile but leave the target behavior described in the lesson unimplemented (a stub or a deliberate gap). "
+    "Keep environment_id 'python-ml'. Provide 1-2 visible_tests, real runnable pytest files with descriptive "
+    "test function names and short docstrings demonstrating normal-case behavior the learner can study and run "
+    "at will; separately provide 1-3 hidden_tests covering additional edge cases and failure behavior used for "
+    "grading, never shown to the learner. Every visible_tests path and every hidden_tests path MUST start with "
+    "'test_' (e.g. test_basic.py) so pytest can discover it - never a name like checks.py that pytest will not "
+    "collect. Numeric/ML assertions must use an appropriate tolerance (e.g. numpy.allclose, torch.allclose, or "
+    "pytest.approx) instead of exact equality, and any randomness -- numpy/torch seeds, train/test splits, "
+    "weight initialization -- must be seeded so a test's outcome is deterministic across runs. Structural rules "
+    "that are strictly enforced: reference_solution_files must contain exactly the same paths as the visible "
+    "workspace files (no extras, none missing) and must implement the behavior correctly, matching what the "
+    "lesson explanation describes; the visible workspace files must NOT contain the working implementation — a "
+    "starter that already passes the tests is rejected; test files must not reuse a workspace file path."
 )
 
 CPP_CODING_ARTIFACTS_SYSTEM_PROMPT = (
@@ -190,11 +225,13 @@ REPAIR_TOOLS: list[dict[str, Any]] = [
 
 CODING_CONTENT_PROMPT_BY_LANGUAGE = {
     "python": CODING_CONTENT_SYSTEM_PROMPT,
+    "python-ml": PYTHON_ML_CODING_CONTENT_SYSTEM_PROMPT,
     "cpp": CPP_CODING_CONTENT_SYSTEM_PROMPT,
 }
 
 CODING_ARTIFACTS_PROMPT_BY_LANGUAGE = {
     "python": CODING_ARTIFACTS_SYSTEM_PROMPT,
+    "python-ml": PYTHON_ML_CODING_ARTIFACTS_SYSTEM_PROMPT,
     "cpp": CPP_CODING_ARTIFACTS_SYSTEM_PROMPT,
 }
 
@@ -202,6 +239,7 @@ CODING_ARTIFACTS_PROMPT_BY_LANGUAGE = {
 # environment registry (services/sandbox_runner/sandbox_runner/runner.py).
 ENVIRONMENT_ID_BY_LANGUAGE = {
     "python": "python-basic",
+    "python-ml": "python-ml",
     "cpp": "cpp-basic",
 }
 
@@ -222,6 +260,18 @@ ENVIRONMENT_PACKAGES = {
         "or deep-learning behavior from scratch with numpy rather than reaching for a "
         "framework: the from-scratch numpy implementation IS the intended exercise, not a "
         "one-line call into a library that hides the concept being taught."
+    ),
+    "python-ml": (
+        "Runtime environment: the sandbox runs this lab on Python 3.13 with a GPU-capable "
+        "PyTorch stack installed: numpy, pandas, scipy, scikit-learn, matplotlib, seaborn, "
+        "torch, torchvision, pytest. CUDA is used automatically when the host has a GPU and "
+        "falls back to CPU otherwise -- never hardcode a device string; select it with "
+        "something like torch.device(\"cuda\" if torch.cuda.is_available() else \"cpu\") so "
+        "the same code is correct either way. TensorFlow, JAX, and Hugging Face transformers "
+        "are NOT installed, and there is no network access, so importing anything outside "
+        "this list makes every test error at collection and the lab fails to build. Unlike "
+        "python-basic, use the real library APIs (scikit-learn estimators, torch.nn modules, "
+        "etc.) rather than reimplementing them from scratch -- that's the point of this track."
     ),
     "cpp-basic": (
         "Runtime environment: the sandbox compiles this lab with g++ 13 (C++17) and "

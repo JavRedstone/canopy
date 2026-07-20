@@ -35,6 +35,7 @@ PRACTICE_STEM_SIMILARITY = 0.8
 # sandbox_runner/runner.py's own per-environment `file_suffix`, which this mirrors.
 ENVIRONMENT_FILE_SUFFIXES: dict[str, tuple[str, ...]] = {
     "python-basic": (".py",),
+    "python-ml": (".py",),
     "cpp-basic": (".cpp", ".h", ".hpp"),
 }
 

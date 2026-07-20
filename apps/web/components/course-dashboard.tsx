@@ -20,6 +20,12 @@ import { LinkButton } from "@/components/link-button";
 import { UNDERSTAND_COLOR } from "@/lib/palette";
 import { createClient } from "@/lib/supabase/client";
 
+const LANGUAGE_LABEL: Record<CourseSummary["language"], string> = {
+  python: "Python",
+  "python-ml": "ML/DL",
+  cpp: "C++"
+};
+
 export function CourseDashboard() {
   const [courses, setCourses] = useState<CourseSummary[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
@@ -95,7 +101,7 @@ export function CourseDashboard() {
             <Stack sx={{ minWidth: 0, flex: 1, gap: 0.35 }}>
               <Stack direction="row" sx={{ alignItems: "center", gap: 0.75, minWidth: 0 }}>
                 <Typography noWrap sx={{ fontWeight: 750 }}>{course.title}</Typography>
-                <Chip size="small" label={course.language} variant="outlined" sx={{ height: 20, fontSize: "0.68rem", textTransform: "uppercase" }} />
+                <Chip size="small" label={LANGUAGE_LABEL[course.language]} variant="outlined" sx={{ height: 20, fontSize: "0.68rem", textTransform: "uppercase" }} />
               </Stack>
               <Typography variant="body2" color="text.secondary" sx={{ overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical" }}>{course.goal}</Typography>
             </Stack>

@@ -33,7 +33,7 @@ class PlaygroundRunRequest(BaseModel):
     own convention (pytest: test_*.py, node --test: *.test.js, go test: *_test.go,
     doctest: any *.cpp file)."""
 
-    environment_id: Literal["python-basic", "javascript-basic", "go-basic", "cpp-basic"]
+    environment_id: Literal["python-basic", "python-ml", "javascript-basic", "go-basic", "cpp-basic", "c-basic"]
     files: list[LessonWorkspaceFile] = Field(min_length=1, max_length=20)
 
 

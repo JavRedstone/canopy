@@ -1,174 +1,144 @@
 # Use cases — reference
 
-**Purpose:** a side-by-side reference of the plausible use cases for Canopy, each
-checked against what the product can *actually do today* (2026-07-18) rather than
-what the plan describes. This is not a recommendation — see
-[`MARKET_EXPLORATION.md`](./MARKET_EXPLORATION.md) for the business case and
-[`DEMO.md`](../demo/DEMO.md) for the one use case that's been scripted into a demo. This doc
-exists because several of these use cases share a persona and a pitch sentence but
-diverge hard on what they'd actually require from the current codebase.
+**Purpose:** a side-by-side reference of plausible use cases for Canopy, each checked
+against what the product can *actually do today* rather than what any plan describes.
+"Feasibility today" below is graded against the real implementation — schemas, the
+sandbox registry, ingestion, the auth model — verified in code, not assumed from intent.
 
-"Feasibility today" below is graded against the real implementation, verified in code
-(schemas, sandbox, ingestion, auth model) — not against the product plan's intent.
+This version is written against [`HACKATHON.md`](../demo/HACKATHON.md)'s own judging
+lens rather than a business case: **potential impact** (a clear user, a specific pain
+point, practical value), **design** (a complete, coherent product experience, not a
+technical concept demo), and **quality of idea** (originality, real understanding of the
+problem). Canopy's natural fit is the **Education** track.
 
-## Structural gaps that affect every use case below
+## What actually works today
 
-Read this section first — it applies across the board, so it isn't repeated per row.
+Read this first — it's the ground truth every use case below is checked against.
 
-- **No org/team/multi-seat model.** `profiles`/`courses` are single-owner
-  (`owner_id = auth.uid()`, one row, one person). There is no "assign this course to a
-  team," no manager/admin view, no cohort progress reporting. Every use case involving
-  a manager, instructor, or DevRel team distributing a course to *other people* needs
-  this layer and doesn't have it — today, the person who uploads the source is the
-  only person who can ever see or run the resulting course.
-- **Sandbox executes Python only.** Hard-locked in two places: the lesson-workspace
-  file-path schema (`_SAFE_PY_PATH` regex in `services/worker/worker/lesson_schema.py`)
-  and the sandbox runner's `environment_id: Literal["python-basic"]`
-  (`services/sandbox_runner/sandbox_runner/main.py`). No SQL, JS/TS, Go, etc. execution
-  exists or is close to existing.
-- **No repository/codebase ingestion.** Sources are uploaded one file at a time
-  (PDF/Markdown/plain text, ≤6MB) and attached to a course by `source_ids`. Multiple
-  files per course works; a live GitHub repo, a folder tree, or "watch this repo for
-  changes" does not exist. `DEMO.md` already scopes around this by hand-curating a
-  fictional file packet — that pattern generalizes to any use case below, but it's manual
-  curation each time, not an integration.
-- **Source parsing is prose-oriented.** Non-markdown text (which is what a code excerpt
-  or config file would be uploaded as) gets a single generic `section="Document"` label
-  and naive character-count chunking (`services/worker/worker/parsing.py`) — no
-  per-file identity, no function/line-boundary awareness. Citations now show the real
-  excerpt (see the citation-viewer work earlier in this doc's history), but a citation
-  into a code file will look worse than one into prose.
-- **No data-residency/deployment story yet.** Everything runs against one shared
-  Supabase project and one shared LLM Gateway; there's no private-deployment or
-  per-tenant isolation option. `MARKET_EXPLORATION.md` flags this as a required answer
-  before a serious enterprise pilot — it's unresolved.
+- **Multi-file source ingestion.** PDF, Markdown, or plain text, up to 6 MB each,
+  attached to a course by `source_ids` (`services/api/app/routers/sources.py`). Multiple
+  files per course is normal; a live repo or "watch this folder" integration doesn't
+  exist — every packet is uploaded by hand.
+- **Three coding-lab environments, not one.** `python-basic` (numpy/pandas/scikit-learn,
+  implement-it-yourself framing), `python-ml` (numpy/pandas/scipy/scikit-learn/
+  matplotlib/seaborn/PyTorch/torchvision — GPU-accelerated where the host has one, CPU
+  otherwise, no TensorFlow), and `cpp-basic` (g++ 17 + doctest). A course picks one at
+  creation (`courses.language`) and every lab in it targets that environment
+  (`services/worker/worker/lesson_agent.py`, `services/sandbox_runner/`). Each lab is
+  sandbox-verified before it's ever shown to a learner: hidden + visible pytest/doctest
+  suites, a starter that's confirmed to fail, and a real repair loop that iterates
+  against the sandbox rather than trusting the model's first answer.
+- **Real citations.** Every claim in a lesson can carry an inline `[chunk-id]` marker
+  that resolves to the actual excerpt it came from, clickable in the UI
+  (`citation_excerpt`, `services/api/app/repository.py`).
+- **A real mastery model, not a completion checkbox.** Two-track Bayesian Knowledge
+  Tracing (`p(understand)` from quizzes, `p(apply)` from labs) with prerequisite-review
+  nudges when a learner is struggling and the concept it builds on is shaky
+  (`services/api/app/mastery.py`, `PrerequisiteRecommendation` in `schemas.py`).
+- **A takeaway artifact.** The full course — lessons, worked examples, quizzes, cited
+  references — exports as a real PDF "coursebook"
+  (`export_coursebook`/`render_textbook_pdf`), not just a web page that stops existing
+  when the trial ends.
+- **A completion certificate.** Once every lesson in a course is done, a certificate
+  (learner, course title, issue date, a deterministic id) is available and pops up
+  automatically the next time the finished course is opened — exportable as its own PDF
+  (`GET .../certificate`, `.../export/certificate`, `certificate_pdf.py`).
+- **Free course cloning.** An owner can flip `is_shared` on; anyone with the course id
+  can import a full copy — modules, concepts, lesson content, prerequisites, source
+  attachments — under their own account. Import is pure database cloning, no worker/LLM
+  call involved (`import_shared_course`,
+  `supabase/migrations/20260719000000_course_sharing_and_import.sql`), so distributing
+  one course to many learners costs nothing per additional learner. Each importer gets
+  their *own* independent copy: their own progress, mastery, and submissions, with no
+  link back to the original for the sharer to see how anyone else is doing.
 
-## Quick comparison
+## What's still missing
 
-| Use case | Persona | Source material | Org/team layer needed? | Sandbox language needed | Feasibility today |
-|---|---|---|---|---|---|
-| [Internal API/SDK onboarding](#1-internal-apisdk-onboarding) | New engineer, onboarding | Internal docs, ADRs, code excerpts, PRs | Yes | Ideally matches the real stack (often not Python) | Partial |
-| [Framework/platform migration](#2-frameworkplatform-migration) | Existing engineer adopting a new version | Migration guide, release notes, before/after code | Yes | Matches the framework's language | Partial |
-| [Data & analytics enablement](#3-data--analytics-enablement) | Analyst | Data dictionary, SQL patterns, sample data | Yes | SQL (not supported at all) | Weak |
-| [Technical partner certification](#4-technical-partner-certification) | External partner/integrator | Public API docs, integration guide | Yes, plus external-identity handling | Matches the partner API's language | Partial |
-| [Niche computational course](#5-niche-computational-course-instructor-led) | Grad student / course participant | Course reader, paper set, methodology guide | Yes (instructor distributes to students) | Python (common for these) | Partial |
-| [Advanced self-directed learner](#6-advanced-self-directed-learner) | Individual technical learner | Paper, docs, textbook chapter (PDF/Markdown) | No — single user by design | Python | **Strong** |
+- **No cohort/manager view.** Sharing is Google-Docs-style (anyone with the link gets
+  their own copy), not a live-shared course with a dashboard the sharer can watch. There
+  is no "assign this to five people and see their progress" — that would need a real
+  org/team layer, which doesn't exist (`courses.owner_id` is the only authorization axis
+  anywhere in the schema).
+- **No repository/codebase ingestion.** Sources are uploaded one file at a time by a
+  human; there's no "point this at a GitHub repo."
+- **Source parsing is prose-oriented.** A non-Markdown text file (what a code excerpt or
+  config file would be uploaded as) gets one generic `section="Document"` label and
+  naive character-count chunking (`services/worker/worker/parsing.py`) — a citation into
+  prose looks much better than a citation into code.
+- **One shared deployment.** Everything runs against a single Supabase project and a
+  single LLM Gateway; there's no per-tenant isolation or private-deployment story.
 
-## 1. Internal API/SDK onboarding
+## Use cases
 
-**Persona:** a new or existing engineer who needs to work with a company-internal API,
-SDK, or service (`MARKET_EXPLORATION.md`'s primary market; `DEMO.md`'s Maya).
+### 1. Turn any source into a validated, hands-on course (solo self-study)
 
-**Workflow:** upload a service overview, an ADR, a code excerpt, and a recent PR as
-separate Markdown/text files; set the goal to something like "safely add validation for
-an expired authorization hold"; the learner reads source-cited lessons and does a lab
-that edits one function inside a larger read-only file.
+**Who:** a learner with a paper, a library's docs, or a textbook chapter, who wants more
+than a summary — they want lessons that cite the real material, plus labs and quizzes
+that actually check whether the concept landed.
 
-**What already works:** multi-file source packets (`source_ids: list[UUID]`), the
-visible/inspectable + `editable_regions` workspace split needed for "edit one function
-in a bigger file," real clickable citations back to the uploaded excerpt.
+**Workflow:** upload the source, set a goal (see
+[`SAMPLE_COURSES.md`](./SAMPLE_COURSES.md) — the same source produces a conceptual
+course, a hands-on course, or a from-scratch-implementation course depending on the
+goal), work through the generated modules solo.
 
-**What's missing:** the org/team layer (there's no way for an engineering manager to
-assign this course to five new hires and see their progress — today only the uploader
-has any course at all); the real code excerpt is very likely not Python, and the
-sandbox can't run anything else, so the packet has to be adapted to a Python-equivalent
-example rather than the team's actual code; no repo ingestion, so every new API surface
-needs a manually curated file packet.
+**Why it fits:** this is the use case that needs nothing Canopy doesn't already have —
+no team layer, no non-Python-family sandbox, no repo ingestion. It's also the most
+complete *product* experience end to end: cited lessons, sandbox-verified labs, real
+mastery tracking, a PDF coursebook at the end. As a hackathon demo it's the safest
+"show the whole loop working" path.
 
-**Open question:** is a Python-only lab still convincing when the target audience's
-actual code is TypeScript/Go/Java? This is the single biggest fit question for this use
-case specifically, since it's the one `DEMO.md` is built around.
+### 2. Learn a library or systems concept by actually using it
 
-## 2. Framework/platform migration
+**Who:** someone who wants to get hands-on with a specific technical stack — PyTorch and
+the classical ML toolkit, or C++ fundamentals like manual memory management and pointer
+arithmetic — rather than reading about it.
 
-**Persona:** an engineer who needs to move code across a breaking framework version.
+**Workflow:** create a course with its language set to `python-ml` or `cpp`; every lab
+in that course is generated, sandboxed, and graded against that environment
+specifically. A `python-ml` lab can lean on real `torch.nn` modules and scikit-learn
+estimators instead of hand-rolling them; a `cpp` lab compiles with g++ and is graded with
+doctest.
 
-**Workflow:** upload release notes, a migration guide, and before/after code samples;
-the course teaches the new pattern and a lab makes the learner fix code that uses the
-deprecated approach.
+**Why it fits:** this is the newest capability in the codebase and the most direct
+"quality of idea" story — the sandbox isn't a fixed Python box, it's a small registry of
+curated, resource-tuned environments (`services/sandbox_runner/sandbox_runner/runner.py`)
+that the course-generation prompt set already knows how to target correctly (each
+environment tells the model exactly what's importable, so a lab can't silently reference
+a package that isn't there). It's also a good demo of the agentic repair loop actually
+mattering: a generated lab that imports something unavailable, or whose starter already
+passes, gets caught and fixed against a real sandbox run before a learner ever sees it.
 
-**What already works:** same multi-file ingestion and editable-workspace mechanics as
-#1 above — this is architecturally the same shape of use case.
+### 3. One course, shared for free with many learners
 
-**What's missing:** same org/team gap; same language constraint (a migration lab is
-only faithful if the sandbox runs the framework's actual language, which is Python-only
-today — this rules out most JS-framework, mobile, or non-Python backend migrations
-without translating the exercise into an unrelated language).
+**Who:** anyone who built a course worth reusing — a study-group organizer, a mentor, a
+teammate who wants to hand a colleague the exact course they just went through — without
+an org/team system existing yet.
 
-## 3. Data & analytics enablement
+**Workflow:** the owner turns sharing on and sends the course id/link; each recipient
+imports their own copy in one action, with no regeneration cost paid twice for the same
+material.
 
-**Persona:** an analyst learning a governed data dictionary, SQL patterns, and
-data-quality checks.
+**Why it fits:** it's a genuine, non-obvious technical decision (clone at the database
+layer instead of re-running generation) that turns an admitted structural gap — no team
+layer — into something that still mostly works for the common case, one link at a time.
+It's an easy, fast thing to demo (import finishes instantly, no waiting on a worker), and
+it directly addresses potential impact: the thing worth sharing is the validated course
+someone already built, not a prompt someone has to re-type.
 
-**Workflow:** upload a data dictionary and sample-data documentation; labs would have
-the learner write and run SQL queries against safe sample data.
+### 4. Prove you actually learned it
 
-**What already works:** source ingestion and citation viewing work the same as any
-other prose/markdown source.
+**Who:** a learner (solo or from use case #3) who wants evidence of progress, not just a
+feeling of having "gone through" the material.
 
-**What's missing:** the actual lab mechanic — there is no SQL execution environment,
-no sample-database sandbox, and no data-platform integration at all. This isn't a small
-gap; it's a different sandbox from the one that exists (Python subprocess execution vs.
-a scoped database connection). Production data must also never enter a learner sandbox,
-which is a second design problem on top of the missing execution environment. Of
-everything in this doc, this is the farthest from what's built.
+**Workflow:** work through labs and quizzes; watch the per-concept mastery meter
+(`p(understand)`/`p(apply)`) move as BKT updates on real observations, not a naive
+percent-complete bar; get nudged back to a shaky prerequisite the moment it's actually
+blocking progress on the current concept, instead of failing silently; once every lesson
+is done, a certificate pops up automatically; export the finished course as a PDF
+coursebook to keep.
 
-## 4. Technical partner certification
-
-**Persona:** an external partner/integrator engineer learning a company's public
-partner API.
-
-**Workflow:** upload the supported integration path's docs; labs simulate calling the
-partner API and handling its error cases.
-
-**What already works:** the same ingestion/citation/workspace mechanics as #1 and #2.
-
-**What's missing:** everything #1 and #2 are missing, plus this one adds external
-identity — partners aren't the same tenant as the company running Canopy, and there's
-no concept of an external/guest account, license-gated access, or per-partner reporting
-today. This use case inherits the org/team gap and adds a harder version of it.
-
-## 5. Niche computational course (instructor-led)
-
-**Persona:** a grad student or course participant in a niche/rapidly-changing technical
-course; the instructor is the one building the course
-(`MARKET_EXPLORATION.md`'s third audience).
-
-**Workflow:** an instructor uploads a course reader, paper set, or methodology guide;
-students go through the resulting course and labs.
-
-**What already works:** PDF and Markdown ingestion (the natural format for a course
-reader or paper), multi-file source packets, Python labs (a natural fit for
-computational coursework), citations back to the reader.
-
-**What's missing:** the org/team gap again — an instructor distributing one course to a
-class of students has no mechanism to do that today; each student would need to be the
-`owner_id` of their own independently-created course from the same uploaded material,
-which also means paying the generation cost once per student rather than once per
-class. Licensing/rights to the course reader is also an open question this doc doesn't
-resolve (see `MARKET_EXPLORATION.md`'s "source material has ownership or licensing
-restrictions" risk).
-
-## 6. Advanced self-directed learner
-
-**Persona:** an individual learning a specialized library, research technique, or
-technical domain from papers/docs on their own
-(`MARKET_EXPLORATION.md`'s explicit secondary market — "not the best first market").
-
-**Workflow:** upload a paper or library's documentation (e.g. a scikit-learn chapter);
-set a goal like implementing an algorithm from scratch; work through labs solo. This is
-close to the existing [`SAMPLE_COURSES.md`](./SAMPLE_COURSES.md) examples.
-
-**What already works:** everything — this is the one use case that needs no org/team
-layer (single user, single course, by construction), fits the Python-only sandbox
-without translation, and only needs PDF/Markdown/text sources, which is exactly what
-ingestion supports today. It's also the use case `MARKET_EXPLORATION.md` explicitly
-says *not* to lead the business on, because NotebookLM/ChatGPT are lower-friction
-substitutes for a solo learner who doesn't strictly need validated labs.
-
-**The tension worth naming:** this is the best-supported use case in the codebase today
-and the one the business case says is the weakest wedge. Every use case with a stronger
-business case (#1, #2, #4, #5) requires the org/team layer that doesn't exist yet, and
-several also fight the Python-only sandbox. That gap — between "what's easiest to build
-on top of today" and "what the market analysis says is defensible" — is the core
-uncertainty this doc was written to make visible, not resolve.
+**Why it fits:** this is the "design/complete product experience" criterion most
+directly — the mastery model and prerequisite nudges are real inference over recorded
+observations, not decoration, and the certificate plus PDF export are tangible artifacts
+a demo can end on. It's less flashy to show in isolation than a live-coding lab, so it demos best paired
+with #1 or #2 rather than standalone.

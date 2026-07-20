@@ -15,6 +15,11 @@ class PlannerConcept(BaseModel):
     citations: list[str] = Field(default_factory=list)
 
 
+# Mirrors courses.language's check constraint (supabase/migrations/20260719020000_python_ml_course_language.sql)
+# and services/api/app/schemas.py's CourseLanguage -- keep all three in sync.
+CourseLanguage = Literal["python", "python-ml", "cpp"]
+
+
 class OutlineModule(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -42,6 +47,19 @@ class CourseOutline(BaseModel):
     source_set_hash: str = Field(min_length=1)
     audience: str = Field(min_length=1, max_length=600)
     objectives: list[str] = Field(min_length=1, max_length=8)
+    # The language every coding lab in this course will be generated and run in -- inferred
+    # here from the goal and source material rather than asked of the learner, since they
+    # are rarely in a position to know the right runtime for a source they haven't read yet.
+    language: CourseLanguage = Field(
+        description=(
+            "The language this course's coding labs should run in. Use 'python-ml' when the "
+            "goal or source centers on machine learning or deep learning -- implementing a "
+            "paper's model, training loops, tensors, numerical experiments -- so labs get "
+            "numpy/pandas/scikit-learn/PyTorch instead of pure-Python primitives. Use 'cpp' "
+            "when the goal is explicitly about C++ or systems/performance programming. "
+            "Otherwise use 'python'."
+        )
+    )
     modules: list[OutlineModule] = Field(min_length=1, max_length=10)
 
     @model_validator(mode="after")

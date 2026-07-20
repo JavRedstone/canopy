@@ -9,6 +9,7 @@ def _outline(**overrides: object) -> dict:
         "source_set_hash": "source-hash",
         "audience": "Backend developers new to authentication.",
         "objectives": ["Understand JWT structure", "Validate tokens safely"],
+        "language": "python",
         "modules": [
             {"id": "jwt-basics", "title": "JWT basics", "focus": "What a JWT is and its parts.", "lesson_count": 6},
             {"id": "validation", "title": "Validation", "focus": "Verifying signatures and claims.", "lesson_count": 6},

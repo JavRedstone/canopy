@@ -12,6 +12,7 @@ from httpx import HTTPError
 from postgrest.exceptions import APIError
 from supabase import Client
 
+from app.course_category import accent_colors_for
 from app.lesson_bundle import bundle_view
 from app.mastery import (
     AssessmentKind,
@@ -33,7 +34,7 @@ from app.practice import (
     concepts_needing_top_up,
     select_practice_items,
 )
-from app.schemas import CitationExcerptResponse, ConceptDetailResponse, ConceptMastery, CoursePointsResponse, CourseMapConcept, CourseMapModule, CourseMapResponse, CourseMasteryResponse, CourseProgressResponse, CourseSourceSummary, CourseSummary, CreateCourseRequest, CreateSourceRequest, LessonPreview, LessonWorkspaceFile, PracticeFilter, PracticeOrder, PracticeQuestion, PracticeScope, PracticeSessionResponse, PrerequisiteConcept, PrerequisiteRecommendation, PrerequisiteReviewResponse, QuizAnswerRequest, QuizGradeResponse, QuizItemPreview, QuizOptionPreview, RecommendationDecision, RecommendationSummary, RecommendationsResponse, SourceDownloadResponse, SourceSummary, SourceUploadTarget, UpdateCourseRequest
+from app.schemas import CertificateResponse, CitationExcerptResponse, ConceptDetailResponse, ConceptMastery, CoursePointsResponse, CourseMapConcept, CourseMapModule, CourseMapResponse, CourseMasteryResponse, CourseProgressResponse, CourseSourceSummary, CourseSummary, CreateCourseRequest, CreateSourceRequest, LessonPreview, LessonWorkspaceFile, PracticeFilter, PracticeOrder, PracticeQuestion, PracticeScope, PracticeSessionResponse, PrerequisiteConcept, PrerequisiteRecommendation, PrerequisiteReviewResponse, ProfileResponse, QuizAnswerRequest, QuizGradeResponse, QuizItemPreview, QuizOptionPreview, RecommendationDecision, RecommendationSummary, RecommendationsResponse, SourceDownloadResponse, SourceSummary, SourceUploadTarget, UpdateCourseRequest, UpdateProfileRequest
 from app.settings import get_settings
 from app.supabase import get_service_client
 
@@ -214,6 +215,23 @@ class CourseRepository(Protocol):
         """The source chunk text and filename behind a lesson citation marker."""
         ...
 
+    def certificate(self, owner_id: UUID, course_id: UUID) -> CertificateResponse:
+        """The completion certificate for a fully finished course. Raises 409 if the
+        course isn't fully completed yet."""
+        ...
+
+    def public_certificate(self, certificate_id: UUID) -> CertificateResponse:
+        """The same certificate, looked up by its durable public link id instead of
+        (owner_id, course_id) -- no authenticated owner required. Raises 404 if unknown."""
+        ...
+
+    def profile(self, owner_id: UUID) -> ProfileResponse:
+        """The current user's own profile (email + optional display name)."""
+        ...
+
+    def update_profile(self, owner_id: UUID, request: UpdateProfileRequest) -> ProfileResponse:
+        ...
+
     def course_sources(self, owner_id: UUID, course_id: UUID) -> list[CourseSourceSummary]:
         """The documents this course was built from, in their attached order."""
         ...
@@ -225,6 +243,12 @@ class CourseRepository(Protocol):
     def course_points(self, owner_id: UUID, course_id: UUID) -> CoursePointsResponse: ...
 
     def regenerate_lesson(self, owner_id: UUID, course_id: UUID, slug: str) -> None: ...
+
+    def clear_demo_progress(self, owner_id: UUID, course_id: UUID, concept_slugs: list[str] | None) -> None:
+        """Dev-only: the undo for a demo auto-complete run. Wipes mastery, observations,
+        and lesson-assignment state for the given concepts (every concept when None) back
+        to a blank, never-attempted state."""
+        ...
 
 
 @dataclass
@@ -263,6 +287,7 @@ class MemoryCourseRepository:
     def __init__(self) -> None:
         self.sources: dict[UUID, SourceRecord] = {}
         self.courses: dict[UUID, CourseRecord] = {}
+        self.display_names: dict[UUID, str | None] = {}
 
     def create_source(self, owner_id: UUID, request: CreateSourceRequest) -> SourceUploadTarget:
         source_id = uuid4()
@@ -496,6 +521,22 @@ class MemoryCourseRepository:
         # concept_detail() always returns citations=[] in memory mode, so this is unreachable from the UI.
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Citation not found.")
 
+    def certificate(self, owner_id: UUID, course_id: UUID) -> CertificateResponse:
+        self._course_for_owner(owner_id, course_id)
+        # Memory mode never tracks real lesson completion, so a course here is never "done".
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This course is not fully completed yet.")
+
+    def public_certificate(self, certificate_id: UUID) -> CertificateResponse:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Certificate not found.")
+
+    def profile(self, owner_id: UUID) -> ProfileResponse:
+        return ProfileResponse(email="dev@example.com", display_name=self.display_names.get(owner_id))
+
+    def update_profile(self, owner_id: UUID, request: UpdateProfileRequest) -> ProfileResponse:
+        name = (request.display_name or "").strip() or None
+        self.display_names[owner_id] = name
+        return self.profile(owner_id)
+
     def course_sources(self, owner_id: UUID, course_id: UUID) -> list[CourseSourceSummary]:
         course = self._course_for_owner(owner_id, course_id)
         summaries = []
@@ -527,6 +568,11 @@ class MemoryCourseRepository:
         self._course_for_owner(owner_id, course_id)
         if slug not in {"core-pattern", "robustness"}:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Concept not found.")
+
+    def clear_demo_progress(self, owner_id: UUID, course_id: UUID, concept_slugs: list[str] | None) -> None:
+        # No mastery/observations/assignments exist in memory mode; validating ownership is
+        # all there is to do.
+        self._course_for_owner(owner_id, course_id)
 
     def _source_for_owner(self, owner_id: UUID, source_id: UUID) -> SourceRecord:
         source = self.sources.get(source_id)
@@ -739,8 +785,10 @@ class SupabaseCourseRepository:
 
     def get_course(self, owner_id: UUID, course_id: UUID) -> CourseSummary:
         course = self._course_for_owner(owner_id, course_id)
-        versions = self._versions_for([course["active_version_id"]] if course["active_version_id"] else [])
-        return self._summary(course, versions)
+        version_ids = [course["active_version_id"]] if course["active_version_id"] else []
+        versions = self._versions_for(version_ids)
+        progress = self._lesson_progress_for(owner_id, version_ids)
+        return self._summary(course, versions, progress)
 
     def update_course(self, owner_id: UUID, course_id: UUID, request: UpdateCourseRequest) -> CourseSummary:
         self._course_for_owner(owner_id, course_id)
@@ -1863,6 +1911,98 @@ class SupabaseCourseRepository:
             content=chunk["content"],
         )
 
+    # Flat estimate, not measured time-on-task -- no such tracking exists yet (see
+    # docs/product/PEDAGOGY_EVALUATION.md). Framed as "estimated" everywhere it's shown.
+    _ESTIMATED_MINUTES_PER_LESSON = 18
+
+    def _certificate_rows(self, course_id: UUID, owner_id: UUID) -> list[dict[str, Any]]:
+        return self._data(
+            self.client.table("certificates").select("id,issued_at").eq("course_id", str(course_id)).eq("owner_id", str(owner_id)),
+            "load certificate record",
+        )
+
+    def _get_or_create_certificate_row(self, owner_id: UUID, course_id: UUID) -> dict[str, Any]:
+        existing = self._certificate_rows(course_id, owner_id)
+        if existing:
+            return existing[0]
+        try:
+            inserted = self.client.table("certificates").insert(
+                {"course_id": str(course_id), "owner_id": str(owner_id)}
+            ).execute().data
+        except APIError as exc:
+            if getattr(exc, "code", None) != "23505":  # not a unique-violation
+                logger.exception("Supabase request failed while attempting to issue certificate record")
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="The course service is temporarily unavailable.",
+                ) from exc
+            inserted = None  # a concurrent call already inserted it -- fall through and re-read
+        if inserted:
+            return inserted[0]
+        return self._one(self._certificate_rows(course_id, owner_id), "Certificate")
+
+    def _build_certificate(self, certificate_row_id: str, course_id: UUID, owner_id: UUID, issued_at: str, course_title: str, course_goal: str) -> CertificateResponse:
+        profile = self._one(
+            self._data(self.client.table("profiles").select("email,display_name").eq("id", str(owner_id)), "load learner profile"),
+            "Profile",
+        )
+        learner_name = profile.get("display_name") or profile["email"]
+        course_map = self.course_map(owner_id, course_id)
+        skills = [module.title for module in course_map.modules if module.concepts][:5]
+        lessons_total = sum(len(module.concepts) for module in course_map.modules)
+        estimated_hours = max(0.5, round(lessons_total * self._ESTIMATED_MINUTES_PER_LESSON / 60 * 2) / 2)
+        # Deterministic, short display label -- separate from the durable link, which is
+        # keyed on the certificates row id instead so it can't be recomputed/guessed.
+        certificate_id = sha256(f"{course_id}:{owner_id}".encode()).hexdigest()[:12].upper()
+        accent_color, accent_tint = accent_colors_for(course_title, course_goal)
+        return CertificateResponse(
+            course_id=course_id,
+            course_title=course_title,
+            learner_name=learner_name,
+            issued_at=self._timestamp(issued_at) if isinstance(issued_at, str) else issued_at,
+            certificate_id=certificate_id,
+            verify_url=f"{get_settings().public_app_url.rstrip('/')}/certificates/{certificate_row_id}",
+            skills=skills,
+            estimated_hours=estimated_hours,
+            accent_color=accent_color,
+            accent_tint=accent_tint,
+        )
+
+    def certificate(self, owner_id: UUID, course_id: UUID) -> CertificateResponse:
+        summary = self.get_course(owner_id, course_id)
+        if summary.lessons_total == 0 or summary.lessons_completed < summary.lessons_total:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This course is not fully completed yet.")
+        row = self._get_or_create_certificate_row(owner_id, course_id)
+        return self._build_certificate(row["id"], course_id, owner_id, row["issued_at"], summary.title, summary.goal)
+
+    def public_certificate(self, certificate_id: UUID) -> CertificateResponse:
+        row = self._one(
+            self._data(
+                self.client.table("certificates").select("id,course_id,owner_id,issued_at,courses(title,goal)").eq("id", str(certificate_id)),
+                "load certificate record",
+            ),
+            "Certificate",
+        )
+        return self._build_certificate(
+            row["id"], UUID(row["course_id"]), UUID(row["owner_id"]), row["issued_at"],
+            row["courses"]["title"], row["courses"]["goal"],
+        )
+
+    def profile(self, owner_id: UUID) -> ProfileResponse:
+        row = self._one(
+            self._data(self.client.table("profiles").select("email,display_name").eq("id", str(owner_id)), "load profile"),
+            "Profile",
+        )
+        return ProfileResponse(email=row["email"], display_name=row.get("display_name"))
+
+    def update_profile(self, owner_id: UUID, request: UpdateProfileRequest) -> ProfileResponse:
+        name = (request.display_name or "").strip() or None
+        self._data(
+            self.client.table("profiles").update({"display_name": name}).eq("id", str(owner_id)),
+            "update profile",
+        )
+        return self.profile(owner_id)
+
     def course_sources(self, owner_id: UUID, course_id: UUID) -> list[CourseSourceSummary]:
         self._course_for_owner(owner_id, course_id)
         rows = self._data(
@@ -2224,6 +2364,51 @@ class SupabaseCourseRepository:
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="The course service is temporarily unavailable.",
             ) from exc
+
+    def clear_demo_progress(self, owner_id: UUID, course_id: UUID, concept_slugs: list[str] | None) -> None:
+        course = self._course_for_owner(owner_id, course_id)
+        version_id = course.get("active_version_id")
+        if not version_id:
+            return
+        concepts_query = self.client.table("concepts").select("id").eq("course_version_id", version_id)
+        if concept_slugs is not None:
+            concepts_query = concepts_query.in_("slug", concept_slugs)
+        concept_ids = [row["id"] for row in self._data(concepts_query, "load concepts for demo clear")]
+        if not concept_ids:
+            return
+        definition_ids = [
+            row["id"]
+            for row in self._data(
+                self.client.table("lesson_definitions").select("id").in_("concept_id", concept_ids),
+                "load lesson definitions for demo clear",
+            )
+        ]
+        if definition_ids:
+            revision_ids = [
+                row["id"]
+                for row in self._data(
+                    self.client.table("lesson_revisions").select("id").in_("lesson_definition_id", definition_ids),
+                    "load lesson revisions for demo clear",
+                )
+            ]
+            # Deleting the assignment cascades its quiz_responses and submissions rows too
+            # (both FKs are ON DELETE CASCADE), so neither needs a separate delete here.
+            if revision_ids:
+                self._data(
+                    self.client.table("learner_lesson_assignments")
+                    .delete()
+                    .eq("user_id", str(owner_id))
+                    .in_("lesson_revision_id", revision_ids),
+                    "clear lesson assignments for demo clear",
+                )
+        self._data(
+            self.client.table("observations").delete().eq("user_id", str(owner_id)).in_("concept_id", concept_ids),
+            "clear observations for demo clear",
+        )
+        self._data(
+            self.client.table("mastery").delete().eq("user_id", str(owner_id)).in_("concept_id", concept_ids),
+            "clear mastery for demo clear",
+        )
 
     def _source_for_owner(self, owner_id: UUID, source_id: UUID) -> dict[str, Any]:
         return self._one(

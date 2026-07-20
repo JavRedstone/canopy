@@ -1,6 +1,10 @@
+from uuid import UUID
+
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.repository import get_repository
+from app.schemas import CertificateResponse
 
 
 def test_course_vertical_slice() -> None:
@@ -193,3 +197,64 @@ def test_import_shared_course_gates_on_sharing_and_clones_to_importer() -> None:
     assert other_ids == [body["id"]]
     owner_ids = [row["id"] for row in client.get("/api/v1/courses", headers=owner).json()]
     assert body["id"] not in owner_ids
+
+
+def test_certificate_is_refused_until_the_course_is_fully_completed() -> None:
+    client = TestClient(app)
+    course = client.post(
+        "/api/v1/courses",
+        json={"title": "Unfinished", "goal": "Not done yet"},
+    )
+    assert course.status_code == 201
+    course_id = course.json()["id"]
+
+    # The memory-backed repository used by default in tests never tracks real
+    # lesson completion, so a course here can never be "done".
+    certificate = client.get(f"/api/v1/courses/{course_id}/certificate")
+    assert certificate.status_code == 409
+
+    export = client.get(f"/api/v1/courses/{course_id}/export/certificate")
+    assert export.status_code == 409
+
+
+class _CompletedCourseRepository:
+    """Fakes just enough of CourseRepository for a fully completed course."""
+
+    def certificate(self, owner_id: UUID, course_id: UUID) -> CertificateResponse:
+        return CertificateResponse(
+            course_id=course_id,
+            course_title="API auth",
+            learner_name="Ada Lovelace",
+            issued_at="2026-07-19T00:00:00Z",
+            certificate_id="ABC123DEF456",
+            verify_url="http://localhost:3000/certificates/11111111-1111-1111-1111-111111111111",
+            skills=["JWT Validation", "REST APIs"],
+            estimated_hours=1.5,
+            accent_color="#581c27",
+            accent_tint="#fee2e2",
+        )
+
+
+def test_certificate_is_issued_once_a_course_is_fully_completed() -> None:
+    client = TestClient(app)
+    app.dependency_overrides[get_repository] = lambda: _CompletedCourseRepository()
+    try:
+        course_id = "00000000-0000-0000-0000-0000000000aa"
+
+        certificate = client.get(f"/api/v1/courses/{course_id}/certificate")
+        assert certificate.status_code == 200
+        body = certificate.json()
+        assert body["course_title"] == "API auth"
+        assert body["learner_name"] == "Ada Lovelace"
+        assert body["certificate_id"] == "ABC123DEF456"
+        assert body["skills"] == ["JWT Validation", "REST APIs"]
+        assert body["estimated_hours"] == 1.5
+
+        export = client.get(f"/api/v1/courses/{course_id}/export/certificate")
+        assert export.status_code == 200
+        assert export.headers["content-type"].startswith("application/pdf")
+        assert export.content.startswith(b"%PDF-")
+        assert "attachment;" in export.headers["content-disposition"]
+        assert "API-auth-certificate.pdf" in export.headers["content-disposition"]
+    finally:
+        app.dependency_overrides.clear()

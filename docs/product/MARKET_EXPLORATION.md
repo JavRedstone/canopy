@@ -1,38 +1,42 @@
 # Market Exploration and Product Positioning
 
-**Prepared:** July 17–18, 2026. **Scope:** business case, market map, target customers,
-competitive landscape, positioning, and risks for the Canopy product described in
+**Prepared:** July 17–18, 2026. **Revised:** July 19, 2026, to lead with the hackathon
+submission this product is actually being built for, rather than a standalone business
+case. **Scope:** what Canopy is, who it's for today, the competitive landscape, and
+where a durable business could grow from that — for the product described in
 [`IDEA.md`](./IDEA.md).
 
-> This consolidates three earlier, independently-written explorations
-> (`MARKET_EXPLORATION.md`, `_2`, `_3`) that were kept separate as deliberately
-> independent takes for triangulation. All three converged on the same conclusion, so
-> keeping them separate cost more in confusion than it added in perspective — this is
-> the single synthesized version.
+> This consolidates three earlier, independently-written explorations that converged on
+> the same conclusion, so keeping them separate cost more in confusion than it added in
+> perspective — this is the single synthesized version.
 
-## Executive conclusion
+## Executive summary
 
-Canopy can solve a real problem, but the strongest business is **not** a general-purpose
-AI course generator for everyone. That category — document in, passive study aids or a
-generic course out — is crowded and shallow (NotebookLM, Coursebox, X-Pilot, OmniLearn).
-Canopy's defensible wedge is **technical enablement from proprietary material**: turning
-a company's own internal documentation, code, and change history into source-cited,
-hands-on, hidden-test-graded practice with per-concept mastery tracking — something no
-competitor does, because it requires both "generated from *your* material" and
-"executable, auto-graded practice" at once.
+Canopy is being built for [OpenAI Build Week](../demo/HACKATHON.md), judged on potential
+impact, design (a complete product experience, not a tech demo), and quality of idea —
+in the **Education** track. Judged against that lens, the strongest story is not a
+B2B pitch; it's the use case the code actually supports end to end today: **a learner
+with a source and a goal gets a validated, hands-on course — cited lessons, sandbox-graded
+labs, real mastery tracking, a certificate and a PDF coursebook at the end** — see
+[`USE_CASES.md`](./USE_CASES.md) for exactly what's built vs. still missing, verified
+against the running code.
+
+That doesn't mean the market thinking below is throwaway. The same core mechanism —
+"generated from *your* material" plus "executable, hidden-test-graded practice," a
+combination no competitor does at once — is also the seed of a real B2B wedge (internal
+engineering onboarding, §4.2) once an org/team layer exists to make sharing more than
+one-link-at-a-time. That's the credible *next* direction, not the thing to lead the
+hackathon submission with:
 
 ```text
-Proprietary engineering context -> validated, hands-on practice -> evidence of applied competence
+Individual learner, self-study (built, demoable today)
+      -> internal engineering onboarding (credible next step, needs an org/team layer)
 ```
 
-The narrower, testable claim to make publicly:
+The narrower, testable version of the durable claim:
 
-> Canopy turns internal technical documentation into validated, hands-on onboarding, so
-> developers can prove they can use a system rather than merely say they read about it.
-
-The demo-friendly story (a lone learner uploading a PDF) and the durable business
-(B2B developer enablement) are **not the same thing** — see [§4](#4-who-should-use-it--ranked).
-Build the demo around the former; build the company around the latter.
+> Canopy turns any source material into validated, hands-on practice — with real
+> evidence that the concept landed, not just that a lesson was viewed.
 
 ## 1. What the product actually is (grounded, not the pitch)
 
@@ -45,12 +49,15 @@ code (Run vs. Submit) and grades it for real.
 
 Live today: dual-track mastery (`p(understand)`/`p(apply)` via BKT), a self-repairing
 generation loop (generate → run → diagnose → patch → re-verify in the sandbox, never
-trusting the model's self-report), real citation grounding back to source excerpts, and
-a multi-language sandbox (Python/JavaScript/Go) proving the execution layer isn't
-hard-locked to one toolchain. Not yet built: the LLM diagnosis-and-remediation layer
-surfaced to learners, just-ahead-of-time generation caching, and org/team course
-assignment (see [`USE_CASES.md`](./USE_CASES.md) for exactly which use cases that gap
-blocks today).
+trusting the model's self-report), real citation grounding back to source excerpts, six
+sandbox environments across four language families (`python-basic`, `python-ml` with
+GPU-capable PyTorch/scikit-learn, `cpp-basic`, `c-basic`, `javascript-basic`, `go-basic`)
+proving the execution layer isn't hard-locked to one toolchain, a completion certificate
+that pops up automatically, a PDF coursebook export, and free course sharing (clone-based
+import, no regeneration cost per additional learner). Not yet built: the LLM
+diagnosis-and-remediation layer surfaced to learners, just-ahead-of-time generation
+caching, and org/team course assignment (see [`USE_CASES.md`](./USE_CASES.md) for exactly
+which use cases that last gap blocks).
 
 The framing that survives scrutiny:
 
@@ -73,7 +80,7 @@ actually execute code.
   where code gets written and graded.
 - **Fixed-catalog interactive coding (deep, locked).** Codecademy, DataCamp, educative,
   boot.dev, Codio have the editor + terminal + hidden-test autograding — but only for a
-  human-authored catalog. None can build a lab from your internal SDK's docs.
+  human-authored catalog. None can build a lab from a document you hand them.
 - **The empty cell** is generated-from-your-materials *and* executable-and-graded. The
   nearest neighbor, ScratchBox ("agentic AI builds labs from a prompt"), targets
   instructors authoring courseware, not learners self-serving from their own material,
@@ -113,57 +120,66 @@ actually execute code.
   produce no curriculum, no active-recall practice, and no evidence of understanding —
   see [§5](#5-what-makes-this-different-from-codebase-chat).
 - **GitHub Skills** — real GitHub-workflow learning (Issues/Actions/Codespaces), but for
-  public GitHub skills, not an org's proprietary internal systems.
+  public GitHub skills, not a learner's own material.
 
 BKT and its successors are mostly research/enterprise adaptive-learning plumbing, not a
 consumer product — Canopy's dual-track mastery is a real differentiator once the
 diagnosis-and-remediation layer is fully live end to end.
 
-## 4. Who should use it — ranked
+## 4. Who this is for — today and beyond
 
-The demo hero and the durable customer are not the same user.
+### 1. Individual self-directed learner — where the product actually lives today
 
-### 1. Internal engineering onboarding (B2B) — where it really lives
+The grad student with a course reader; the engineer learning a niche library that has
+docs but no course; anyone who'd rather build a validated, hands-on course from a source
+they already have than get a passive summary. This is not a fallback story — it's the
+single best-supported use case in the codebase *right now* (see
+[`USE_CASES.md`](./USE_CASES.md) #1 and #2), the natural fit for the hackathon's
+Education track, and the complete product experience end to end: upload a source, get
+cited lessons, sandbox-verified labs, real mastery tracking, a certificate and a PDF
+coursebook at the end. Willingness-to-pay for a solo learner is genuinely uncertain long
+term, and the conceptual half alone is "good enough for free" via NotebookLM — but that's
+a question for *after* proving the product is worth using, not a reason to lead with a
+narrower story today.
+
+### 2. Internal engineering onboarding (B2B) — the credible next direction
 
 Every company with a non-trivial codebase has this problem: internal SDKs, proprietary
 frameworks, service architectures, and runbooks scattered across Confluence/Markdown/PDF
 — and there is no Codecademy course for "Acme's internal payments SDK." New hires read
-stale docs and learn by breaking staging.
+stale docs and learn by breaking staging. Canopy's mechanism — generate from real
+material, grade against real hidden tests, track real mastery — solves that as directly
+as it solves the solo-learner case. What's missing is the organizational layer: today,
+sharing is one link at a time with no shared progress dashboard (`courses.owner_id` is
+the only authorization axis in the schema). That's a real, scoped gap, not a rewrite —
+see [`USE_CASES.md`](./USE_CASES.md#whats-still-missing) — and it's the natural place to
+grow the product once the individual-learner experience has proven itself.
 
-- **Economic buyer:** VP Engineering/CTO, platform engineering, developer productivity.
-- **Champion:** staff engineer, engineering manager, onboarding lead.
-- **Learner:** new hire, engineer transferring teams, contractor with bounded access.
+- **Economic buyer (once built):** VP Engineering/CTO, platform engineering, developer
+  productivity.
 - **Proof of value:** faster first independently-accepted change, fewer predictable
   review errors, less senior-engineer interruption.
-- **Why it's the strongest fit:** budget exists and is CFO-legible ("cut ramp from 3
-  months to 6 weeks"); the shared-content architecture (canonical cached bundles, cohort
-  mastery tracking) only pays off when many learners share the same content — a
-  200-engineer org onboarding onto shared internal material is exactly that shape, one
-  learner with one PDF is not; and there is no incumbent — Codecademy for Business sells
-  the fixed catalog and cannot touch a proprietary stack.
+- **Why it's the strongest longer-term fit:** budget exists and is CFO-legible ("cut ramp
+  from 3 months to 6 weeks"); the shared-content architecture (canonical cached bundles)
+  only pays off when many learners share the same content — a 200-engineer org onboarding
+  onto shared internal material is exactly that shape; and there is no incumbent —
+  Codecademy for Business sells the fixed catalog and cannot touch a proprietary stack.
 
-### 2. Developer relations / API & SDK companies (B2B, second wedge)
+### 3. Developer relations / API & SDK companies (second wedge, if pursued)
 
 The Stripe/Twilio/Datadog pattern: a company shipping an API wants interactive "learn
 our product" labs that stay in sync with the docs, instead of hand-building labs that rot
 as the API changes. Shorter sales cycle than internal-onboarding enterprise deals, so a
-reasonable beachhead before expanding into wedge #1 once generation quality is proven.
+reasonable beachhead before expanding into #2 once generation quality is proven at scale.
 
-### 3. Bootcamps, instructors, niche/rapidly-changing courses (SMB/prosumer)
+### 4. Bootcamps, instructors, niche/rapidly-changing courses (SMB/prosumer)
 
 Have teaching material (a course reader, paper set, lab manual), want interactive labs
 without building sandbox infra. Real, but a knife-fight — ScratchBox, Codio, and
 CodeGrade already contest it. Best where the *topic itself* isn't in any standard
-catalog (a custom research tool, a niche framework) rather than mainstream CS.
-
-### 4. Individual self-directed learner (the demo hero, weakest business)
-
-The grad student with a course reader; the engineer learning a niche library that has
-docs but no course. The best hackathon demo and the most emotionally resonant story, and
-— per [`USE_CASES.md`](./USE_CASES.md) — the single best-supported use case in the
-codebase *today*. But as a business it's weakest: uncertain willingness-to-pay, and the
-conceptual half is already "good enough for free" via NotebookLM or a chatbot with code
-execution. **Build the demo around this user; don't build the company around them.**
+catalog (a custom research tool, a niche framework) rather than mainstream CS. Canopy's
+free course-sharing feature (§1 of `USE_CASES.md`) is a direct fit here: one built course,
+imported by every student for free.
 
 ### Where Canopy should not compete initially
 
@@ -185,9 +201,10 @@ Canopy adds four things that kind of tool does not naturally create:
 2. **Active recall and transfer** — the learner explains, traces, debugs, and changes a
    small realistic example instead of only consuming an answer.
 3. **Evidence of understanding** — completion means a runnable task or assessment was
-   completed, not that a chat was opened.
-4. **Reusable team enablement** — a staff engineer reviews a generated path once; every
-   new teammate or release cohort reuses it.
+   completed, backed by a real mastery model and a certificate, not that a chat was
+   opened.
+4. **Reusable enablement** — one person builds a course once; every subsequent learner
+   imports the validated result for free instead of re-generating or re-explaining it.
 
 ## 6. What must be true (product differentiation requirements)
 
@@ -205,22 +222,26 @@ The positioning only holds if Canopy reliably delivers all of:
 4. **Evidence-based adaptation** — recommendations come from assessed evidence, not
    typing speed or time-on-task; learners can see and decline a recommendation;
    conceptual and applied-skill signals stay separate.
-5. **Enterprise trust** — proprietary material and learner code get clear isolation,
-   access controls, retention policy, and auditability (see [`SECURITY.md`](../architecture/SECURITY.md)
-   for current state); customers can see the source of a generated claim and edit or
-   approve content before assigning it broadly.
+5. **Trust at scale, if this grows into an org tool** — proprietary material and learner
+   code get clear isolation, access controls, retention policy, and auditability (see
+   [`SECURITY.md`](../architecture/SECURITY.md) for current state); an eventual B2B
+   customer needs to see the source of a generated claim and approve content before
+   assigning it broadly.
 
-## 7. A practical early wedge
+## 7. A practical path from here to a B2B wedge
 
-Start with approved, deliberately bounded source packets rather than promising full
-autonomous repository comprehension on day one: a README/architecture doc, a small
-selected set of code files and tests, an ADR, a PR description, an SME-approved example
-task. Preserve citations back to those sources; state uncertainty when sources conflict;
-let an expert edit or approve material before it's assigned — especially important for
-code, where an explanation can be syntactically plausible yet teach the wrong invariant.
+If the org/team direction (§4.2) gets pursued after the hackathon, start with approved,
+deliberately bounded source packets rather than promising full autonomous repository
+comprehension on day one: a README/architecture doc, a small selected set of code files
+and tests, an ADR, a PR description, an SME-approved example task. Preserve citations
+back to those sources; state uncertainty when sources conflict; let an expert edit or
+approve material before it's assigned — especially important for code, where an
+explanation can be syntactically plausible yet teach the wrong invariant.
 
-**Worked example — "How our authorization pipeline works"** (this is the scenario
-[`DEMO.md`](../demo/DEMO.md)'s live demo is built around):
+**Worked example — "How our authorization pipeline works"** (a hypothetical internal
+onboarding packet, illustrative of §7's shape — [`DEMO.md`](../demo/DEMO.md)'s actual
+demo script uses the individual-learner story instead, since that's what the hackathon
+submission is built and demoed around):
 
 1. Three short activities tracing the request lifecycle, data model, and idempotency
    contract.
@@ -233,15 +254,16 @@ code, where an explanation can be syntactically plausible yet teach the wrong in
 
 | Phase | Scope | Why it matters |
 |---|---|---|
+| 0. Individual learner (shipped) | Any source + goal → validated, hands-on course | Proves the core mechanism works before adding organizational complexity |
 | 1. Reviewed source packets | Docs, selected code, hand-curated change context → short learning paths and labs | Proves learning value without broad repo access or unsafe automation |
-| 2. Engineering integrations | Git provider, docs, and PR metadata provide governed source selection and version awareness | Makes paths easier to maintain as systems evolve |
-| 3. Change learning | A merged change or release produces an optional, reviewable "what changed and why" path | Turns change management into understanding, not just notification |
-| 4. Measured transfer | Independent task outcomes improve recommendations and flag weak content | Validates Canopy improves real capability, not just engagement |
+| 2. Org/team layer | Real assignment + cohort progress, not link-sharing | Unlocks the B2B wedge in §4.2 — the single biggest gap today |
+| 3. Engineering integrations | Git provider, docs, and PR metadata provide governed source selection and version awareness | Makes paths easier to maintain as systems evolve |
+| 4. Change learning | A merged change or release produces an optional, reviewable "what changed and why" path | Turns change management into understanding, not just notification |
 
-Repository-wide ingestion, PR-aware learning, and automatic updates are roadmap items,
-not current claims, until they're reliable, permission-safe, and reviewable — see
-[`USE_CASES.md`](./USE_CASES.md)'s "structural gaps" section for the current, honest
-state of source ingestion.
+Repository-wide ingestion, PR-aware learning, cohort dashboards, and automatic updates
+are roadmap items, not current claims, until they're reliable, permission-safe, and
+reviewable — see [`ROADMAP.md`](./ROADMAP.md) and
+[`USE_CASES.md`](./USE_CASES.md#whats-still-missing) for the current, honest state.
 
 Canopy should explicitly **not** claim to be: an autonomous code author or merge agent, a
 PR-review replacement, a generic course marketplace, a documentation replacement, or an
@@ -251,33 +273,34 @@ employee-performance/hiring score.
 
 | Risk | Response |
 |---|---|
-| **Foundation models eating the middle.** A general chatbot with code execution, plus free NotebookLM, already covers "explain this doc and quiz me." | The defense is *only* the executable graded sandbox and per-concept mastery — the parts a chat interface structurally omits. Sell the end-to-end organizational outcome (maintainable training, safe practice, source provenance, evidence people can perform the job), not "you can ask questions about a file." |
-| **Generated-lab correctness (the trust story).** A self-repair loop that produces a broken or hallucinated exercise breaks the product on first contact. | Build human review for first releases and high-impact material; track source coverage, SME edits, validation failures, and (later) transfer-task outcomes. This is also the strongest evidence of real agentic engineering in the system — foreground it, don't hide it. |
-| **The mastery score overclaims certainty.** New concepts have no historic learner data; a BKT probability is an estimate, not ground truth. | Treat mastery as a transparent support signal validated by independent transfer exercises. Don't market it as a credential until evidence supports that use. |
-| **Customers won't upload confidential documents.** The best target customer is also the most sensitive to IP/privacy. | Make data handling a first-class feature: isolation, model-provider data controls, retention, tenant boundaries, access logs, a private-deployment option where needed. |
-| **"An ordinary chat product is good enough."** Many prospects can paste a PDF into ChatGPT or NotebookLM in minutes. | Sell the organizational outcome: maintainable training, a safe practice environment, source provenance, assignment-ready material, evidence of performance — not "a better prompt." |
-| **Source material ownership/licensing.** A student uploading a commercial textbook and an enterprise uploading licensed internal material carry different legal risk. | Require the uploader to confirm rights, keep provenance visible, provide deletion controls, prioritize customer-owned documentation for the initial business model. |
-| **B2B sales motion vs. hackathon speed.** The strongest market is an enterprise sale with a real cycle; the consumer wedge is faster to reach but monetizes worse. | Acknowledge the split rather than pretending one funnel serves both — DevRel (§4.2) is the faster-cycle beachhead into the durable market (§4.1). |
+| **Foundation models eating the middle.** A general chatbot with code execution, plus free NotebookLM, already covers "explain this doc and quiz me." | The defense is *only* the executable graded sandbox and per-concept mastery — the parts a chat interface structurally omits. Sell the outcome (real evidence someone can do the thing, not just talk about it), not "you can ask questions about a file." |
+| **Generated-lab correctness (the trust story).** A self-repair loop that produces a broken or hallucinated exercise breaks the product on first contact. | The self-validating sandbox (reference solution must pass before a learner sees the lesson) is already the mitigation and is itself the strongest evidence of real agentic engineering in the system — foreground it, don't hide it. If this grows into a B2B product, add human review for high-impact material and track source coverage, SME edits, and validation failures. |
+| **The mastery score overclaims certainty.** New concepts have no historic learner data; a BKT probability is an estimate, not ground truth — see [`PEDAGOGY_EVALUATION.md`](./PEDAGOGY_EVALUATION.md) §4.2 for the specific gap. | Treat mastery as a transparent support signal, not a credential, until independent transfer exercises validate it. |
+| **"An ordinary chat product is good enough."** Many prospects can paste a PDF into ChatGPT or NotebookLM in minutes. | Sell the specific thing a chat can't do: a validated, hidden-test-graded lab and a mastery model that separates understanding from applying — not "a better prompt." |
+| **Source material ownership/licensing.** A learner uploading a commercial textbook and (eventually) an enterprise uploading licensed internal material carry different legal risk. | Require the uploader to confirm rights, keep provenance visible, provide deletion controls. |
+| **If a B2B motion is pursued later: sales cycle vs. hackathon speed.** The strongest longer-term market is an enterprise sale with a real cycle; the individual-learner product is faster to reach and is what's actually built. | Don't conflate them — build and demo the individual-learner product now; treat §4.2–4.3 as the deliberate next phase, not a parallel claim today. |
 
 ## 9. Positioning language
 
-**Primary:**
+**Primary (what's built and demoable today):**
 
-> Turn internal technical documentation into validated, hands-on onboarding.
+> Turn any source material into a validated, hands-on course — with real evidence the
+> concept landed, not just that a lesson was viewed.
 
-**For internal engineering:**
+**For a future internal-engineering direction:**
 
 > Give every engineer a guided path from "I can find the code" to "I understand the
 > system and can make the next change."
 
-**For DevRel and platforms:**
+**For a future DevRel/platform direction:**
 
 > Turn product documentation and release context into practice developers can complete,
 > not just pages they skim.
 
 **Proof points:** learners practice in a sandbox, not only reading or chatting; every
 generated exercise is checked before release; explanations point back to approved
-sources; adaptation is based on what a learner demonstrates, not what they completed.
+sources; a certificate and mastery model provide real evidence of what was learned, not
+just that something was completed.
 
 **What not to lead with:** "Any document becomes a course" (crowded claim). "AI
 personalization" (competitors market this too — Codecademy's AI Builder is real).
@@ -291,62 +314,42 @@ generators; lead with the learner outcome instead.
 
 - **"Why not just use NotebookLM?"** NotebookLM is a strong source-grounded study tool.
   Canopy is justified only when the outcome is not "understand this document" but
-  "reliably perform this technical workflow" — proven by a validated lab and a transfer
-  task, not a prettier summary.
-- **"Why not ChatGPT Study Mode?"** Choose Canopy only when an organization needs a
-  maintained, versioned, assignment-ready course with controlled execution and a shared
-  record of practical evidence.
+  "reliably perform this technical workflow" — proven by a validated lab and hidden
+  tests, not a prettier summary.
+- **"Why not ChatGPT Study Mode?"** Choose Canopy when the outcome needs to be a
+  maintained, versioned course with controlled execution and a shared record of
+  practical evidence, not a single conversation.
 - **"Codecademy can already personalize learning — what's new here?"** The claim isn't
-  that public curricula can't personalize; it's that a company can't wait for a public
-  curriculum team to create and maintain hands-on training for its own APIs,
-  frameworks, and release cadence.
+  that public curricula can't personalize; it's that a course from *your own* material —
+  a paper, a library's docs, an internal SDK — doesn't exist in any fixed catalog at all.
 - **"How do you know a learner mastered the skill vs. learned the test?"** Not from a
-  single checkpoint — the answer is an independent, hint-free transfer exercise in a new
-  context plus separated conceptual/applied evidence. Still needs pilot validation.
+  single checkpoint — hidden tests plus dual-track mastery (understanding vs. applying)
+  separate that today; an independent, hint-free transfer exercise is the unbuilt next
+  layer of evidence (`PEDAGOGY_EVALUATION.md` §4.8).
 - **"What's the moat if every model vendor can generate lessons?"** Not generic
-  generation — a trusted workflow around proprietary sources: source/version
-  provenance, safe environments, validated exercise templates, customer-specific course
-  history, and outcome data that improves quality over time.
+  generation — the self-validating sandbox loop (a lesson proves itself against hidden
+  tests before a learner ever sees it) and a mastery model that's actually calibrated to
+  evidence, not a completion checkbox.
 
-## 10. Go-to-market experiment
+## 10. Hackathon framing (OpenAI Build Week)
 
-Run one design-partner pilot: one internal service or SDK, 5–10 developers new to it.
-
-1. Choose a workflow with current documentation, a clear owner, and a safe
-   representative task.
-2. Have the owner approve one Canopy path built from a small source packet.
-3. Compare it with existing onboarding material.
-4. Give both cohorts a novel, hint-free transfer task.
-5. Measure: time to a correct independent solution, review iterations, help requests,
-   learner confidence, and the owner's content-editing burden. Completion rate alone is
-   not enough — set success thresholds with the pilot customer before it begins.
-
-| Outcome | Example measure |
-|---|---|
-| Faster path to usefulness | Time to complete an independent, representative task |
-| Real capability | Success rate on a hint-free transfer exercise |
-| Content quality | SME approval rate, source corrections, learner-reported confusion |
-| Operational reliability | Sandbox startup time, validation-pass rate, repair-loop frequency, execution cost |
-| Reduced enablement burden | Repeated support questions/office-hours demand before vs. after |
-| Learner value | Activation, lab completion, return rate, self-reported confidence paired with actual task performance |
-
-## 11. Hackathon framing (OpenAI Build Week)
-
-- **Track:** Education is the natural home; Developer Tools is defensible given the
-  developer-enablement thesis and the agentic generation pipeline.
-- **Demo:** run the emotional consumer story end to end — upload a source packet, watch
-  a working graded lab appear, fail it, watch the system diagnose and help remediate,
-  with the mastery number moving. See [`DEMO.md`](../demo/DEMO.md) for the full script.
+- **Track:** Education is the natural home — see [`HACKATHON.md`](../demo/HACKATHON.md)
+  for the exact judging criteria this submission is built against.
+- **Demo:** the individual-learner story end to end — upload a source, watch a working
+  graded lab appear, fail it, fix it against real hidden tests, watch the mastery number
+  move, and end on a certificate and a PDF coursebook. This is deliberately the
+  *built* story, not an aspirational one.
 - **Codex-usage narrative:** the generate → run → diagnose → patch → re-verify loop
   (never trusting the model's self-report, always re-checking in the sandbox) is exactly
   the "autonomous multi-step engineering workflow" judges are told to look for —
   foreground it. It is both the product's trust guarantee and the strongest evidence of
   meaningful agentic integration in the system.
-- **Writeup:** demo the individual learner; sell the organization.
+- **Writeup:** lead with the individual learner and what's actually built; mention the
+  B2B direction (§4.2) as where this credibly grows next, not as the headline claim.
 
 ## Sources
 
-All market claims are based on product materials accessed July 17–18, 2026.
+All market claims are based on product materials accessed July 17–19, 2026.
 
 1. [Canopy product plan (internal)](./IDEA.md)
 2. [Google for Education: NotebookLM](https://edu.google.com/ai-notebooklm/)
