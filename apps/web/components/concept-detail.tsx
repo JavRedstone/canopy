@@ -12,6 +12,7 @@ import { MarkdownText } from "@/components/markdown-text";
 import { PageShell } from "@/components/page-shell";
 import { QuizQuestion, QuizSection } from "@/components/quiz";
 import { MasteryCard } from "@/components/mastery-meter";
+import { PracticeDrill } from "@/components/practice-drill";
 import { PrerequisiteReview } from "@/components/prerequisite-review";
 import { PrerequisiteNudge } from "@/components/prerequisite-nudge";
 import { SettingsMenu } from "@/components/settings-menu";
@@ -306,6 +307,33 @@ function LessonNavigation({ courseId, map, activeSlug }: { courseId: string; map
     <Stack direction="row" sx={{ justifyContent: "space-between", gap: 1, pt: 1 }}>
       {previous ? <Button component={Link} href={`/courses/${courseId}/concepts/${previous.slug}`} variant="outlined" startIcon={<Icon name="arrow_back" />}>Previous</Button> : <Box />}
       {next ? <Button component={Link} href={`/courses/${courseId}/concepts/${next.slug}`} variant="contained" endIcon={<Icon name="arrow_forward" />}>Next lesson</Button> : <Button component={Link} href={`/courses/${courseId}`} variant="contained" endIcon={<Icon name="school" />}>Back to course</Button>}
+    </Stack>
+  );
+}
+
+/**
+ * The concept-level entry into the practice pool: the same drill surface the course page
+ * shows, pinned to this one concept. Collapsed by default so the graded quick check stays
+ * the page's focus -- practice is something the learner opts into once they've finished.
+ * The drill is keyed on the slug so navigating to another concept starts a clean session
+ * rather than carrying this one's questions across.
+ */
+function ConceptPractice({ courseId, slug, onMasteryChange }: { courseId: string; slug: string; onMasteryChange?: () => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Stack component="section" sx={{ gap: 1.5 }}>
+      <Divider textAlign="left">
+        <Typography variant="overline" color="text.secondary">Practice</Typography>
+      </Divider>
+      {!open ? (
+        <Box>
+          <Button variant="outlined" startIcon={<Icon name="fitness_center" />} onClick={() => setOpen(true)}>
+            Practise this concept
+          </Button>
+        </Box>
+      ) : (
+        <PracticeDrill key={slug} courseId={courseId} conceptSlug={slug} onMasteryChange={onMasteryChange} />
+      )}
     </Stack>
   );
 }
@@ -983,6 +1011,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
                 onAskHelper={handleAskHelperForQuizItem}
               />
               {conceptMastery ? <MasteryCard concept={conceptMastery} threshold={masteryThreshold} /> : null}
+              <ConceptPractice courseId={courseId} slug={slug} onMasteryChange={refreshMastery} />
               {assessmentComplete ? <LessonComplete courseId={courseId} map={courseMap} slug={slug} title="Assessment" /> : null}
             </Stack>
           ) : null}
@@ -1091,6 +1120,7 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
                   onAskHelper={handleAskHelperForQuizItem}
                 />
                 {conceptMastery ? <MasteryCard concept={conceptMastery} threshold={masteryThreshold} /> : null}
+                <ConceptPractice courseId={courseId} slug={slug} onMasteryChange={refreshMastery} />
                 {labComplete ? <LessonComplete courseId={courseId} map={courseMap} slug={slug} title="Lab" /> : null}
               </Stack>
             ) : !solutionRevealed ? (

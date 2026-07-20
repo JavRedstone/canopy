@@ -18,11 +18,18 @@ from typing import Literal
 
 
 Track = Literal["understand", "apply"]
-AssessmentKind = Literal["quiz_mcq", "quiz_fill", "coding_submission", "transfer_exercise"]
+AssessmentKind = Literal["quiz_mcq", "quiz_fill", "coding_submission", "transfer_exercise", "practice"]
 
 # A track is "mastered" once its probability crosses this bar. Conceptual concepts need
 # only ``understand``; coding concepts need ``apply`` as well (see ``concept_mastered``).
 MASTERY_THRESHOLD = 0.95
+
+# How far low-stakes practice alone can carry the ``understand`` track. Practice is
+# unproctored, retryable, and immediately self-revealing, so it is good evidence that a
+# learner is getting the idea and poor evidence that they have mastered it. Drilling can
+# therefore make someone demonstrably proficient, but the 0.95 mastery bar still requires
+# graded quiz or coding evidence. See ``practice_update``.
+PRACTICE_CEILING = 0.85
 
 # A prerequisite is flagged for review when the learner has *practiced* it (it has
 # observations) yet its relevant track sits below this softer bar -- meaning the idea a
@@ -65,6 +72,11 @@ DEFAULT_PARAMS: dict[AssessmentKind, BktParams] = {
     "quiz_fill": BktParams(p_l0=0.20, p_t=0.15, p_g=0.10, p_s=0.12),
     "coding_submission": BktParams(p_l0=0.15, p_t=0.12, p_g=0.10, p_s=0.10),
     "transfer_exercise": BktParams(p_l0=0.15, p_t=0.10, p_g=0.05, p_s=0.10),
+    # Practice carries the highest guess rate of any kind: the learner can retry freely,
+    # sees the answer immediately, and is drilling material they just read, so a single
+    # correct answer says less here than anywhere else. Only correct answers are ever
+    # recorded (see ``practice_update``), so the slip rate never comes into play.
+    "practice": BktParams(p_l0=0.20, p_t=0.10, p_g=0.45, p_s=0.10),
 }
 
 # Which mastery track each assessment kind updates.
@@ -73,6 +85,7 @@ TRACK_BY_ASSESSMENT: dict[AssessmentKind, Track] = {
     "quiz_fill": "understand",
     "coding_submission": "apply",
     "transfer_exercise": "apply",
+    "practice": "understand",
 }
 
 # Quiz item kinds (from the lesson bundle) collapse onto the two quiz assessment kinds:
@@ -117,6 +130,24 @@ def bkt_update(p_l: float, correct: bool, params: BktParams) -> float:
     conditioned = numerator / denominator if denominator > 0 else p_l
     learned = conditioned + (1.0 - conditioned) * params.p_t
     return min(1.0, max(0.0, learned))
+
+
+def practice_update(p_l: float, params: BktParams) -> float:
+    """The posterior after one *correct* low-stakes practice answer.
+
+    Two rules separate this from ``bkt_update``, and both exist so drilling can help a
+    learner without letting them grind their way to a mastery claim they haven't earned:
+
+    - **Positive-only.** Only correct answers reach this function at all; a wrong practice
+      answer records no observation, so ``p(L)`` can never fall because someone chose to
+      practice. Getting a question wrong in a low-stakes drill is how practice is supposed
+      to work, and penalizing it would make practicing strictly worse than not practicing.
+    - **Capped at** ``PRACTICE_CEILING``. Practice can carry a learner up to proficient and
+      no further. A learner already above the ceiling on graded evidence keeps their
+      estimate untouched rather than being dragged down to it.
+    """
+    raised = bkt_update(p_l, correct=True, params=params)
+    return min(raised, max(p_l, PRACTICE_CEILING))
 
 
 def relevant_track(kind: str) -> Track:

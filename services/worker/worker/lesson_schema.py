@@ -13,6 +13,7 @@ Hidden tests and the reference solution live in the stored bundle but must never
 returned through learner-facing APIs.
 """
 
+import re
 from collections.abc import Iterable
 from pathlib import PurePosixPath
 from typing import Literal
@@ -23,6 +24,11 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 # target (see ENVIRONMENT_FILE_SUFFIXES below for which suffix belongs to which environment).
 _SAFE_WORKSPACE_PATH = r"^[A-Za-z0-9_][A-Za-z0-9_./-]*\.(py|cpp|h|hpp)$"
 _SLUG = r"^[a-z0-9]+(?:-[a-z0-9]+)*$"
+
+# Two practice questions whose stems share this fraction of their words (Jaccard) are
+# treated as the same question reworded. Set high enough that questions legitimately
+# sharing the concept's vocabulary pass, low enough to catch a paraphrase.
+PRACTICE_STEM_SIMILARITY = 0.8
 
 # Every file in a coding lesson's workspace/tests/reference solution must carry the one
 # suffix its sandbox environment actually compiles/runs -- see services/sandbox_runner/
@@ -177,6 +183,29 @@ class LessonContentBundle(BaseModel):
         quiz_ids = [item.id for item in self.quiz_items]
         if len(set(quiz_ids)) != len(quiz_ids):
             raise ValueError("Quiz item identifiers must be unique within a lesson.")
+        return self
+
+
+class PracticePoolBundle(BaseModel):
+    """What one practice-pool generation call produces for a concept: a batch of standalone
+    drill questions for the low-stakes practice pool.
+
+    Reuses ``QuizItem`` wholesale -- these are graded by the same grader as the lesson's
+    quick-check -- but they are *not* part of the lesson bundle: they carry no inline
+    ``{{quiz:N}}`` markers, are stored per concept rather than per revision, and are served
+    a few at a time by the practice engine. Batches accumulate, so ``id`` uniqueness is
+    enforced here within a batch and against earlier batches at the call site.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    practice_items: list[QuizItem] = Field(default_factory=list, min_length=1, max_length=20)
+
+    @model_validator(mode="after")
+    def item_ids_are_unique(self) -> "PracticePoolBundle":
+        item_ids = [item.id for item in self.practice_items]
+        if len(set(item_ids)) != len(item_ids):
+            raise ValueError("Practice item identifiers must be unique within a batch.")
         return self
 
 
@@ -335,6 +364,65 @@ def bundle_content_citations(content: LessonContentBundle) -> set[str]:
 def validate_lesson_content(content: LessonContentBundle, available_citations: Iterable[str]) -> None:
     if not bundle_content_citations(content).issubset(set(available_citations)):
         raise ValueError("Lesson content cites a chunk outside the concept's source context.")
+
+
+def practice_pool_citations(pool: PracticePoolBundle) -> set[str]:
+    """Every chunk ID a practice batch cites."""
+    citations: set[str] = set()
+    for item in pool.practice_items:
+        citations.update(item.citations)
+    return citations
+
+
+def _stem_tokens(prompt_markdown: str) -> frozenset[str]:
+    """The bag of words a question stem asks about, ignoring case, punctuation, and order."""
+    return frozenset(re.findall(r"[a-z0-9]+", prompt_markdown.casefold()))
+
+
+def _near_duplicate(left: frozenset[str], right: frozenset[str]) -> bool:
+    """Jaccard overlap of two stems' words, over the near-duplicate bar.
+
+    Word overlap is a blunt instrument, but it reliably catches the failure that actually
+    matters for a *pool*: the same question asked twice with a word or two changed. Exact
+    string matching would miss those, and anything smarter would need an embedding call
+    inside what must stay a cheap, deterministic validation.
+    """
+    if not left or not right:
+        return False
+    return len(left & right) / len(left | right) >= PRACTICE_STEM_SIMILARITY
+
+
+def validate_practice_pool(
+    pool: PracticePoolBundle,
+    available_citations: Iterable[str],
+    existing_prompts: Iterable[str] = (),
+) -> None:
+    """Reject a practice batch that is ungrounded or repetitive.
+
+    ``existing_prompts`` is everything the learner could already have been asked on this
+    concept -- the lesson's own quiz items plus any earlier pool batch -- so a top-up
+    cannot quietly re-ask what batch 0 already covers. Messages are written to be fed
+    straight back to the model as regeneration feedback.
+    """
+    if not practice_pool_citations(pool).issubset(set(available_citations)):
+        raise ValueError("Practice pool cites a chunk outside the concept's source context.")
+
+    stems = [(item.id, _stem_tokens(item.prompt_markdown)) for item in pool.practice_items]
+    for index, (item_id, stem) in enumerate(stems):
+        for other_id, other_stem in stems[index + 1 :]:
+            if _near_duplicate(stem, other_stem):
+                raise ValueError(
+                    f"Practice items {item_id} and {other_id} ask nearly the same question; "
+                    "every question in the pool must test something distinct."
+                )
+
+    existing_stems = [_stem_tokens(prompt) for prompt in existing_prompts]
+    for item_id, stem in stems:
+        if any(_near_duplicate(stem, existing) for existing in existing_stems):
+            raise ValueError(
+                f"Practice item {item_id} repeats a question the learner has already been asked on this "
+                "concept; ask about a different aspect of the material instead."
+            )
 
 
 def bundle_citations(bundle: LessonBundle) -> set[str]:

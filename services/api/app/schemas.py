@@ -288,6 +288,64 @@ class QuizItemPreview(BaseModel):
     previous_grade: QuizGradeResponse | None = None
 
 
+PracticeScope = Literal["done", "modules", "concepts"]
+PracticeOrder = Literal["shuffle", "weakest", "course"]
+PracticeFilter = Literal["unseen", "all", "missed"]
+
+
+class PracticeQuestion(BaseModel):
+    """One pool question as the learner sees it: grading material stripped, exactly as for a
+    lesson quiz item. ``id`` is the stored row's id, not the batch-local id the generator
+    wrote -- pool batches accumulate per concept, so only the row id is unique over time."""
+
+    id: UUID
+    concept_slug: str
+    concept_title: str
+    kind: QuizKind
+    prompt_markdown: str
+    options: list[QuizOptionPreview] = Field(default_factory=list)
+
+
+class PracticeSessionResponse(BaseModel):
+    """A batch of drill questions plus what the client needs to explain an empty one."""
+
+    course_id: UUID
+    questions: list[PracticeQuestion]
+    # Concepts in scope whose unseen questions are running out. The client turns this into a
+    # top-up call, so a learner who drills a concept dry gets more rather than a dead end.
+    concepts_low_on_questions: list[str] = Field(default_factory=list)
+    # True when the scope resolved to no practiceable concept at all -- nothing started yet,
+    # or nothing selected -- which the UI explains differently from an exhausted pool.
+    scope_empty: bool = False
+
+
+class PracticeGradeResponse(BaseModel):
+    """Full feedback, revealed immediately -- practice is low-stakes, so nothing is withheld
+    and there is no attempt cap. ``p_understand`` is the concept's refreshed estimate when a
+    correct answer moved it, so the mastery meter can update without a second request."""
+
+    item_id: UUID
+    concept_slug: str
+    correct: bool
+    explanation_markdown: str
+    options: list[QuizOptionGrade] = Field(default_factory=list)
+    correct_answers: list[str] = Field(default_factory=list)
+    feedback_markdown: str | None = None
+    p_understand: float | None = None
+
+
+class PracticeTopUpRequest(BaseModel):
+    """Ask for another generated batch on the concepts named, or on everything in scope that
+    is running low when the list is empty."""
+
+    concept_slugs: list[str] = Field(default_factory=list, max_length=50)
+
+
+class PracticeTopUpResponse(BaseModel):
+    course_id: UUID
+    concepts_queued: list[str]
+
+
 class LessonPreview(BaseModel):
     status: LessonBuildStatus
     title: str

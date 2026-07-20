@@ -1,4 +1,4 @@
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -31,6 +31,15 @@ class WorkerSettings(BaseSettings):
     lesson_build_job_max_retries: int = 2
     sandbox_timeout_seconds: int = 20
 
+    # How many practice questions one pool batch asks for. Batch 0 is generated after the
+    # lesson builds; a top-up appends another batch of this size when the learner runs low.
+    # Bounded to the pool's design range so a stray environment value cannot configure a
+    # batch the generation schema (1-20 items) would reject outright.
+    practice_pool_batch_size: int = Field(default=12, ge=10, le=15)
+    # A generated batch this size or larger is accepted even if it undershoots the target;
+    # below it, the model ignored the instruction and the batch is regenerated.
+    practice_pool_min_batch_size: int = Field(default=10, ge=1, le=15)
+
     @property
     def outline_model(self) -> str:
         return "course_outline"
@@ -50,6 +59,10 @@ class WorkerSettings(BaseSettings):
     @property
     def conceptual_builder_model(self) -> str:
         return "concept_regeneration"
+
+    @property
+    def practice_pool_model(self) -> str:
+        return "practice_pool"
 
     def require_runtime_configuration(self) -> None:
         if not self.supabase_url or not self.supabase_service_role_key:

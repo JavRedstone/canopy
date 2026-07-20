@@ -14,7 +14,7 @@ import Alert from "@mui/material/Alert";
 import Avatar from "@mui/material/Avatar";
 import Divider from "@mui/material/Divider";
 import { alpha } from "@mui/material/styles";
-import { QuizAnswerRequest, QuizGradeResponse, QuizItemPreview, answerQuizItem } from "@/lib/api";
+import { QuizAnswerRequest, QuizGradeResponse, QuizItemPreview, QuizKind, QuizOptionGrade, QuizOptionPreview, answerQuizItem } from "@/lib/api";
 import { Icon } from "@/components/icon";
 import { MarkdownText } from "@/components/markdown-text";
 import { ConfettiBurst } from "@/components/confetti-burst";
@@ -33,6 +33,62 @@ function selectionFromAnswer(answer: QuizAnswerRequest | null): number[] {
   if (!answer) return [];
   if (answer.selected_option_index !== undefined && answer.selected_option_index !== null) return [answer.selected_option_index];
   return answer.selected_option_indices ?? [];
+}
+
+/**
+ * The choice-option list, shared by the graded quick check and the practice drill.
+ *
+ * `revealAll` is the one real difference between the two: a graded question marks only the
+ * options the learner actually picked, so a wrong guess never gives away the right answer
+ * while attempts remain. Practice reveals every option, because there is nothing left to
+ * protect once the answer is shown and seeing why each distractor is wrong is the point.
+ */
+export function QuizOptionList({ kind, options, selected, disabled, optionGrades, revealAll = false, onToggle }: { kind: QuizKind; options: QuizOptionPreview[]; selected: number[]; disabled: boolean; optionGrades?: QuizOptionGrade[]; revealAll?: boolean; onToggle: (optionIndex: number) => void }) {
+  return (
+    <Stack role="group" sx={{ gap: 0.75 }}>
+      {options.map((option, optionIndex) => {
+        const optionGrade = optionGrades?.[optionIndex];
+        const isSelected = selected.includes(optionIndex);
+        const shown = Boolean(optionGrade) && (revealAll || isSelected);
+        const isIncorrect = Boolean(shown && isSelected && optionGrade && !optionGrade.correct);
+        const isCorrect = Boolean(shown && optionGrade?.correct);
+        return (
+          <Paper
+            key={optionIndex}
+            variant="outlined"
+            component="label"
+            sx={{
+              display: "flex",
+              gap: 1.25,
+              alignItems: "flex-start",
+              p: "6px 10px",
+              cursor: disabled ? "default" : "pointer",
+              borderColor: isCorrect ? "success.main" : isIncorrect ? "error.main" : isSelected ? "text.primary" : "divider",
+              bgcolor: (theme) =>
+                isCorrect
+                  ? alpha(theme.palette.success.main, 0.08)
+                  : isIncorrect
+                    ? alpha(theme.palette.error.main, 0.08)
+                    : "transparent"
+            }}
+          >
+            {kind === "mcq" ? (
+              <Radio checked={isSelected} disabled={disabled} onChange={() => onToggle(optionIndex)} size="small" sx={{ p: 0, mt: "2px" }} />
+            ) : (
+              <Checkbox checked={isSelected} disabled={disabled} onChange={() => onToggle(optionIndex)} size="small" sx={{ p: 0, mt: "2px" }} />
+            )}
+            <Box sx={{ display: "grid", gap: 0.5 }}>
+              <MarkdownText variant="body2">{option.text}</MarkdownText>
+              {shown && optionGrade ? (
+                <MarkdownText variant="caption" color="text.secondary">{optionGrade.explanation_markdown}</MarkdownText>
+              ) : null}
+            </Box>
+          </Paper>
+        );
+      })}
+      {kind === "multi_select" ? <Typography variant="body2" color="text.secondary">Select every answer that applies.</Typography> : null}
+    </Stack>
+  );
 }
 
 export function QuizQuestion({ courseId, slug, item, index, maxAttempts = DEFAULT_MAX_ATTEMPTS, onCorrect, onAnswered, onAskHelper }: { courseId: string; slug: string; item: QuizItemPreview; index: number; maxAttempts?: number; onCorrect?: (itemId: string) => void; onAnswered?: () => void; onAskHelper?: (item: QuizItemPreview) => void }) {
@@ -125,62 +181,14 @@ export function QuizQuestion({ courseId, slug, item, index, maxAttempts = DEFAUL
       </Stack>
 
       {isChoice ? (
-        <Stack role="group" sx={{ gap: 0.75 }}>
-          {item.options.map((option, optionIndex) => {
-            const optionGrade = grade?.options[optionIndex];
-            const isSelected = selected.includes(optionIndex);
-            const isIncorrect = Boolean(answered && isSelected && optionGrade && !optionGrade.correct);
-            // Only reveal correctness for options the learner actually picked -- marking an
-            // unselected option green would give away an answer they never chose.
-            const isCorrect = Boolean(isSelected && optionGrade?.correct);
-            return (
-              <Paper
-                key={optionIndex}
-                variant="outlined"
-                component="label"
-                sx={{
-                  display: "flex",
-                  gap: 1.25,
-                  alignItems: "flex-start",
-                  p: "6px 10px",
-                  cursor: answered || exhausted ? "default" : "pointer",
-                  borderColor: isCorrect ? "success.main" : isIncorrect ? "error.main" : isSelected ? "text.primary" : "divider",
-                  bgcolor: (theme) =>
-                    isCorrect
-                      ? alpha(theme.palette.success.main, 0.08)
-                      : isIncorrect
-                        ? alpha(theme.palette.error.main, 0.08)
-                        : "transparent"
-                }}
-              >
-                {item.kind === "mcq" ? (
-                  <Radio
-                    checked={isSelected}
-                    disabled={answered || exhausted}
-                    onChange={() => toggleOption(optionIndex)}
-                    size="small"
-                    sx={{ p: 0, mt: "2px" }}
-                  />
-                ) : (
-                  <Checkbox
-                    checked={isSelected}
-                    disabled={answered || exhausted}
-                    onChange={() => toggleOption(optionIndex)}
-                    size="small"
-                    sx={{ p: 0, mt: "2px" }}
-                  />
-                )}
-                <Box sx={{ display: "grid", gap: 0.5 }}>
-                  <MarkdownText variant="body2">{option.text}</MarkdownText>
-                  {answered && optionGrade && isSelected ? (
-                    <MarkdownText variant="caption" color="text.secondary">{optionGrade.explanation_markdown}</MarkdownText>
-                  ) : null}
-                </Box>
-              </Paper>
-            );
-          })}
-          {item.kind === "multi_select" ? <Typography variant="body2" color="text.secondary">Select every answer that applies.</Typography> : null}
-        </Stack>
+        <QuizOptionList
+          kind={item.kind}
+          options={item.options}
+          selected={selected}
+          disabled={answered || exhausted}
+          optionGrades={grade?.options}
+          onToggle={toggleOption}
+        />
       ) : item.kind === "fill" ? (
         <TextField
           size="small"

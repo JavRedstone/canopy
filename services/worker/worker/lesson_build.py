@@ -25,6 +25,7 @@ from worker.errors import RETRYABLE_ERRORS
 from worker.lesson_agent import ENVIRONMENT_ID_BY_LANGUAGE, generate_assessment_content, generate_coding_artifacts, generate_conceptual_content, generate_lesson_content, repair_bundle, strip_starter_solution
 from worker.lesson_schema import Assessment, CodingArtifactsBundle, LessonBundle, LessonContentBundle, reference_workspace, starter_workspace, validate_lesson_content
 from worker.llm import LLMGatewayClient
+from worker.queues import QueueAdapter
 from worker.sandbox import SandboxFile, SandboxRunnerClient
 from worker.settings import WorkerSettings
 
@@ -37,11 +38,19 @@ BUNDLE_VALIDATION_ATTEMPTS = 3
 
 
 class LessonBuilder:
-    def __init__(self, settings: WorkerSettings, client: Client, openai: LLMGatewayClient, sandbox: SandboxRunnerClient) -> None:
+    def __init__(
+        self,
+        settings: WorkerSettings,
+        client: Client,
+        openai: LLMGatewayClient,
+        sandbox: SandboxRunnerClient,
+        queue: QueueAdapter,
+    ) -> None:
         self.settings = settings
         self.client = client
         self.openai = openai
         self.sandbox = sandbox
+        self.queue = queue
 
     def build_lesson(self, lesson_definition_id: str) -> bool:
         """Returns True once the job is resolved (claimed and finished, or already resolved
@@ -79,6 +88,8 @@ class LessonBuilder:
                     "Lesson exhausted its build attempts without passing tests",
                     extra={"lesson_definition_id": lesson_definition_id},
                 )
+            else:
+                self._enqueue_practice_pool(lesson_definition_id)
         except RETRYABLE_ERRORS:
             self.client.table("lesson_definitions").update({"build_status": "pending"}).eq("id", lesson_definition_id).execute()
             raise
@@ -88,6 +99,19 @@ class LessonBuilder:
             ).eq("id", lesson_definition_id).execute()
             raise
         return True
+
+    def _enqueue_practice_pool(self, lesson_definition_id: str) -> None:
+        """Kick off the concept's practice pool now that there is a finished explanation to
+        draw questions from. Best-effort on purpose: the lesson is already stored and served,
+        so a queue hiccup here must not fail the build or re-run generation. The API's top-up
+        path enqueues again the first time a learner practices a concept with an empty pool."""
+        try:
+            self.queue.enqueue_practice_pool_build(lesson_definition_id)
+        except Exception:
+            logger.exception(
+                "Could not enqueue the practice pool build for a lesson that built successfully",
+                extra={"lesson_definition_id": lesson_definition_id},
+            )
 
     def _lesson_still_building(self, lesson_definition_id: str) -> bool:
         rows = self.client.table("lesson_definitions").select("build_status").eq("id", lesson_definition_id).execute().data or []
