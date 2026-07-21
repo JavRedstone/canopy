@@ -1,57 +1,57 @@
 # Roadmap / To-do
 
 Candidate features and improvements. Checked items have shipped and are verified in the
-running code, not just planned — see [`USE_CASES.md`](./USE_CASES.md) for how "shipped"
+running code, not just planned; see [`USE_CASES.md`](./USE_CASES.md) for how "shipped"
 is verified. Unchecked items are still just candidates.
 
 ## Content & pedagogy
 
-- [x] **Fill-in-the-blank question type** — a fourth quiz kind (`fill`) alongside
+- [x] **Fill-in-the-blank question type**: a fourth quiz kind (`fill`) alongside
   mcq/multi-select/short-answer, generated, graded, and mastery-tracked end to end
   (`services/api/app/quiz.py`, `apps/web/components/quiz.tsx`).
-- [x] **Multiple coding-lab environments** — `python-basic`, `python-ml` (GPU-capable
+- [x] **Multiple coding-lab environments**: `python-basic`, `python-ml` (GPU-capable
   PyTorch/scikit-learn), `cpp-basic`, `c-basic` (AddressSanitizer-hardened),
   `javascript-basic`, `go-basic`. A course picks one at creation and every lab in it
   targets that environment (`services/sandbox_runner/sandbox_runner/runner.py`).
-- [ ] **Multiple content languages** — generate and serve courses in languages other than
+- [ ] **Multiple content languages**: generate and serve courses in languages other than
   English. (Not to be confused with the coding-lab *environments* above, which are
   shipped.)
-- [ ] **Adaptive course progression** — sequence lessons based on demonstrated mastery
+- [ ] **Adaptive course progression**: sequence lessons based on demonstrated mastery
   rather than a fixed order; add spaced re-retrieval of already-mastered concepts instead
   of marking them done forever. Highest-confidence pedagogy fix per
-  [`PEDAGOGY_EVALUATION.md`](./PEDAGOGY_EVALUATION.md#5-bottom-line) — reuses the quiz
+  [`PEDAGOGY_EVALUATION.md`](./PEDAGOGY_EVALUATION.md#5-bottom-line); reuses the quiz
   engine already built.
-- [ ] **Changing questions / question bank** — draw from a pool so repeated attempts and
+- [ ] **Changing questions / question bank**: draw from a pool so repeated attempts and
   reviews don't reuse the same questions.
-- [ ] **Adaptive remediation trigger** — replace the flat "N failed attempts" constant
+- [ ] **Adaptive remediation trigger**: replace the flat "N failed attempts" constant
   with something sensitive to learner level, per the assistance-dilemma research in
   `PEDAGOGY_EVALUATION.md` §4.3.
-- [ ] **Increase robustness of general content (multiple agents?)** — use multiple
+- [ ] **Increase robustness of general content (multiple agents?)**: use multiple
   generation/validation agents to raise content quality and catch errors, beyond the
   sandbox-verification repair loop that already exists for labs.
 
 ## Learner experience
 
-- [x] **Certificate of completion** — issued once every lesson in a course is done;
+- [x] **Certificate of completion**: issued once every lesson in a course is done;
   auto-pops up on visiting a finished course, downloadable as a PDF
   (`services/api/app/certificate_pdf.py`, `apps/web/components/certificate-dialog.tsx`).
-- [x] **Course export** — the full course exports as a real PDF coursebook
+- [x] **Course export**: the full course exports as a real PDF coursebook
   (`export_coursebook`/`render_textbook_pdf`).
-- [x] **Free course sharing** — an owner can share a course by id; anyone who imports it
+- [x] **Free course sharing**: an owner can share a course by id; anyone who imports it
   gets their own independent copy, no regeneration cost
   (`import_shared_course`, `supabase/migrations/20260719000000_course_sharing_and_import.sql`).
-- [ ] **Practice mode** — a low-stakes way to drill concepts outside of graded flow.
-- [ ] **Cohort/manager view** — a real org/team layer so a course can be assigned to a
+- [ ] **Practice mode**: a low-stakes way to drill concepts outside of graded flow.
+- [ ] **Cohort/manager view**: a real org/team layer so a course can be assigned to a
   group with a shared progress dashboard, not just Google-Docs-style link sharing. The
   single biggest structural gap today (`courses.owner_id` is the only authorization axis
-  in the schema) — see [`USE_CASES.md`](./USE_CASES.md#whats-still-missing).
-- [ ] **Repository/codebase ingestion** — point a course at a GitHub repo instead of
+  in the schema); see [`USE_CASES.md`](./USE_CASES.md#whats-still-missing).
+- [ ] **Repository/codebase ingestion**: point a course at a GitHub repo instead of
   uploading files by hand.
 
 ## Rendering & UI
 
-- [x] **Proper markdown / LaTeX support** — KaTeX-rendered math and full Markdown
+- [x] **Proper markdown / LaTeX support**: KaTeX-rendered math and full Markdown
   (including fenced code) in lesson content and quiz options
   (`apps/web/components/markdown-text.tsx`).
-- [ ] **General UI improvements** — broad polish pass across the web app.
-- [ ] **Diagrams** — support diagrams in lesson content.
+- [ ] **General UI improvements**: broad polish pass across the web app.
+- [ ] **Diagrams**: support diagrams in lesson content.

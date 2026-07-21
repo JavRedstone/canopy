@@ -1,4 +1,4 @@
-# Pedagogy evaluation — Canopy against the learning-science literature
+# Pedagogy evaluation: Canopy against the learning-science literature
 
 **Status:** Analysis, not a spec. Directional input for product/curriculum decisions.
 **Date:** 2026-07-18
@@ -15,12 +15,12 @@ citation; the full reference list is at the end. Where a finding is contested, i
 Canopy's pedagogy is a stack of well-known moves:
 
 - **Source-grounded generated lessons + worked examples** (read mode).
-- **Embedded retrieval quizzes** — the `understand` mastery track.
-- **Hands-on coding labs** with a run/submit loop and hidden tests — the `apply` track.
+- **Embedded retrieval quizzes**, the `understand` mastery track.
+- **Hands-on coding labs** with a run/submit loop and hidden tests, the `apply` track.
 - **Per-concept dual-track Bayesian Knowledge Tracing (BKT)** driving a mastery dashboard.
 - **A prerequisite concept graph** that flags weak prerequisites before a lesson.
 
-**Built vs aspirational — read this before the evaluation.** The headline
+**Built vs aspirational: read this before the evaluation.** The headline
 differentiator, "the course reshapes itself around your mastery," is mostly still on
 paper. Verified against the code:
 
@@ -28,14 +28,14 @@ paper. Verified against the code:
   run/submit split, the mastery dashboard, prerequisite-review flagging
   (`REVIEW_THRESHOLD = 0.6`), and a struggle-triggered prerequisite *nudge* that is the
   first writer of `adaptation_events`.
-- **Not built (or write-only):** nothing yet *consumes* `adaptation_events` — remediation
+- **Not built (or write-only):** nothing yet *consumes* `adaptation_events`; remediation
   lessons are not generated, the LLM diagnosis layer, transfer-check exercises,
   per-test concept tagging (the Q-matrix), the "works-but-fragile" visible-pass/hidden-fail
   signal, and the acceleration/support-signal rules are all unbuilt.
 
 So today the system **measures** mastery and **nudges** (prerequisite review); it does
 not yet **reshape** around mastery. This matters because several of Canopy's strongest
-research-backed claims live entirely in the unbuilt half — which is also where they are
+research-backed claims live entirely in the unbuilt half, which is also where they are
 cheapest to get right.
 
 ---
@@ -43,15 +43,15 @@ cheapest to get right.
 ## 2. Calibrate expectations first
 
 The realistic ceiling for this class of system is **not** Bloom's 2σ. That 1984 result
-was confounded — the tutoring arms were held to a 90% mastery threshold vs 80% in the
-classroom arms, so "goal level" was not held constant — and it has never replicated at
+was confounded: the tutoring arms were held to a 90% mastery threshold vs 80% in the
+classroom arms, so "goal level" was not held constant, and it has never replicated at
 that magnitude (Bloom 1984; see critique in VanLehn 2011).
 
 The sober numbers:
 
 - **Mastery learning:** d ≈ 0.52 (Kulik, Kulik & Bangert-Drowns 1990); near-zero on
   standardized tests under stricter controls (Slavin 1987).
-- **Step-based intelligent tutoring:** d ≈ 0.76 in controlled studies — statistically
+- **Step-based intelligent tutoring:** d ≈ 0.76 in controlled studies, statistically
   indistinguishable from human tutors at d ≈ 0.79 (VanLehn 2011).
 - **The field reality:** those lab effects collapse to **d ≈ 0.20 in large real-world
   trials, and only after a year of implementation maturity** (Pane et al. 2014, Cognitive
@@ -67,18 +67,18 @@ not "2 sigma."
 **3.1 Learning-by-doing is the best-supported core it could have picked.**
 Freeman et al. (2014, *PNAS*, 225 studies) found active learning raises exam performance
 **+0.47 SD** and cuts failure rates from 34% to 22% (odds ratio 1.95 for failing under
-lecture). Chi & Wylie's ICAP framework (2014) ranks *constructive/interactive* activity —
-the learner generating output beyond what was presented — as the highest-yield mode. "Fill
+lecture). Chi & Wylie's ICAP framework (2014) ranks *constructive/interactive* activity,
+the learner generating output beyond what was presented, as the highest-yield mode. "Fill
 in this function and run it against tests" sits squarely there. This is the least
 contestable thing about the design.
 
 **3.2 Retrieval-practice quizzes are on solid ground.** The testing effect is among the
 most replicated findings in the field: Roediger & Karpicke (2006); Rowland (2014)
 meta-analysis **g ≈ 0.50** vs restudy; Adesope, Trevisan & Sundararajan (2017)
-**g ≈ 0.51**. Notably, re-readers are the *most confident and worst-performing* group — the
+**g ≈ 0.51**. Notably, re-readers are the *most confident and worst-performing* group: the
 exact "illusion of mastery" a mastery-tracking system should want to puncture.
 
-**3.3 Worked examples are correct — for novices.** Sweller & Cooper (1985) and Barbieri
+**3.3 Worked examples are correct, for novices.** Sweller & Cooper (1985) and Barbieri
 et al. (2023, **d ≈ 0.48**) support front-loading worked examples in early skill
 acquisition, which is what Canopy's lesson bundles do.
 
@@ -88,13 +88,13 @@ run→feedback→retry loop is the step-based interaction VanLehn (2011) found e
 
 **3.5 Several choices are more sophisticated than typical edtech:**
 - **Splitting `understand` (quiz) from `apply` (code)** aligns with the finding that you
-  must assess at the cognitive level you care about — factual quizzing doesn't reliably
+  must assess at the cognitive level you care about: factual quizzing doesn't reliably
   transfer to higher-order skill (Agarwal et al. 2019). Collapsing them into one score, as
   completion-based tools do, would hide exactly the gap that matters.
 - **Not penalizing help-seeking** (hints recorded as support level, never docked from
   mastery) avoids punishing the productive behavior.
 - **Diagnosis framed as an evidence-backed, probe-verified hypothesis about code
-  behavior** — not a claim about the learner's mind — is epistemically honest and rare.
+  behavior**, not a claim about the learner's mind, is epistemically honest and rare.
 - **Immutable observation ledger + interpretable BKT** supports transparency and
   self-regulated learning: the learner can see *why* the system believes what it does.
 - **The self-validating sandbox** (reference solution must pass before a learner sees the
@@ -111,7 +111,7 @@ ChatGPT/NotebookLM baseline, this is a real pedagogical and trust advantage.
 
 **4.1 No spacing. The single clearest, best-quantified weakness.**
 Canopy marks a concept "mastered" at `p ≥ 0.95` and never schedules it again. Standard
-BKT literally has **no forgetting parameter** (Khajah, Lindsey & Mozer 2016) — once a skill
+BKT literally has **no forgetting parameter** (Khajah, Lindsey & Mozer 2016): once a skill
 flips to "learned," it stays learned. But the durability evidence is overwhelming and
 quantitative: spaced practice beats massed by **~15%** (Cepeda et al. 2006, 317
 experiments); an immediate mass-study advantage *inverts within a week* (Roediger &
@@ -122,7 +122,7 @@ highest-confidence improvement available, and it reuses the quiz engine already 
 
 **4.2 The `0.95` threshold and BKT are shakier than the dashboard implies.**
 The cutoff is a 1994 convention (Corbett & Anderson 1994), not an empirically derived line.
-BKT suffers documented **degeneracy** (Baker, Corbett & Aleven 2008 — unconstrained fits
+BKT suffers documented **degeneracy** (Baker, Corbett & Aleven 2008: unconstrained fits
 imply "knowing the skill makes you answer *wrong* more often") and **identifiability**
 concerns (Beck & Chang 2007, partly walked back by Doroudi & Brunskill 2017). Canopy's
 specific problem is worse than the generic critique: it cold-starts from *conservative
@@ -132,7 +132,7 @@ effectively priors with a thin layer of evidence on top. "78% applied mastery" c
 epistemic authority in the UI than the model can support.
 
 **4.3 "Scaffold after 2 failed attempts" substitutes a constant for what must be adaptive.**
-This is the **assistance dilemma** (Koedinger & Aleven 2007) — an acknowledged *unsolved*
+This is the **assistance dilemma** (Koedinger & Aleven 2007), an acknowledged *unsolved*
 problem. Productive-failure work shows struggling *before* being rescued improves
 conceptual and transfer outcomes (Sinha & Kapur 2021, **g ≈ 0.36** on conceptual/transfer,
 ~0 on procedural), and Warshauer (2015) finds the reflex to "show students what to do next"
@@ -140,7 +140,7 @@ is associated with *lower* conceptual gains. A fixed 2-strike trigger can short-
 productive struggle for a capable learner making progress. The complication: for genuine
 novices on complex content, unresolved struggle becomes *unproductive* overload and earlier
 help is correct (Ashman, Kalyuga & Sweller 2020). The evidence-aligned design is a trigger
-sensitive to *learner level and whether the failure is productive* — not a flat count. The
+sensitive to *learner level and whether the failure is productive*, not a flat count. The
 count itself is the weak part, and since this loop is unbuilt, it is cheap to fix now.
 
 **4.4 Generic MCQ is the weakest retrieval lever, and auto-generated items skew shallow.**
@@ -151,12 +151,12 @@ exam items matched human items on discrimination but were **systematically easie
 et al. 2025, Δβ ≈ −0.79), and health-professions reviews report MCQ error rates from <1% to
 45% (PLOS ONE 2025). Canopy gates its `understand` track on exactly these items. They need
 competitive distractors, conceptual (not recall) framing, and feedback on failed retrievals
-to earn their place — none guaranteed by generation alone.
+to earn their place; none guaranteed by generation alone.
 
 **4.5 Passing generated tests ≠ understanding.** Baker et al. (2004) showed students who
 "game" tutoring systems learn **~two-thirds as much**, and gating progress on
 auto-generated checks invites exactly that. Canopy's hidden tests, static analysis, and
-(planned) transfer checks are the right mitigations — but the transfer check is unbuilt, and
+(planned) transfer checks are the right mitigations, but the transfer check is unbuilt, and
 even validated hidden tests can be satisfied by hardcoding or pattern-matching. Treating a
 green suite as a clean mastery signal is the assumption most likely to inflate the numbers.
 
@@ -167,22 +167,22 @@ data on how learners develop and where they hold misconceptions (Duncan & Hmelo-
 2009); and expertise reversal means no single order is optimal for all learners (Kalyuga et
 al. 2003). Canopy auto-extracts a prerequisite graph from source + goal and treats it as the
 canonical "spine." That's a plausible scaffold, but it inherits the author's expert blind
-spot and encodes reference order, not teaching order — presented with more pedagogical
+spot and encodes reference order, not teaching order: presented with more pedagogical
 authority than an extracted graph has earned.
 
 **4.7 Citations build trust faster than they earn it.** Canopy leans on "see §4.2 of your
 textbook" as a trust mechanism, but grounding is not a guarantee: leading legal RAG tools
-still hallucinate 17–33% of the time (Magesh et al. 2024), and *correctness ≠ faithfulness* —
+still hallucinate 17–33% of the time (Magesh et al. 2024), and *correctness ≠ faithfulness*:
 models cite sources that don't actually support the sentence in up to 57% of adversarial
 cases (Wallat et al. 2024). A citation that *looks* grounded is not evidence the claim *is*
 grounded. Not hypothetical here: the retrieval-ivfflat bug silently returned *no* grounding
-while generation proceeded anyway — the exact failure mode the literature warns about,
+while generation proceeded anyway: the exact failure mode the literature warns about,
 already observed once in this codebase.
 
 **4.8 The "transfer exercises" are near transfer, not far.** "Same concept, new API shape"
-holds the knowledge domain constant and varies only surface form — Barnett & Ceci (2002)
+holds the knowledge domain constant and varies only surface form; Barnett & Ceci (2002)
 classify this as *horizontal/near* transfer. That's genuinely worthwhile: near transfer is
-where transfer actually succeeds. But it shouldn't be framed as broad generalization — far
+where transfer actually succeeds. But it shouldn't be framed as broad generalization: far
 transfer is meta-analytically near-zero (Sala et al. 2019; Gobet & Sala 2022) and would need
 deliberate design (varied domains, self-explanation, principle extraction) Canopy doesn't
 attempt.
@@ -198,7 +198,7 @@ the learner's trajectory.
 Self-paced mastery's documented Achilles heel is procrastination and non-completion (the
 PSI/Keller-plan literature); MOOC completion sits at 3–15% and hasn't budged in a decade
 (Reich & Ruipérez-Valiente 2019). Self-Determination Theory (Ryan & Deci 2020) says durable
-motivation needs autonomy, competence, *and relatedness* — Canopy serves autonomy well and
+motivation needs autonomy, competence, *and relatedness*; Canopy serves autonomy well and
 has no cohort/instructor/social layer at all (single-owner in the code), leaving relatedness
 structurally unmet. Compounding it: learner control has a **near-zero average effect** and is
 *worst for novices* (Karich, Burns & Maki 2014), and learners are poor self-assessors
@@ -211,19 +211,19 @@ direction.
 
 ## 5. Bottom line
 
-**The scorecard.** Canopy's *foundations* are the strongest interventions in the field —
-active learning, retrieval practice, worked examples, immediate feedback, mastery framing —
+**The scorecard.** Canopy's *foundations* are the strongest interventions in the field:
+active learning, retrieval practice, worked examples, immediate feedback, mastery framing,
 and a few choices (dual-track mastery, evidence-backed diagnosis, the self-validating
 sandbox, source grounding) are ahead of typical edtech. Its weaknesses cluster into two
 families:
 
-1. **Fixed constants where the evidence demands adaptivity** — a 2-failure trigger, static
+1. **Fixed constants where the evidence demands adaptivity**: a 2-failure trigger, static
    examples/hints, a hard 0.95 cutoff, one-shot mastery. Four separate literatures
    (assistance dilemma, expertise reversal, feedback directiveness, desirable difficulties)
    all converge on one principle: *optimal support is an interaction of the learner's current
    knowledge with the goal, and it must fade.* Canopy substitutes a constant at each point.
 
-2. **Trusting generated artifacts more than they've earned** — extracted concept graphs as
+2. **Trusting generated artifacts more than they've earned**: extracted concept graphs as
    validated progressions, auto-generated MCQs as sound assessments, green test suites as
    clean mastery signals, citations as proof of grounding.
 
@@ -232,8 +232,8 @@ families:
 | # | Fix | Why it ranks here |
 |---|-----|-------------------|
 | 1 | **Spaced re-retrieval of mastered concepts** | Highest-confidence, best-quantified benefit (Cepeda 2006 +15%; one-shot mastery is not durable). Reuses the quiz engine already built. |
-| 2 | **Make the remediation trigger adaptive to learner level** | Assistance dilemma + productive failure. Cheap — the loop is unbuilt. |
-| 3 | **Strengthen quiz items** — conceptual framing, competitive distractors, feedback on failed retrieval | MCQ is the weakest retrieval lever; generated items skew easy. |
+| 2 | **Make the remediation trigger adaptive to learner level** | Assistance dilemma + productive failure. Cheap, the loop is unbuilt. |
+| 3 | **Strengthen quiz items**: conceptual framing, competitive distractors, feedback on failed retrieval | MCQ is the weakest retrieval lever; generated items skew easy. |
 | 4 | **Fade examples/hints/feedback with competence** | Expertise reversal; feedback directiveness research. |
 | 5 | **Soften the mastery UI's epistemic authority** | Cold-start priors + missing Q-matrix make early percentages weaker than they look. |
 

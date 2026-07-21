@@ -37,14 +37,14 @@ sandbox specifically see [`SANDBOX_ARCHITECTURE.md`](SANDBOX_ARCHITECTURE.md).
 
 Four independent trust zones exist:
 
-1. **Browser** — fully untrusted. Holds only the learner's own Supabase session and
+1. **Browser**: fully untrusted. Holds only the learner's own Supabase session and
    public config.
-2. **Public backend (API)** — untrusted input arrives here (HTTP requests, learner
+2. **Public backend (API)**: untrusted input arrives here (HTTP requests, learner
    code submissions), but the service itself is trusted once a request is authenticated.
-3. **Internal services (worker, LLM gateway, sandbox runner)** — reachable only from
+3. **Internal services (worker, LLM gateway, sandbox runner)**: reachable only from
    other backend services on the internal network, gated by a shared bearer token.
    Never exposed to the browser.
-4. **Sandbox containers** — the one place arbitrary, adversarial code actually runs.
+4. **Sandbox containers**: the one place arbitrary, adversarial code actually runs.
    Treated as fully hostile even though most of its input is AI-generated, not
    learner-submitted (see §5).
 
@@ -55,13 +55,13 @@ Four independent trust zones exist:
   exchanges a code for a session and sets cookies.
 - All Supabase config (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`)
   and the API base URL (`NEXT_PUBLIC_API_URL`) are intentionally public (`NEXT_PUBLIC_`
-  prefixed) — the frontend never holds a server-only secret. `scripts/sync-env.js`
+  prefixed): the frontend never holds a server-only secret. `scripts/sync-env.js`
   exists specifically to keep non-public vars (Supabase service-role key, OpenAI keys)
   out of `apps/web/.env.local`.
 - Route protection is enforced per-layout (`app/courses/layout.tsx` calls
   `supabase.auth.getUser()` server-side and redirects unauthenticated visitors), not
   via a global middleware gate. Every protected route currently sits under that layout.
-- Every backend call attaches `Authorization: Bearer <learner's own Supabase JWT>` —
+- Every backend call attaches `Authorization: Bearer <learner's own Supabase JWT>`:
   the frontend never sends an internal service token or any other privileged secret.
 - No `dangerouslySetInnerHTML`, `eval`, or `new Function`; Markdown is rendered through
   a hand-rolled parser that produces React elements directly, not injected HTML. React's
@@ -96,21 +96,21 @@ calls the LLM Gateway and Sandbox Runner, using the shared `APP_INTERNAL_SERVICE
 
 ## 4. Worker (`services/worker`)
 
-Runs detached from any public port — it only polls Supabase-backed job queues
+Runs detached from any public port: it only polls Supabase-backed job queues
 (`pgmq` via `read_ingestion_jobs`/`read_generation_jobs`, `SECURITY DEFINER` RPCs
 granted only to `service_role`; see §7) and calls the LLM Gateway and Sandbox Runner
 with the internal token, same as the API. It holds the Supabase service-role key to
 write generated course/lesson content back to Postgres. There is no learner-facing
-entry point into the worker — job payloads originate from API-side enqueue calls that
+entry point into the worker: job payloads originate from API-side enqueue calls that
 are themselves scoped to the requesting user's own course/source.
 
 The worker is also the source of AI-generated code: `lesson_agent.py` /
 `lesson_build.py` drive an LLM to write lesson starter code and reference solutions,
 which are validated by actually executing them in the sandbox (`content_validation`
 profile) before being shown to a learner. AI-generated code is treated with the same
-distrust as learner-submitted code — it runs in the identical hardened container (§5).
+distrust as learner-submitted code: it runs in the identical hardened container (§5).
 
-## 5. Sandbox Runner (`services/sandbox_runner`) — code execution isolation
+## 5. Sandbox Runner (`services/sandbox_runner`): code execution isolation
 
 This is the only component that executes arbitrary code (learner lab submissions via
 the API's `learner_visible` profile, and AI-generated solutions/tests via the worker's
@@ -127,7 +127,7 @@ the API's `learner_visible` profile, and AI-generated solutions/tests via the wo
   from these validated inputs server-side rather than extracted from attacker-supplied
   tar bytes, avoiding the classic `tarfile` path-traversal class of bug.
 - **No shell anywhere in the execution path**: commands are passed to the Docker SDK
-  as argv lists (`["pytest", ...]`, `["python", "-u", entry_path]`) — never
+  as argv lists (`["pytest", ...]`, `["python", "-u", entry_path]`): never
   `shell=True`, `subprocess`, `os.system`, or `eval`.
 - **Per-run container hardening** (`sandbox_runner/runner.py`): `network_disabled=True`
   (no network access, so no exfiltration/SSRF from inside sandboxed code),
@@ -142,7 +142,7 @@ the API's `learner_visible` profile, and AI-generated solutions/tests via the wo
   (inputs are tightly validated, no shell/eval surface), but because a bug there would
   be catastrophic rather than merely contained, this service's own code surface should
   stay minimal and any change to it should get extra scrutiny. In any real deployment,
-  `sandbox-runner` must sit on an internal-only network with no public port —
+  `sandbox-runner` must sit on an internal-only network with no public port:
   the local [`docker-compose.yml`](../../docker-compose.yml) publishes `8020` to the host
   for dev convenience only.
 
@@ -153,12 +153,12 @@ rationale.
 
 The API, worker, LLM Gateway, and Sandbox Runner all share one bearer secret,
 `APP_INTERNAL_SERVICE_TOKEN`, checked with a plain `!=` comparison (not
-constant-time — low practical risk given these are internal-network-only calls, but
+constant-time, low practical risk given these are internal-network-only calls, but
 worth swapping for `hmac.compare_digest` opportunistically). Every internal service
 fails closed: if no token is configured and `APP_ENVIRONMENT != development`, the
 service refuses to start (`require_runtime_configuration`) or the endpoint returns
 503. There is currently a single shared token across all three internal services
-rather than per-service credentials — a compromise of any one internal service's
+rather than per-service credentials: a compromise of any one internal service's
 token grants access to the same endpoints from any caller on the internal network.
 
 ## 7. Data layer (Supabase)
@@ -170,31 +170,31 @@ token grants access to the same endpoints from any caller on the internal networ
   a `(storage.foldername(name))[1] = auth.uid()::text` path-prefix check.
 - Seven tables (`source_document_versions`, `source_chunks`, `concept_prerequisites`,
   `modules`, `lesson_definitions`, `lesson_revisions`, `mastery_parameters`) have RLS
-  **enabled with no policy defined** — this is default-deny for any non-service-role
+  **enabled with no policy defined**: this is default-deny for any non-service-role
   client, not a gap; they're only ever touched via the service-role key or
   `SECURITY DEFINER` RPCs below, never directly by an end-user session.
 - **`service_role` key**: held only by the API and worker (`app/settings.py`,
   `app/supabase.py`), never by the frontend. It bypasses RLS entirely, which is why
-  the API's application-layer ownership checks (§3) — not RLS — are the actual
+  the API's application-layer ownership checks (§3), not RLS, are the actual
   authorization boundary for API-served reads/writes.
 - **~29 `SECURITY DEFINER` functions** implement the job-queue and course-generation
   pipeline (e.g. `enqueue_course_planning`, `claim_lesson_build`, `apply_course_plan`,
   `read_ingestion_jobs`/`archive_ingestion_job`, `delete_course`). All are explicitly
-  `revoke`d from `public`/`anon`/`authenticated` and `grant`ed only to `service_role`
-  — an authenticated end-user session cannot invoke any of them directly, only the
+  `revoke`d from `public`/`anon`/`authenticated` and `grant`ed only to `service_role`:
+  an authenticated end-user session cannot invoke any of them directly, only the
   backend can.
 
 ## 8. Secrets management
 
 - All LLM provider credentials (OpenAI key, Azure endpoint, AWS Bedrock credentials)
-  live only in the LLM Gateway's environment — the API and worker never see them,
+  live only in the LLM Gateway's environment: the API and worker never see them,
   they only call the gateway's internal HTTP API.
 - `.env` and `.env.local` are gitignored repo-wide; `apps/web/.env.local` is
   regenerated from the root `.env` by `scripts/sync-env.js`, which filters to
   `NEXT_PUBLIC_*` keys only, so a server secret added to the root `.env` cannot
   accidentally leak into the frontend bundle via that script.
 - No CI/CD workflows are currently configured in this repo (no `.github/workflows`),
-  so there's no secrets-in-CI surface to audit yet — revisit this section once one
+  so there's no secrets-in-CI surface to audit yet; revisit this section once one
   exists.
 
 ## 9. Known limitations / accepted risk
@@ -203,13 +203,13 @@ token grants access to the same endpoints from any caller on the internal networ
   gateway's "no token required in development" fallback are intentionally open and
   must never be set in a deployed environment. There's no runtime assertion outside
   `require_runtime_configuration()` preventing `APP_ENVIRONMENT=development` from
-  being set in production by mistake — this is an operational/config-discipline
+  being set in production by mistake: this is an operational/config-discipline
   control, not a code-enforced one.
 - **Shared internal token** across three internal services (§6) rather than per-service
   credentials.
 - **No security headers / CSP** on the Next.js app yet.
 - **Sandbox-runner's `docker.sock` mount** is an inherent trade-off of the
-  docker-outside-of-docker pattern (§5) — it cannot be fully eliminated without
+  docker-outside-of-docker pattern (§5): it cannot be fully eliminated without
   switching to a different isolation mechanism (e.g. gVisor/Firecracker via a
   dedicated execution host), only contained through network isolation and a minimal,
   well-audited code surface in that one service.

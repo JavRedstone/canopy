@@ -1,4 +1,4 @@
-# Architecture — Canopy
+# Architecture: Canopy
 
 **Status:** Current implementation (updated 2026-07-19)
 

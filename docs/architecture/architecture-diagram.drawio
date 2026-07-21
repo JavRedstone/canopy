@@ -152,7 +152,7 @@
         <mxCell id="legend-orange-text" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=15;fontColor=#1A1A1A;" value="Canopy application or processing service" vertex="1">
           <mxGeometry height="75" width="210" x="132" y="1442" as="geometry" />
         </mxCell>
-        <mxCell id="legend-dashed-text" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=15;fontColor=#666666;" value="—:—  Limited browser → Supabase access (Auth + signed uploads)" vertex="1">
+        <mxCell id="legend-dashed-text" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=15;fontColor=#666666;" value="-:-  Limited browser → Supabase access (Auth + signed uploads)" vertex="1">
           <mxGeometry height="80" width="252" x="90" y="1532" as="geometry" />
         </mxCell>
         <mxCell id="legend-loop-text" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=15;fontColor=#6D28D9;fontStyle=1;" value="┄┄┄  Violet panel = detail inset: the agentic self-healing lab-repair loop" vertex="1">
@@ -164,7 +164,7 @@
         <mxCell id="loop-title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=26;fontStyle=1;fontColor=#6D28D9;" value="Agentic Lab-Repair Loop" vertex="1">
           <mxGeometry height="38" width="900" x="430" y="1305" as="geometry" />
         </mxCell>
-        <mxCell id="loop-subtitle" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=17;fontStyle=2;fontColor=#5B21B6;" value="How every coding lab is generated and verified before a learner ever sees it — Worker + LLM Gateway + Sandbox Runner, in detail" vertex="1">
+        <mxCell id="loop-subtitle" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=17;fontStyle=2;fontColor=#5B21B6;" value="How every coding lab is generated and verified before a learner ever sees it: Worker + LLM Gateway + Sandbox Runner, in detail" vertex="1">
           <mxGeometry height="28" width="1580" x="430" y="1347" as="geometry" />
         </mxCell>
         <mxCell id="loop-a" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FF6B35;fontColor=#FFFFFF;strokeColor=#CC4400;fontSize=16;fontStyle=1;arcSize=12;verticalAlign=top;spacing=12;" value="&lt;font style=&quot;font-size: 24px;&quot;&gt;&lt;b&gt;1 · Generate&lt;/b&gt;&lt;br&gt;&lt;/font&gt;&lt;span style=&quot;font-weight:400;font-size:16px;&quot;&gt;GPT-5.6 &lt;b&gt;Luna&lt;/b&gt; (fast, high-volume tier), via the LLM Gateway, writes the lesson&#39;s starter workspace, hidden + visible tests, and reference solution.&lt;/span&gt;" vertex="1">
@@ -173,10 +173,10 @@
         <mxCell id="loop-b" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FF6B35;fontColor=#FFFFFF;strokeColor=#CC4400;fontSize=16;fontStyle=1;arcSize=12;verticalAlign=top;spacing=12;" value="&lt;font style=&quot;font-size: 24px;&quot;&gt;&lt;b&gt;2 · Run for real&lt;/b&gt;&lt;br&gt;&lt;/font&gt;&lt;span style=&quot;font-weight:400;font-size:16px;&quot;&gt;Sandbox Runner executes the starter, then the reference solution, against the real test suite. Nothing is trusted unverified.&lt;/span&gt;" vertex="1">
           <mxGeometry height="170" width="340" x="820" y="1405" as="geometry" />
         </mxCell>
-        <mxCell id="loop-c" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FF6B35;fontColor=#FFFFFF;strokeColor=#CC4400;fontSize=16;fontStyle=1;arcSize=12;verticalAlign=top;spacing=12;" value="&lt;font style=&quot;font-size: 24px;&quot;&gt;&lt;b&gt;3 · Feed back the real failure&lt;/b&gt;&lt;br&gt;&lt;/font&gt;&lt;span style=&quot;font-weight:400;font-size:16px;&quot;&gt;On a failing run, the actual pytest/doctest output goes back to GPT-5.6 — never a guess at what broke.&lt;/span&gt;" vertex="1">
+        <mxCell id="loop-c" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FF6B35;fontColor=#FFFFFF;strokeColor=#CC4400;fontSize=16;fontStyle=1;arcSize=12;verticalAlign=top;spacing=12;" value="&lt;font style=&quot;font-size: 24px;&quot;&gt;&lt;b&gt;3 · Feed back the real failure&lt;/b&gt;&lt;br&gt;&lt;/font&gt;&lt;span style=&quot;font-weight:400;font-size:16px;&quot;&gt;On a failing run, the actual pytest/doctest output goes back to GPT-5.6, never a guess at what broke.&lt;/span&gt;" vertex="1">
           <mxGeometry height="170" width="340" x="1210" y="1405" as="geometry" />
         </mxCell>
-        <mxCell id="loop-d" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FF6B35;fontColor=#FFFFFF;strokeColor=#CC4400;fontSize=16;fontStyle=1;arcSize=12;verticalAlign=top;spacing=12;" value="&lt;font style=&quot;font-size: 24px;&quot;&gt;&lt;b&gt;4 · Repair the exact file&lt;/b&gt;&lt;br&gt;&lt;/font&gt;&lt;span style=&quot;font-weight:400;font-size:16px;&quot;&gt;GPT-5.6 &lt;b&gt;Sol&lt;/b&gt; (flagship reasoning tier — the last line of defense) patches only the starter or only the reference solution, whichever actually failed.&lt;/span&gt;" vertex="1">
+        <mxCell id="loop-d" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FF6B35;fontColor=#FFFFFF;strokeColor=#CC4400;fontSize=16;fontStyle=1;arcSize=12;verticalAlign=top;spacing=12;" value="&lt;font style=&quot;font-size: 24px;&quot;&gt;&lt;b&gt;4 · Repair the exact file&lt;/b&gt;&lt;br&gt;&lt;/font&gt;&lt;span style=&quot;font-weight:400;font-size:16px;&quot;&gt;GPT-5.6 &lt;b&gt;Sol&lt;/b&gt; (flagship reasoning tier, the last line of defense) patches only the starter or only the reference solution, whichever actually failed.&lt;/span&gt;" vertex="1">
           <mxGeometry height="170" width="340" x="1600" y="1405" as="geometry" />
         </mxCell>
         <mxCell id="loop-e1" edge="1" parent="1" source="loop-a" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;strokeColor=#5B21B6;strokeWidth=3.5;endArrow=block;endSize=10;endFill=1;fontSize=15;fontColor=#5B21B6;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" target="loop-b" value="">
@@ -188,7 +188,7 @@
         <mxCell id="loop-e3" edge="1" parent="1" source="loop-c" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;strokeColor=#5B21B6;strokeWidth=3.5;endArrow=block;endSize=10;endFill=1;fontSize=15;fontColor=#5B21B6;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" target="loop-d" value="">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="loop-e4" edge="1" parent="1" source="loop-d" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;strokeColor=#5B21B6;strokeWidth=5;endArrow=block;endSize=14;endFill=1;fontSize=15;fontColor=#5B21B6;fontStyle=1;exitX=0.5;exitY=0;entryX=0.5;entryY=0;" target="loop-b" value="re-verify — bounded retries, never trusted on one attempt">
+        <mxCell id="loop-e4" edge="1" parent="1" source="loop-d" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;strokeColor=#5B21B6;strokeWidth=5;endArrow=block;endSize=14;endFill=1;fontSize=15;fontColor=#5B21B6;fontStyle=1;exitX=0.5;exitY=0;entryX=0.5;entryY=0;" target="loop-b" value="re-verify: bounded retries, never trusted on one attempt">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
               <mxPoint x="1770" y="1385" />
@@ -196,7 +196,7 @@
             </Array>
           </mxGeometry>
         </mxCell>
-        <mxCell id="loop-ships" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DCFCE7;fontColor=#166534;strokeColor=#16A34A;strokeWidth=2;fontSize=16;fontStyle=1;arcSize=12;verticalAlign=top;spacing=10;" value="&lt;b&gt;✓ Ships&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-weight:400;font-size:16px;&quot;&gt;Sandbox-verified lesson — never shown to a learner until this passes for real.&lt;/span&gt;" vertex="1">
+        <mxCell id="loop-ships" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DCFCE7;fontColor=#166534;strokeColor=#16A34A;strokeWidth=2;fontSize=16;fontStyle=1;arcSize=12;verticalAlign=top;spacing=10;" value="&lt;b&gt;✓ Ships&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-weight:400;font-size:16px;&quot;&gt;Sandbox-verified lesson: never shown to a learner until this passes for real.&lt;/span&gt;" vertex="1">
           <mxGeometry height="100" width="340" x="820" y="1630" as="geometry" />
         </mxCell>
         <mxCell id="loop-e5" edge="1" parent="1" source="loop-b" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;strokeColor=#16A34A;strokeWidth=3.5;endArrow=block;endSize=10;endFill=1;fontSize=15;fontColor=#166534;fontStyle=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" target="loop-ships" value="tests pass">

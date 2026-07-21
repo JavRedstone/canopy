@@ -22,7 +22,7 @@ needed (e.g. the lab can't be "failing" again once you've applied the fix). Each
 tagged with `→ video ⟨timestamp⟩`, its position in the final edit, so you can re-sequence
 during assembly.
 
-### Batch 1 — Static/prepared assets (no live app needed, get these out of the way first)
+### Batch 1: Static/prepared assets (no live app needed, get these out of the way first)
 
 1. **Original paper view** → video 0:00-0:30
    The "Attention Is All You Need" paper on screen.
@@ -36,13 +36,13 @@ during assembly.
 4. **Final slide** → video 2:45-3:00
    Closing slide/screen for the outro narration.
 
-### Batch 2 — Create the course (must happen before it has modules)
+### Batch 2: Create the course (must happen before it has modules)
 
 5. **New Course creation** → video 0:30-0:50
    The New Course flow, showing the source input and the learner goal being entered.
-   Do this first in the live app — everything after depends on the course existing.
+   Do this first in the live app; everything after depends on the course existing.
 
-### Batch 3 — Tour the generated course
+### Batch 3: Tour the generated course
 
 6. **Prepared course modules overview** → video 0:50-1:35
    Full module list/progression: paper thesis and Transformer fundamentals → core
@@ -51,15 +51,15 @@ during assembly.
 7. **Scaled dot-product attention lesson** → video 0:50-1:35
    Open the lesson and its source reference, showing the link back to the original paper.
 
-### Batch 4 — Lab, failing state (shoot before touching the fix — this state is one-shot)
+### Batch 4: Lab, failing state (shoot before touching the fix; this state is one-shot)
 
-8. **Transformer block implementation lab — failing run** → video 0:50-1:35
+8. **Transformer block implementation lab: failing run** → video 0:50-1:35
    Open the lab, run the incomplete implementation, pause briefly on the failure output.
-   Don't apply the fix yet — once fixed, this shot can't be redone without resetting.
+   Don't apply the fix yet; once fixed, this shot can't be redone without resetting.
 
-### Batch 5 — Lab, fix and passing state (continuation of Batch 4, same session)
+### Batch 5: Lab, fix and passing state (continuation of Batch 4, same session)
 
-9. **Learning helper — hint and fix** → video 0:50-1:35
+9. **Learning helper: hint and fix** → video 0:50-1:35
    Open the Learning helper, click **Give me a hint**, apply the small fix, rerun to a
    passing result.
 
@@ -67,12 +67,12 @@ during assembly.
     Clean re-open of the now-fixed lab for a tidy passing shot. Can reuse the rerun from
     the previous shot instead if it's clean enough.
 
-### Batch 6 — Mastery and prerequisite data (needs evidence from the lab run to exist)
+### Batch 6: Mastery and prerequisite data (needs evidence from the lab run to exist)
 
-11. **Mastery dashboard — overview** → video 1:35-2:00
+11. **Mastery dashboard: overview** → video 1:35-2:00
     The mastery dashboard for the course.
 
-12. **Mastery dashboard — Understand vs. Apply signals** → video 1:35-2:00
+12. **Mastery dashboard: Understand vs. Apply signals** → video 1:35-2:00
     Close-up on the separate **Understand** and **Apply** scores for the Transformer
     course.
 
