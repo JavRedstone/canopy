@@ -71,7 +71,7 @@ Most important first. Full doc index: [docs/README.md](./docs/README.md).
 
 | Doc | What it's for |
 |---|---|
-| [About / Devpost writeup](./docs/ABOUT.md) | Inspiration, what it does, how it was built, challenges, what's next |
+| [About / Devpost writeup](./docs/ABOUT_PUBLIC.md) | Inspiration, what it does, how it was built, challenges, what's next |
 | [Technologies](./docs/TECHNOLOGIES.md) | The Devpost "Built with" tag list, and what each one actually does here |
 | [Features](./docs/product/FEATURES.md) | Full feature checklist |
 | [Setup](./docs/setup/SETUP.md) | Install + run instructions to test the repo |
