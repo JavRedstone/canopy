@@ -1,4 +1,4 @@
-# Canopy — Features
+# Canopy: Features
 
 Everything Canopy does today, verified against the running code rather than intent. Not a
 roadmap: see [`ROADMAP.md`](./ROADMAP.md) for what is planned, and the
@@ -47,7 +47,7 @@ schema supports but no code path produces.
 
 - Real in-browser Monaco editor, multi-file workspaces, full-viewport workspace layout
 - **Run** (visible checks only, records nothing) vs. **Submit** (full suite including hidden
-  tests, records applied-skill mastery) — a genuine "let me try it" loop before it counts
+  tests, records applied-skill mastery), a genuine "let me try it" loop before it counts
 - Hidden tests stay hidden; the visible test files appear in the editor as read-only tabs so
   you can read what you are graded against
 - Every lab is self-verified before a learner sees it. The generator's starter code must
@@ -68,7 +68,7 @@ schema supports but no code path produces.
   graded by an LLM against a rubric the learner never sees
 - Per-course attempt cap with progressive reveal: while attempts remain, correct answers and
   explanations stay withheld
-- A wrong guess never leaks the answer — only the option you picked is marked
+- A wrong guess never leaks the answer: only the option you picked is marked
 - Answers persist across reloads and replay as answered
 - Topic-level assessments that act as a module mastery checkpoint
 
@@ -116,8 +116,11 @@ schema supports but no code path produces.
 
 ## Certificates & export
 
-- Full PDF coursebook export: every lesson, worked example, quiz, and a deduplicated
-  reference section of cited source excerpts
+- **Partly done.** Full PDF coursebook export: every lesson, worked example, quiz, and a
+  deduplicated reference section of cited source excerpts. The renderer works end to end, but
+  fidelity is still incomplete: the brand font carries a limited glyph set, so some
+  mathematical and non-Latin characters fall back or drop, and complex layouts are still
+  being hardened
 - Completion certificate once every lesson is done, issued once and dated permanently
 - Public, unauthenticated verification link keyed on an unguessable ID, with its own PDF
 - Certificate PDF and web view share one layout, so they cannot drift
