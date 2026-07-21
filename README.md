@@ -2,9 +2,9 @@
   <img src="./docs/assets/canopy-logo.svg" alt="Canopy logo" width="120" />
 </p>
 
-# Adaptive Source Learning
+# Canopy
 
-Canopy turns any technical source — a paper, docs, your own notes — into a hands-on course of lessons and labs, then tracks whether you can actually *apply* what it teaches, not just whether you read it.
+Canopy turns any technical source (a paper, docs, your own notes) into a hands-on course of lessons and labs, then tracks whether you can actually *apply* what it teaches, not just whether you read it.
 
 Local installation and environment configuration are in [docs/SETUP.md](./docs/setup/SETUP.md). Full details on each command below are there too.
 
@@ -42,6 +42,7 @@ equivalents and the full explanation of each service are in
 Full index: [docs/README.md](./docs/README.md).
 
 - [Product idea](./docs/product/IDEA.md)
+- [Features](./docs/product/FEATURES.md)
 - [Architecture](./docs/architecture/ARCHITECTURE.md)
 - [Security](./docs/architecture/SECURITY.md)
 - [Demo guide](./docs/demo/DEMO.md)
