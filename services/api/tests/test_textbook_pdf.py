@@ -9,7 +9,7 @@ running off the page edge) rather than an exception, so a smoke test that only c
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from reportlab.platypus import Preformatted, Table
+from reportlab.platypus import Paragraph, Preformatted, Table
 
 from app.schemas import (
     ConceptDetailResponse,
@@ -22,11 +22,13 @@ from app.schemas import (
 )
 from app.textbook_pdf import (
     _CONTENT_WIDTH,
+    _MATH_SYMBOLS,
     _build_styles,
     _code_cards,
     _inline,
     _markdown_flowables,
     _math_markup,
+    _symbol,
     _Theme,
     render_textbook_pdf,
 )
@@ -125,6 +127,66 @@ def test_unsupported_glyphs_fall_back_instead_of_rendering_blank() -> None:
 
     assert "🚀" not in markup  # the brand font has no emoji; a blank box reads as a bug
     assert 'name="ZapfDingbats"' in markup  # the check mark still renders
+
+
+def test_undelimited_latex_in_prose_is_converted() -> None:
+    """Generated lessons write maths with no $...$ around it, so a delimiter-only renderer
+    printed the raw commands (see the CSC263 export: "G = \\langle V, E\\rangle")."""
+    markup = _inline(r"a graph is written as G = \langle V, E\rangle, where \{u, v\} is an edge")
+
+    assert "\\langle" not in markup and "\\rangle" not in markup and "\\{" not in markup
+    assert "&lt; V, E&gt;" in markup  # no Symbol glyph exists for angle brackets
+    assert "{u, v}" in markup
+
+    complexity = _inline(r"BFS runs in \Theta(V + E) with \infty cost and \log n factors")
+    assert "Θ" in complexity and "∞" in complexity and "log n" in complexity
+    assert "\\Theta" not in complexity
+
+
+def test_noise_commands_do_not_truncate_longer_command_names() -> None:
+    """A substring replace of "\\left" also ate the front of "\\leftrightarrow"."""
+    markup = _inline(r"a \leftrightarrow b and c \leftarrow d")
+
+    assert "↔" in markup and "←" in markup
+    assert "rightarrow" not in markup and "arrow" not in markup.replace("←", "").replace("↔", "")
+
+
+def test_unknown_backslash_words_in_prose_are_left_alone() -> None:
+    """Undelimited conversion is opt-in per command, so real prose is not mangled."""
+    assert r"C:\Users\name" in _inline(r"the path C:\Users\name stays intact")
+
+
+def test_inline_citation_uuids_become_numbered_references() -> None:
+    """The generator cites by writing the bare chunk id inline; the raw hash must never
+    reach the page (markdown-text.tsx does the same for the web view)."""
+    references = {"b64d1cbb-db0b-476b-861d-b51145f97751": 3}
+    markup = _inline("depends on the graph type. [b64d1cbb-db0b-476b-861d-b51145f97751]", references)
+
+    assert "b64d1cbb" not in markup
+    assert '<super><a href="#ref-3"' in markup and "[3]" in markup
+
+    # A citation with no matching reference is dropped rather than printed.
+    orphan = _inline("stale marker [aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee] here", references)
+    assert "aaaaaaaa" not in orphan and "[" not in orphan
+
+
+def test_every_math_symbol_actually_draws() -> None:
+    """Guards the symbol table: a character with no Symbol-font glyph renders as a blank box
+    rather than raising, so a bad entry would ship silently."""
+    from io import BytesIO
+
+    from pypdf import PdfReader
+    from reportlab.platypus import SimpleDocTemplate
+
+    symbols = sorted(set(_MATH_SYMBOLS.values()))
+    buffer = BytesIO()
+    SimpleDocTemplate(buffer).build(
+        [Paragraph(" ".join(_symbol(character) for character in symbols), STYLES["body"])]
+    )
+    rendered = PdfReader(BytesIO(buffer.getvalue())).pages[0].extract_text()
+
+    missing = [character for character in symbols if character not in rendered]
+    assert not missing, f"no Symbol-font glyph for: {missing}"
 
 
 def test_nested_lists_keep_their_depth() -> None:

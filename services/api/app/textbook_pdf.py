@@ -102,24 +102,50 @@ class _Theme:
 _MATH_SYMBOLS = {
     "alpha": "α", "beta": "β", "gamma": "γ", "delta": "δ", "epsilon": "ε", "varepsilon": "ε",
     "zeta": "ζ", "eta": "η", "theta": "θ", "vartheta": "θ", "iota": "ι", "kappa": "κ",
-    "lambda": "λ", "mu": "μ", "nu": "ν", "xi": "ξ", "pi": "π", "rho": "ρ", "sigma": "σ",
+    # "mu" uses the micro sign (U+00B5), not Greek mu: visually identical, and the brand font
+    # carries it directly so it needs no Symbol run.
+    "lambda": "λ", "mu": "µ", "nu": "ν", "xi": "ξ", "pi": "π", "rho": "ρ", "sigma": "σ",
     "tau": "τ", "upsilon": "υ", "phi": "φ", "varphi": "φ", "chi": "χ", "psi": "ψ", "omega": "ω",
     "Gamma": "Γ", "Delta": "Δ", "Theta": "Θ", "Lambda": "Λ", "Xi": "Ξ", "Pi": "Π",
     "Sigma": "Σ", "Phi": "Φ", "Psi": "Ψ", "Omega": "Ω",
     "nabla": "∇", "partial": "∂", "infty": "∞", "sum": "∑", "prod": "∏", "int": "∫",
     "leq": "≤", "le": "≤", "geq": "≥", "ge": "≥", "neq": "≠", "ne": "≠", "approx": "≈",
     "equiv": "≡", "sim": "∼", "propto": "∝", "times": "×", "cdot": "⋅", "div": "÷",
-    "pm": "±", "mp": "∓", "in": "∈", "notin": "∉", "subset": "⊂", "cup": "∪", "cap": "∩",
+    "pm": "±", "in": "∈", "notin": "∉", "subset": "⊂", "cup": "∪", "cap": "∩",
     "forall": "∀", "exists": "∃", "rightarrow": "→", "to": "→", "leftarrow": "←",
     "Rightarrow": "⇒", "leftrightarrow": "↔", "mapsto": "→", "ldots": "…", "cdots": "…",
     "prime": "′", "angle": "∠", "perp": "⊥", "therefore": "∴", "emptyset": "∅",
+    "dots": "…", "vdots": "…", "implies": "⇒", "iff": "↔", "subseteq": "⊆", "supseteq": "⊇",
+    "supset": "⊃", "neg": "¬", "lnot": "¬", "land": "∧", "wedge": "∧", "lor": "∨", "vee": "∨",
+    "bigcup": "∪", "bigcap": "∩", "bigoplus": "⊕", "oplus": "⊕", "otimes": "⊗",
 }
 
-# Dropped outright: spacing/sizing directives with no visual meaning in flowed text.
-_MATH_NOISE = (
-    "\\left", "\\right", "\\displaystyle", "\\limits", "\\nolimits",
-    "\\quad", "\\qquad", "\\,", "\\;", "\\:", "\\!", "\\ ",
-)
+# Commands whose glyph no bundled font can draw, so they degrade to readable ASCII instead.
+# Symbol has no angle brackets, ceilings or floors reachable by Unicode (verified), and a
+# missing glyph renders as a blank box -- "<V, E>" beats a hole in the sentence.
+_MATH_TEXT = {
+    "langle": "<", "rangle": ">",
+    "lceil": "[", "rceil": "]", "lfloor": "[", "rfloor": "]",
+    "lbrace": "{", "rbrace": "}", "lbrack": "[", "rbrack": "]",
+    "setminus": "\\", "backslash": "\\", "colon": ":", "mid": "|",
+    # No Symbol glyph reachable by Unicode for these two, so they degrade to ASCII.
+    "circ": "o", "mp": "-/+",
+    # Operator names: TeX sets these upright, and the name is already the right output.
+    "log": "log", "ln": "ln", "lg": "lg", "exp": "exp", "sin": "sin", "cos": "cos",
+    "tan": "tan", "max": "max", "min": "min", "det": "det", "dim": "dim", "gcd": "gcd",
+    "deg": "deg", "arg": "arg", "bmod": "mod", "pmod": "mod", "argmax": "argmax", "argmin": "argmin",
+}
+
+# Dropped outright: sizing/spacing directives with no visual meaning in flowed text. Matched
+# as whole command names -- a plain substring replace of "\left" also ate the front of
+# "\leftrightarrow" and "\leftarrow", turning them into stray words.
+_MATH_NOISE_COMMANDS = frozenset({
+    "left", "right", "displaystyle", "limits", "nolimits", "quad", "qquad", "mathstrut",
+})
+_MATH_SPACING = re.compile(r"\\[,;:!]|\\(?= )")
+
+# TeX escapes for characters that are otherwise LaTeX syntax.
+_LATEX_ESCAPES = re.compile(r"\\([{}%&_$#])")
 
 
 def _symbol(text: str) -> str:
@@ -196,6 +222,48 @@ def _fold_code(text: str) -> str:
     return "".join(folded)
 
 
+def _latex_token(name: str, stash, *, known_only: bool) -> str:
+    """One LaTeX command -> markup: Symbol-font glyph, ASCII stand-in, or a fallback.
+
+    ``known_only`` is the difference between the two callers. Inside real maths delimiters an
+    unrecognised command is still maths, so it degrades to its own name. In undelimited prose
+    it might not be LaTeX at all, so an unknown command is left exactly as written -- that is
+    what keeps a Windows path like C:\\Users\\name from collapsing to "C:Usersname".
+    """
+    if name in _MATH_NOISE_COMMANDS:
+        return ""
+    character = _MATH_SYMBOLS.get(name)
+    if character:
+        return stash(_symbol(character))
+    if name in _MATH_TEXT:
+        return _MATH_TEXT[name]
+    return f"\\{name}" if known_only else name
+
+
+def _loose_latex(text: str, stash) -> str:
+    """Convert LaTeX that arrives with no math delimiters at all.
+
+    The lesson generator writes maths straight into prose -- "a graph is written as
+    \\langle V, E\\rangle", "\\Theta(V + E)", "\\{u, v\\}" -- with no $...$ or \\(...\\)
+    around it. A delimiter-only renderer therefore printed the raw commands. Runs on prose
+    only: code spans and delimited maths are already stashed by the time this is called.
+    """
+    if "\\" not in text:
+        return text
+    text = re.sub(r"\\\\", " ", text)                             # TeX line break
+    text = re.sub(r"\\(?:begin|end)\s*\{[^{}]*\}", "", text)      # environment wrappers
+    text = re.sub(r"\\d?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}", r"(\1)/(\2)", text)
+    text = re.sub(r"\\sqrt\s*\{([^{}]*)\}", lambda m: stash(_symbol("√")) + f"({m.group(1)})", text)
+    text = re.sub(r"\\(?:text|mathrm|mathbf|mathit|mathcal|operatorname)\s*\{([^{}]*)\}", r"\1", text)
+    text = _MATH_SPACING.sub(" ", text)
+    text = _LATEX_ESCAPES.sub(lambda m: stash(escape(m.group(1))), text)
+    text = re.sub(r"\\([A-Za-z]+)", lambda m: _latex_token(m.group(1), stash, known_only=True), text)
+    # Only the braced script forms: bare "_x" would mangle snake_case identifiers in prose.
+    text = re.sub(r"\^\{([^{}]*)\}", lambda m: stash(f"<super>{escape(m.group(1))}</super>"), text)
+    text = re.sub(r"_\{([^{}]*)\}", lambda m: stash(f"<sub>{escape(m.group(1))}</sub>"), text)
+    return text
+
+
 def _math_markup(tex: str) -> str:
     """Turn a LaTeX fragment into readable reportlab markup.
 
@@ -210,24 +278,16 @@ def _math_markup(tex: str) -> str:
         fragments.append(markup)
         return f"\x00M{len(fragments) - 1}\x00"
 
-    text = tex.strip()
-    for noise in _MATH_NOISE:
-        text = text.replace(noise, " ")
+    text = _MATH_SPACING.sub(" ", tex.strip())
     # Innermost-first so nested fractions unwrap completely.
     fraction = re.compile(r"\\d?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}")
     while fraction.search(text):
         text = fraction.sub(r"(\1)/(\2)", text)
     text = re.sub(r"\\sqrt\s*\{([^{}]*)\}", lambda m: stash(_symbol("√")) + f"({m.group(1)})", text)
     text = re.sub(r"\\(?:text|mathrm|mathbf|mathit|mathcal|operatorname)\s*\{([^{}]*)\}", r"\1", text)
-
-    def command(match: re.Match[str]) -> str:
-        name = match.group(1)
-        character = _MATH_SYMBOLS.get(name)
-        # An unknown command degrades to its own name ("\argmax" -> "argmax"), which reads
-        # far better than leaving the backslash in place.
-        return stash(_symbol(character)) if character else name
-
-    text = re.sub(r"\\([A-Za-z]+)", command, text)
+    # Escaped literals are stashed so the brace-stripping pass below cannot eat them.
+    text = _LATEX_ESCAPES.sub(lambda m: stash(escape(m.group(1))), text)
+    text = re.sub(r"\\([A-Za-z]+)", lambda m: _latex_token(m.group(1), stash, known_only=False), text)
     text = re.sub(r"\^\{([^{}]*)\}", lambda m: stash(f"<super>{escape(m.group(1))}</super>"), text)
     text = re.sub(r"\^(-?\w)", lambda m: stash(f"<super>{escape(m.group(1))}</super>"), text)
     text = re.sub(r"_\{([^{}]*)\}", lambda m: stash(f"<sub>{escape(m.group(1))}</sub>"), text)
@@ -249,6 +309,33 @@ def _code_markup(code: str) -> str:
     return f'<font name="{_MONO_FONT}" color="{_INK}">{escape(code)}</font>'
 
 
+# The lesson generator cites sources by writing the raw chunk id inline, e.g.
+# "...depends on the graph type. [b64d1cbb-db0b-476b-861d-b51145f97751]". The web view turns
+# these into numbered superscripts (markdown-text.tsx's CITATION_PATTERN); the PDF used to
+# print the bare uuid, dropping 16 distinct hashes into the reading text of a 37-page export.
+_CITATION_MARKER = re.compile(
+    r"\s*\[([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\]", re.IGNORECASE
+)
+
+
+def _citation_markup(text: str, citations: dict[str, int] | None, stash) -> str:
+    """Inline chunk-id markers become superscript references into the References page.
+
+    A marker with no matching reference (deleted or legacy citation) is dropped rather than
+    printed, so a raw uuid can never reach the page.
+    """
+    if "[" not in text:
+        return text
+
+    def replace(match: re.Match[str]) -> str:
+        number = (citations or {}).get(match.group(1).lower())
+        if not number:
+            return ""
+        return stash(f'<super><a href="#ref-{number}" color="{_LINK}">[{number}]</a></super>')
+
+    return _CITATION_MARKER.sub(replace, text)
+
+
 def _emphasis(text: str) -> str:
     """Bold/italic/strikethrough on already-escaped text."""
     # Not <b>...</b>: reportlab's <b> tag resolves a family's bold variant through
@@ -265,7 +352,7 @@ def _emphasis(text: str) -> str:
     return text
 
 
-def _inline(markdown: str) -> str:
+def _inline(markdown: str, citations: dict[str, int] | None = None) -> str:
     """Inline markdown -> reportlab paragraph markup."""
     fragments: list[str] = []
 
@@ -280,6 +367,10 @@ def _inline(markdown: str) -> str:
     text = re.sub(r"\$\$(.+?)\$\$", lambda m: stash(_math_markup(m.group(1))), text, flags=re.S)
     text = re.sub(r"\\\((.+?)\\\)", lambda m: stash(_math_markup(m.group(1))), text, flags=re.S)
     text = re.sub(r"\$(?![\s\d])([^$\n]+?)\$(?!\d)", lambda m: stash(_math_markup(m.group(1))), text)
+    text = _citation_markup(text, citations, stash)
+    # Undelimited LaTeX is the common case in generated lessons, so this runs on every
+    # paragraph -- after the delimited forms above have already been taken out.
+    text = _loose_latex(text, stash)
     text = _fallback_runs(text, stash)
     text = escape(text)
     # Images can't be fetched during a synchronous export, so keep the alt text.
@@ -445,7 +536,7 @@ def _column_alignments(delimiter: str) -> list[str]:
     return alignments
 
 
-def _table_flowable(rows: list[list[str]], alignments: list[str], styles: dict[str, ParagraphStyle], theme: _Theme, width: float) -> Table:
+def _table_flowable(rows: list[list[str]], alignments: list[str], styles: dict[str, ParagraphStyle], theme: _Theme, width: float, citations: dict[str, int] | None = None) -> Table:
     """A real GFM table. Previously these collapsed into one run-on paragraph of pipes."""
     header, body = rows[0], rows[1:]
     columns = max(len(row) for row in rows)
@@ -464,8 +555,8 @@ def _table_flowable(rows: list[list[str]], alignments: list[str], styles: dict[s
 
     header_style = ParagraphStyle("TableHeader", parent=styles["small"], fontName=_BOLD_FONT, textColor=HexColor(theme.accent), spaceAfter=0)
     cell_style = ParagraphStyle("TableCell", parent=styles["small"], textColor=HexColor(_BODY_INK), spaceAfter=0)
-    data = [[Paragraph(_inline(cell), header_style) for cell in pad(header)]]
-    data.extend([Paragraph(_inline(cell), cell_style) for cell in pad(row)] for row in body)
+    data = [[Paragraph(_inline(cell, citations), header_style) for cell in pad(header)]]
+    data.extend([Paragraph(_inline(cell, citations), cell_style) for cell in pad(row)] for row in body)
 
     table = Table(data, colWidths=widths, repeatRows=1, hAlign="LEFT")
     style = [
@@ -525,7 +616,7 @@ def _code_cards(code: str, styles: dict[str, ParagraphStyle], width: float) -> I
         )
 
 
-def _list_flowables(items: list[tuple[int, str, str]], styles: dict[str, ParagraphStyle]) -> Iterator[Paragraph]:
+def _list_flowables(items: list[tuple[int, str, str]], styles: dict[str, ParagraphStyle], citations: dict[str, int] | None = None) -> Iterator[Paragraph]:
     """Indented, tightly-spaced list items. Nesting used to be flattened flush-left and every
     item picked up a full paragraph's worth of trailing space."""
     indents = sorted({indent for indent, _, _ in items})
@@ -541,10 +632,10 @@ def _list_flowables(items: list[tuple[int, str, str]], styles: dict[str, Paragra
             spaceBefore=0,
             spaceAfter=3,
         )
-        yield Paragraph(f"{escape(bullet)}&nbsp;&nbsp;{_inline(text)}", style)
+        yield Paragraph(f"{escape(bullet)}&nbsp;&nbsp;{_inline(text, citations)}", style)
 
 
-def _markdown_flowables(markdown: str, styles: dict[str, ParagraphStyle], theme: _Theme, width: float) -> Iterator:
+def _markdown_flowables(markdown: str, styles: dict[str, ParagraphStyle], theme: _Theme, width: float, citations: dict[str, int] | None = None) -> Iterator:
     lines = markdown.replace("\r\n", "\n").split("\n")
     index = 0
     paragraph: list[str] = []
@@ -554,7 +645,7 @@ def _markdown_flowables(markdown: str, styles: dict[str, ParagraphStyle], theme:
             text = " ".join(part.strip() for part in paragraph).strip()
             paragraph.clear()
             if text:
-                yield Paragraph(_inline(text), styles["body"])
+                yield Paragraph(_inline(text, citations), styles["body"])
 
     while index < len(lines):
         raw = lines[index]
@@ -605,7 +696,7 @@ def _markdown_flowables(markdown: str, styles: dict[str, ParagraphStyle], theme:
                 rows.append(_split_table_row(lines[index]))
                 index += 1
             yield Spacer(1, 4)
-            yield _table_flowable(rows, alignments, styles, theme, width)
+            yield _table_flowable(rows, alignments, styles, theme, width, citations)
             yield Spacer(1, 9)
             continue
 
@@ -628,7 +719,7 @@ def _markdown_flowables(markdown: str, styles: dict[str, ParagraphStyle], theme:
                 else:
                     break
             yield Spacer(1, 3)
-            yield from _list_flowables(items, styles)
+            yield from _list_flowables(items, styles, citations)
             yield Spacer(1, 6)
             continue
 
@@ -639,7 +730,7 @@ def _markdown_flowables(markdown: str, styles: dict[str, ParagraphStyle], theme:
                 quote.append(lines[index].strip().lstrip(">").strip())
                 index += 1
             padding = 13
-            inner = list(_markdown_flowables("\n".join(quote), {**styles, "body": styles["callout"]}, theme, _inner_width(width, padding)))
+            inner = list(_markdown_flowables("\n".join(quote), {**styles, "body": styles["callout"]}, theme, _inner_width(width, padding), citations))
             yield _card(inner, "#ffffff", width=width, padding=padding, border=theme.accent, radius=12)
             yield Spacer(1, 8)
             continue
@@ -648,7 +739,7 @@ def _markdown_flowables(markdown: str, styles: dict[str, ParagraphStyle], theme:
         if heading:
             yield from flush()
             level = min(len(heading.group(1)), 4)
-            yield Paragraph(_inline(heading.group(2)), styles[f"h{level}"])
+            yield Paragraph(_inline(heading.group(2), citations), styles[f"h{level}"])
             index += 1
             continue
 
@@ -800,14 +891,14 @@ def _lesson_story(
         Paragraph(f'<a name="{key}"/>{_inline(concept.title)}', title_style),
     ]
     if summary:
-        header.append(Paragraph(_inline(summary), styles["small"]))
+        header.append(Paragraph(_inline(summary, reference_numbers), styles["small"]))
     padding = 14
     story.append(_card(header, "#ffffff", width=_CONTENT_WIDTH, padding=padding, border=_HAIRLINE, radius=14))
     story.append(Spacer(1, 10))
 
     if detail and detail.lesson:
         explanation = _LESSON_MARKER.sub("", detail.lesson.explanation_markdown)
-        story.extend(_markdown_flowables(explanation, styles, theme, _CONTENT_WIDTH))
+        story.extend(_markdown_flowables(explanation, styles, theme, _CONTENT_WIDTH, reference_numbers))
 
         for example in detail.lesson.worked_examples:
             example_padding = 14
@@ -815,7 +906,7 @@ def _lesson_story(
             example_title = ParagraphStyle("ExampleTitle", parent=styles["body"], fontName=_BOLD_FONT, textColor=HexColor(theme.accent), spaceAfter=5)
             story.append(Spacer(1, 6))
             story.append(_card(
-                [Paragraph(_inline(example.title), example_title), *_markdown_flowables(example.body_markdown, styles, theme, inner)],
+                [Paragraph(_inline(example.title, reference_numbers), example_title), *_markdown_flowables(example.body_markdown, styles, theme, inner, reference_numbers)],
                 theme.tint,
                 width=_CONTENT_WIDTH,
                 padding=example_padding,
@@ -831,7 +922,7 @@ def _lesson_story(
             heading = ParagraphStyle("QuizHeading", parent=styles["body"], fontName=_BOLD_FONT, textColor=HexColor("#92400e"), spaceAfter=7)
             content = [Paragraph("Check your understanding", heading)]
             for position, quiz in enumerate(detail.lesson.quiz_items, start=1):
-                content.append(Paragraph(f"{position}. {_inline(quiz.prompt_markdown)}", prompt_style))
+                content.append(Paragraph(f"{position}. {_inline(quiz.prompt_markdown, reference_numbers)}", prompt_style))
                 for option in quiz.options or []:
                     content.append(Paragraph(f"{escape(_BULLETS[0])}&nbsp;&nbsp;{_inline(option.text)}", option_style))
                 content.append(Spacer(1, 5))
