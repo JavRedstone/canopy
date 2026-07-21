@@ -23,10 +23,12 @@ INTERLEAVE_INSTRUCTION = (
 )
 
 MATH_FORMATTING_INSTRUCTION = (
-    "Use fenced Markdown code blocks only for code, never for mathematics. Write any mathematical "
-    "notation as LaTeX so it renders as real math: wrap inline math in \\( \\) and put display "
-    "equations in $$ ... $$ on their own lines (KaTeX renders both). Never split an inline backtick "
-    "or inline-math expression across lines."
+    "Write any mathematical notation as LaTeX so it renders as real math: wrap inline math in \\( \\) "
+    "and put display equations in $$ ... $$ on their own lines (KaTeX renders both). Never put a formula, "
+    "equation, or symbolic expression in backticks or in a fenced code block, and never substitute Unicode "
+    "characters such as the square-root sign or superscript letters for LaTeX. Backticks are only for code "
+    "identifiers such as variable, function, and file names. Never split an inline backtick or inline-math "
+    "expression across lines."
 )
 
 QUIZ_KINDS_INSTRUCTION = (

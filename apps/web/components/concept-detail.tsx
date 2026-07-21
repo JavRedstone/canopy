@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { ConceptDetailResponse, ConceptMastery, CourseMapResponse, CourseMasteryResponse, CourseSummary, LessonRunResult, LessonWorkspaceFile, QuizItemPreview, ScriptRunResult, WorkedExamplePreview, askLessonHelper, clearDemoProgress, getConceptDetail, getCourse, getCourseMap, getCourseMastery, getDemoAutoCompleteStatus, regenerateLesson, runLesson, runLessonScript, startDemoAutoComplete, submitLesson } from "@/lib/api";
+import { ConceptDetailResponse, ConceptMastery, CourseMapResponse, CourseMasteryResponse, CourseSummary, LessonRunResult, LessonWorkspaceFile, QuizItemPreview, ScriptRunResult, WorkedExamplePreview, askLessonHelper, clearDemoProgress, getConceptDetail, getCourse, getCourseMastery, getDemoAutoCompleteStatus, regenerateLesson, runLesson, runLessonScript, startDemoAutoComplete, submitLesson } from "@/lib/api";
 import { useFullBleed } from "@/components/app-shell";
+import { CanopyLoader } from "@/components/canopy-loader";
+import { useCourseOutline } from "@/components/course-outline";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { CitationExcerptDialog } from "@/components/citation-excerpt-dialog";
 import { Icon } from "@/components/icon";
@@ -243,48 +245,6 @@ function TabDot({ ok }: { ok: boolean }) {
   return <Box component="span" sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: ok ? "success.main" : "error.main", display: "inline-block" }} />;
 }
 
-function CourseOutlineSidebar({ courseId, map, activeSlug, collapsed, onToggle }: { courseId: string; map?: CourseMapResponse; activeSlug: string; collapsed: boolean; onToggle: () => void }) {
-  return (
-    <Box component="aside" sx={{ display: { xs: "none", md: "block" }, position: "fixed", top: 64, bottom: 0, left: 0, zIndex: 2, width: collapsed ? 56 : 280, overflowX: "hidden", overflowY: "auto", borderRight: 1, borderColor: "divider", bgcolor: "background.paper", p: 1.25, transition: (theme) => theme.transitions.create("width", { duration: 180 }) }}>
-      <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", px: collapsed ? 0 : 1, mb: 0.75 }}>
-        {!collapsed ? <Typography variant="overline" color="text.secondary">Course outline</Typography> : null}
-        <IconButton size="small" onClick={onToggle} aria-label={collapsed ? "Expand course outline" : "Collapse course outline"}>
-          <Icon name={collapsed ? "chevron_right" : "chevron_left"} />
-        </IconButton>
-      </Stack>
-      {!collapsed && !map ? <Stack direction="row" sx={{ alignItems: "center", gap: 1, px: 1, color: "text.secondary" }}><CircularProgress size={14} /><Typography variant="body2">Loading outline…</Typography></Stack> : null}
-      {!collapsed && map ? <List disablePadding sx={{ display: "grid", gap: 1 }}>
-        {map.modules.map((module) => (
-          <Box key={module.position}>
-            <Typography variant="caption" color="text.secondary" sx={{ display: "block", px: 1, pb: 0.5 }}>
-              {module.position}. {module.title}
-            </Typography>
-            {module.concepts.map((item) => (
-              <ListItemButton
-                key={item.slug}
-                component={Link}
-                href={`/courses/${courseId}/concepts/${item.slug}`}
-                selected={item.slug === activeSlug}
-                sx={{ borderRadius: 1, py: 0.75, px: 1, alignItems: "flex-start" }}
-              >
-                <ListItemIcon sx={{ minWidth: 28, mt: 0.15 }}>
-                  <Icon name={conceptKindIcon(item.kind)} />
-                </ListItemIcon>
-                <ListItemText primary={item.title} secondary={conceptKindLabel(item.kind)} slotProps={{ primary: { sx: { fontSize: "0.82rem", lineHeight: 1.25 } }, secondary: { sx: { fontSize: "0.72rem" } } }} />
-                {item.completed ? (
-                  <Box component="span" sx={{ mt: 0.15, color: "success.main", display: "inline-flex", "& .material-symbol": { fontSize: 16 } }}>
-                    <Icon name="check_circle" />
-                  </Box>
-                ) : null}
-              </ListItemButton>
-            ))}
-          </Box>
-        ))}
-      </List> : null}
-    </Box>
-  );
-}
-
 /** A small floating "Ask" pill that appears next to a text selection, so the learning
  *  helper is discoverable without spotting the collapsed icon rail on the page edge. */
 function SelectionAskBubble({ rect, onAsk }: { rect: { top: number; left: number }; onAsk: () => void }) {
@@ -493,10 +453,11 @@ function LearningHelperSidebar({
 }
 
 export function ConceptDetail({ courseId, slug }: { courseId: string; slug: string }) {
+  // The outline lives in the /courses/[id] layout so it survives concept navigation; this
+  // page reads the same map for its prev/next links rather than fetching a second copy.
+  const { map: courseMap, refresh: refreshCourseMap, collapsed: outlineCollapsed } = useCourseOutline();
   const [course, setCourse] = useState<CourseSummary>();
   const [concept, setConcept] = useState<ConceptDetailResponse>();
-  const [courseMap, setCourseMap] = useState<CourseMapResponse>();
-  const [outlineCollapsed, setOutlineCollapsed] = useState(false);
   const [codeCollapsed, setCodeCollapsed] = useState(false);
   const [helperOpen, setHelperOpen] = useState(false);
   const [selectedText, setSelectedText] = useState("");
@@ -541,16 +502,14 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
       if (!data.session) return;
       try {
         const token = data.session.access_token;
-        const [courseSummary, conceptDetail, map, masteryResponse] = await Promise.all([
+        const [courseSummary, conceptDetail, masteryResponse] = await Promise.all([
           getCourse(courseId, token),
           getConceptDetail(courseId, slug, token),
-          getCourseMap(courseId, token),
           getCourseMastery(courseId, token).catch(() => undefined)
         ]);
         if (cancelled) return;
         setCourse(courseSummary);
         setConcept(conceptDetail);
-        setCourseMap(map);
         setMastery(masteryResponse);
         const starterFiles = conceptDetail.lesson?.starter_files ?? [];
         setFiles(starterFiles);
@@ -744,20 +703,9 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
     }
   }
 
-  // courseMap is only fetched once on load, so its per-concept `completed` flags (the
-  // checkmarks in the outline sidebar and course overview) would otherwise go stale for
-  // the rest of the session the moment a lesson is finished. Refresh it alongside mastery
-  // on every completion-relevant event so "done" shows up live, not just after a reload.
-  async function refreshCourseMap() {
-    try {
-      const { data } = await createClient().auth.getSession();
-      if (!data.session) return;
-      setCourseMap(await getCourseMap(courseId, data.session.access_token));
-    } catch {
-      // Non-fatal: the outline/module list just keeps its last known completion state.
-    }
-  }
-
+  // The outline's per-concept `completed` ticks would otherwise go stale the moment a
+  // lesson is finished, so refresh the map alongside mastery on every completion-relevant
+  // event -- refreshCourseMap comes from the layout-level provider that owns it.
   async function refreshProgress() {
     await Promise.all([refreshMastery(), refreshCourseMap()]);
   }
@@ -891,16 +839,15 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
   if (state === "loading") {
     return (
       <PageShell maxWidth={{ xs: 1040, xl: helperOpen ? 1360 : 1040 }}>
-        <CourseOutlineSidebar courseId={courseId} map={courseMap} activeSlug={slug} collapsed={outlineCollapsed} onToggle={() => setOutlineCollapsed((current) => !current)} />
         <LearningHelperSidebar courseId={courseId} slug={slug} selectedText={selectedText} selectedParagraph={selectedParagraph} focusedQuizItem={focusedQuizItem} workspaceFiles={submittableFiles} open={helperOpen} onToggle={() => setHelperOpen((current) => !current)} onClearSelection={() => { setSelectedText(""); setSelectedRange(undefined); setSelectedParagraph(undefined); setBubbleRect(undefined); setFocusedQuizItem(undefined); }} onApplyRevision={applyHelperRevision} />
         {bubbleRect ? <SelectionAskBubble rect={bubbleRect} onAsk={() => { setHelperOpen(true); setBubbleRect(undefined); }} /> : null}
-        <Stack direction="row" sx={{ ml: { md: outlineCollapsed ? "56px" : "280px" }, mr: { xs: "56px", xl: helperOpen ? "360px" : "56px" }, alignItems: "center", gap: 1.5, color: "text.secondary" }}>
-          <CircularProgress size={18} /> <Typography>Loading…</Typography>
-        </Stack>
+        <Box sx={{ ml: { md: outlineCollapsed ? "56px" : "280px" }, mr: { xs: "56px", xl: helperOpen ? "360px" : "56px" } }}>
+          <CanopyLoader label="Loading this lesson…" />
+        </Box>
       </PageShell>
     );
   }
-  if (state === "error") return <PageShell><CourseOutlineSidebar courseId={courseId} map={courseMap} activeSlug={slug} collapsed={outlineCollapsed} onToggle={() => setOutlineCollapsed((current) => !current)} /><LearningHelperSidebar courseId={courseId} slug={slug} selectedText={selectedText} selectedParagraph={selectedParagraph} focusedQuizItem={focusedQuizItem} workspaceFiles={submittableFiles} open={helperOpen} onToggle={() => setHelperOpen((current) => !current)} onClearSelection={() => { setSelectedText(""); setSelectedRange(undefined); setSelectedParagraph(undefined); setBubbleRect(undefined); setFocusedQuizItem(undefined); }} onApplyRevision={applyHelperRevision} />
+  if (state === "error") return <PageShell><LearningHelperSidebar courseId={courseId} slug={slug} selectedText={selectedText} selectedParagraph={selectedParagraph} focusedQuizItem={focusedQuizItem} workspaceFiles={submittableFiles} open={helperOpen} onToggle={() => setHelperOpen((current) => !current)} onClearSelection={() => { setSelectedText(""); setSelectedRange(undefined); setSelectedParagraph(undefined); setBubbleRect(undefined); setFocusedQuizItem(undefined); }} onApplyRevision={applyHelperRevision} />
         {bubbleRect ? <SelectionAskBubble rect={bubbleRect} onAsk={() => { setHelperOpen(true); setBubbleRect(undefined); }} /> : null}<Box sx={{ ml: { md: outlineCollapsed ? "56px" : "280px" }, mr: { xs: "56px", xl: helperOpen ? "360px" : "56px" } }}><Alert severity="error">{errorMessage ?? "We could not load this concept."}</Alert></Box></PageShell>;
   if (!course || !concept) return null;
 
@@ -955,7 +902,6 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
         <Box sx={{ ml: { md: outlineCollapsed ? "56px" : "280px" }, mr: { xs: "56px", xl: helperOpen ? "360px" : "56px" } }}>
         {breadcrumbs}
         <Box sx={{ display: "flex", gap: 3, alignItems: "flex-start" }}>
-        <CourseOutlineSidebar courseId={courseId} map={courseMap} activeSlug={slug} collapsed={outlineCollapsed} onToggle={() => setOutlineCollapsed((current) => !current)} />
         <Box sx={{ flex: 1, minWidth: 0 }}>
         <Stack direction="row" sx={{ alignItems: "flex-start", justifyContent: "space-between", gap: 3, mb: 4 }}>
           <Stack direction="row" sx={{ alignItems: "center", gap: 1.75 }}>
@@ -1026,7 +972,6 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
-      <CourseOutlineSidebar courseId={courseId} map={courseMap} activeSlug={slug} collapsed={outlineCollapsed} onToggle={() => setOutlineCollapsed((current) => !current)} />
       <LearningHelperSidebar courseId={courseId} slug={slug} selectedText={selectedText} selectedParagraph={selectedParagraph} focusedQuizItem={focusedQuizItem} workspaceFiles={submittableFiles} open={helperOpen} onToggle={() => setHelperOpen((current) => !current)} onClearSelection={() => { setSelectedText(""); setSelectedRange(undefined); setSelectedParagraph(undefined); setBubbleRect(undefined); setFocusedQuizItem(undefined); }} onApplyRevision={applyHelperRevision} />
         {bubbleRect ? <SelectionAskBubble rect={bubbleRect} onAsk={() => { setHelperOpen(true); setBubbleRect(undefined); }} /> : null}
       <CitationExcerptDialog courseId={courseId} citationId={selectedCitationId} onOpenChange={(open) => { if (!open) setSelectedCitationId(null); }} />
@@ -1048,11 +993,27 @@ export function ConceptDetail({ courseId, slug }: { courseId: string; slug: stri
 
       {concept.lesson && concept.lesson.status === "built" ? (
         <Box sx={{ flex: 1, minHeight: 0, display: "flex", pl: { md: outlineCollapsed ? "56px" : "280px" }, pr: { xs: "56px", xl: helperOpen ? "360px" : "56px" } }}>
-          <Box sx={{ flex: codeCollapsed ? 1 : "0 1 420px", minWidth: 280, overflowY: "auto", p: "24px 24px 48px", borderRight: 1, borderColor: "divider", display: "grid", gap: 3, alignContent: "start" }}>
+          <Box
+            sx={{
+              // Keep enough room for the editor at the 1100px desktop cutoff, then let the
+              // instructions grow on normal laptop and desktop displays. The previous fixed
+              // 420px basis left dense lab directions cramped even when space was available.
+              flex: codeCollapsed ? 1 : "0 1 clamp(360px, 34vw, 540px)",
+              minWidth: 320,
+              overflowY: "auto",
+              overflowWrap: "anywhere",
+              p: "24px 24px 48px",
+              borderRight: 1,
+              borderColor: "divider",
+              display: "grid",
+              gap: 3,
+              alignContent: "start"
+            }}
+          >
             <Stack direction="row" sx={{ alignItems: "flex-start", justifyContent: "space-between", gap: 1 }}>
               <Stack sx={{ minWidth: 0, gap: 0.25 }}>
                 <Typography variant="overline" color="text.secondary">{conceptKindLabel(concept.kind)}</Typography>
-                <Typography variant="subtitle1" sx={{ fontWeight: 700 }} noWrap>{concept.title}</Typography>
+                <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.35 }}>{concept.title}</Typography>
               </Stack>
               {lessonSettingsMenu}
             </Stack>

@@ -24,6 +24,7 @@ import {
   getPracticeSession,
   topUpPracticePool
 } from "@/lib/api";
+import { CanopyLoader } from "@/components/canopy-loader";
 import { Icon } from "@/components/icon";
 import { MarkdownText } from "@/components/markdown-text";
 import { QuizOptionList } from "@/components/quiz";
@@ -53,11 +54,84 @@ const ORDER_LABELS: Record<Order, string> = {
   course: "Course order"
 };
 
+// Terse on purpose: the toggle labels the choice, and describeSession() below spells out
+// what it means, so these don't have to wrap onto two lines to explain themselves.
 const FILTER_LABELS: Record<Filter, string> = {
-  unseen: "New questions",
-  all: "Everything",
-  missed: "Ones I missed"
+  unseen: "New",
+  all: "All",
+  missed: "Missed"
 };
+
+const ORDER_PHRASES: Record<Order, string> = {
+  shuffle: "in random order",
+  weakest: "weakest concepts first",
+  course: "in course order"
+};
+
+const FILTER_PHRASES: Record<Filter, string> = {
+  unseen: "you haven't seen yet",
+  all: "from the whole pool",
+  missed: "you've missed before"
+};
+
+/** Turns the three toggles into one plain sentence, so the configured session is legible
+ *  without mentally combining "10" + "Shuffle" + "New questions". */
+function describeSession(config: SessionConfig): string {
+  const length = config.length === ENDLESS ? "Endless practice" : `${config.length} questions`;
+  return `${length} ${FILTER_PHRASES[config.filter]}, ${ORDER_PHRASES[config.order]}.`;
+}
+
+function OptionGroup<T extends string | number>({
+  label,
+  icon,
+  value,
+  options,
+  onChange
+}: {
+  label: string;
+  icon: string;
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (value: T) => void;
+}) {
+  return (
+    <Box sx={{ display: "grid", gap: 0.75, alignContent: "start", minWidth: 0 }}>
+      <Stack direction="row" sx={{ alignItems: "center", gap: 0.5, color: "text.secondary", "& .material-symbol": { fontSize: 16 } }}>
+        <Icon name={icon} />
+        <Typography variant="overline">{label}</Typography>
+      </Stack>
+      <ToggleButtonGroup
+        size="small"
+        exclusive
+        fullWidth
+        value={value}
+        onChange={(_event, next) => { if (next !== null) onChange(next as T); }}
+        sx={{
+          "& .MuiToggleButton-root": {
+            py: 0.65,
+            px: 1,
+            textTransform: "none",
+            fontSize: "0.78rem",
+            lineHeight: 1.2,
+            borderColor: "divider",
+            // MUI's default selected state is a barely-darker grey; at this size the active
+            // choice has to be unmistakable at a glance.
+            "&.Mui-selected": {
+              bgcolor: "primary.main",
+              color: "primary.contrastText",
+              fontWeight: 600,
+              "&:hover": { bgcolor: "primary.main" }
+            }
+          }
+        }}
+      >
+        {options.map((option) => (
+          <ToggleButton key={String(option.value)} value={option.value}>{option.label}</ToggleButton>
+        ))}
+      </ToggleButtonGroup>
+    </Box>
+  );
+}
 
 function answerFor(question: PracticeQuestion, selected: number[], text: string): QuizAnswerRequest | null {
   if (question.kind === "mcq") return selected.length === 1 ? { selected_option_index: selected[0] } : null;
@@ -183,7 +257,7 @@ function PracticeQuestionCard({
               {grade.explanation_markdown ? <MarkdownText>{grade.explanation_markdown}</MarkdownText> : null}
               {!grade.correct ? (
                 <Typography variant="caption" color="text.secondary">
-                  Practice is low-stakes — a miss here never counts against your mastery. You&apos;ll see this one again.
+                  Practice is low-stakes, so a miss here never counts against your mastery. You&apos;ll see this one again.
                 </Typography>
               ) : null}
             </Alert>
@@ -328,7 +402,7 @@ export function PracticeDrill({
     <Stack sx={{ gap: 1.5 }}>
       <Stack direction="row" sx={{ gap: 1, alignItems: "center", flexWrap: "wrap" }}>
         <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
-          {answeredCount > 0 ? `${correctCount} of ${answeredCount} correct` : "Low-stakes drilling — a miss never counts against you"}
+          {answeredCount > 0 ? `${correctCount} of ${answeredCount} correct` : "Low-stakes drilling. A miss never counts against you"}
         </Typography>
         <Button
           size="small"
@@ -341,58 +415,51 @@ export function PracticeDrill({
       </Stack>
 
       <Collapse in={optionsOpen} unmountOnExit>
-        <Paper variant="outlined" sx={{ p: 1.5, display: "grid", gap: 1.5 }}>
-          <Box sx={{ display: "grid", gap: 0.5 }}>
-            <Typography variant="overline" color="text.secondary">Length</Typography>
-            <ToggleButtonGroup
-              size="small"
-              exclusive
+        <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, bgcolor: (theme) => alpha(theme.palette.primary.main, 0.015) }}>
+          {/* Uneven columns: Order carries the longest labels, Questions the shortest. */}
+          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1.1fr 1.3fr 1fr" }, gap: { xs: 2, sm: 2.5 } }}>
+            <OptionGroup
+              label="Length"
+              icon="tag"
               value={config.length}
-              onChange={(_event, value) => { if (value !== null) changeConfig({ length: value }); }}
-            >
-              {SESSION_LENGTHS.map((option) => (
-                <ToggleButton key={option} value={option}>{option}</ToggleButton>
-              ))}
-              <ToggleButton value={ENDLESS}>Endless</ToggleButton>
-            </ToggleButtonGroup>
-          </Box>
-
-          <Box sx={{ display: "grid", gap: 0.5 }}>
-            <Typography variant="overline" color="text.secondary">Order</Typography>
-            <ToggleButtonGroup
-              size="small"
-              exclusive
+              options={[...SESSION_LENGTHS.map((option) => ({ value: option, label: String(option) })), { value: ENDLESS, label: "Endless" }]}
+              onChange={(length) => changeConfig({ length })}
+            />
+            <OptionGroup
+              label="Order"
+              icon="shuffle"
               value={config.order}
-              onChange={(_event, value) => { if (value !== null) changeConfig({ order: value }); }}
-            >
-              {(Object.keys(ORDER_LABELS) as Order[]).map((option) => (
-                <ToggleButton key={option} value={option}>{ORDER_LABELS[option]}</ToggleButton>
-              ))}
-            </ToggleButtonGroup>
+              options={(Object.keys(ORDER_LABELS) as Order[]).map((option) => ({ value: option, label: ORDER_LABELS[option] }))}
+              onChange={(order) => changeConfig({ order })}
+            />
+            <OptionGroup
+              label="Questions"
+              icon="filter_alt"
+              value={config.filter}
+              options={(Object.keys(FILTER_LABELS) as Filter[]).map((option) => ({ value: option, label: FILTER_LABELS[option] }))}
+              onChange={(filter) => changeConfig({ filter })}
+            />
           </Box>
 
-          <Box sx={{ display: "grid", gap: 0.5 }}>
-            <Typography variant="overline" color="text.secondary">Questions</Typography>
-            <ToggleButtonGroup
-              size="small"
-              exclusive
-              value={config.filter}
-              onChange={(_event, value) => { if (value !== null) changeConfig({ filter: value }); }}
-            >
-              {(Object.keys(FILTER_LABELS) as Filter[]).map((option) => (
-                <ToggleButton key={option} value={option}>{FILTER_LABELS[option]}</ToggleButton>
-              ))}
-            </ToggleButtonGroup>
-          </Box>
+          {/* Three separate toggles don't add up to an obvious result, so say the outcome plainly. */}
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 2, pt: 1.5, borderTop: 1, borderColor: "divider" }}>
+            {describeSession(config)}
+          </Typography>
         </Paper>
       </Collapse>
 
-      {config.length !== ENDLESS && questions.length > 0 ? (
-        <LinearProgress variant="determinate" value={progress} />
+      {/* Only once there is progress to show. At 0% this rendered as a bare grey track that
+          read as a stray divider between the options panel and the question card. */}
+      {config.length !== ENDLESS && progress > 0 ? (
+        <LinearProgress
+          variant="determinate"
+          value={progress}
+          sx={{ height: 6, borderRadius: 999, bgcolor: "action.hover", "& .MuiLinearProgress-bar": { borderRadius: 999 } }}
+        />
       ) : null}
 
       {error ? <Alert severity="error">{error}</Alert> : null}
-      {loading && !current ? <Typography color="text.secondary">Loading questions…</Typography> : null}
+      {loading && !current ? <CanopyLoader label="Loading questions…" size={44} py={4} /> : null}
 
       {current ? (
         <>
@@ -423,7 +490,7 @@ export function PracticeDrill({
               <Typography sx={{ fontWeight: 700 }}>You&apos;ve seen every question here</Typography>
               <Typography variant="body2" color="text.secondary">
                 {toppedUp
-                  ? "More questions are being written now — check back in a moment."
+                  ? "More questions are being written now. Check back in a moment."
                   : "Ask for a fresh batch, or switch “Questions” to Everything to drill the ones you've already answered."}
               </Typography>
               {!toppedUp ? (

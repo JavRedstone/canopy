@@ -10,6 +10,7 @@ import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import { CertificateResponse, CourseNotCompletedError, exportCertificate, getCertificate } from "@/lib/api";
 import { CertificateCard } from "@/components/certificate-card";
+import { CanopyLoader } from "@/components/canopy-loader";
 import { Icon } from "@/components/icon";
 import { createClient } from "@/lib/supabase/client";
 
@@ -99,11 +100,7 @@ export function CertificateDialog({ courseId, open, onOpenChange }: { courseId: 
   return (
     <Dialog open={open} onClose={() => onOpenChange(false)} fullWidth maxWidth="lg">
       <DialogContent sx={{ pt: 2 }}>
-        {loading ? (
-          <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
-            <CircularProgress size={28} />
-          </Box>
-        ) : null}
+        {loading ? <CanopyLoader label="Loading certificate…" size={44} py={3} /> : null}
         {error ? <Alert severity="info">{error}</Alert> : null}
         {previewUrl ? (
           <Box sx={{ width: "100%", aspectRatio: "11 / 8.5", border: 1, borderColor: "divider", borderRadius: 1, overflow: "hidden", bgcolor: "grey.100" }}>

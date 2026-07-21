@@ -6,10 +6,10 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import Paper from "@mui/material/Paper";
 import Chip from "@mui/material/Chip";
-import CircularProgress from "@mui/material/CircularProgress";
 import { alpha } from "@mui/material/styles";
 import { CourseMasteryResponse, getCourseMastery } from "@/lib/api";
 import { MasteryMeter } from "@/components/mastery-meter";
+import { CanopyLoader } from "@/components/canopy-loader";
 import { Icon } from "@/components/icon";
 import { UNDERSTAND_COLOR } from "@/lib/palette";
 import { conceptKindIcon } from "@/lib/concept-kind";
@@ -43,13 +43,7 @@ export function MasteryDashboard({ courseId, refreshKey }: { courseId: string; r
     };
   }, [courseId, refreshKey]);
 
-  if (state === "loading") {
-    return (
-      <Stack direction="row" sx={{ alignItems: "center", gap: 1, color: "text.secondary", py: 1 }}>
-        <CircularProgress size={14} /> <Typography variant="body2">Loading mastery…</Typography>
-      </Stack>
-    );
-  }
+  if (state === "loading") return <CanopyLoader label="Loading mastery…" size={44} py={4} />;
   if (state === "error" || !mastery || mastery.concepts.length === 0) return null;
 
   const total = mastery.concepts.length;

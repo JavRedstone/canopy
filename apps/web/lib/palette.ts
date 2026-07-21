@@ -5,3 +5,7 @@
 export const UNDERSTAND_COLOR = "#818cf8";
 export const APPLY_COLOR = "#2dd4bf";
 export const ASSESSMENT_COLOR = "#fbbf24";
+
+// The canopy green from public/canopy-logo.svg. For brand moments -- in-progress work, the
+// growing-tree loader -- rather than the mastery tracks above, which carry their own meaning.
+export const CANOPY_GREEN = "#6aa84f";

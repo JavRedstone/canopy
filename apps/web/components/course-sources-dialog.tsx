@@ -15,6 +15,7 @@ import ListItemText from "@mui/material/ListItemText";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { CourseSourceSummary, getCourseSources, getSourceDownloadUrl } from "@/lib/api";
+import { CanopyLoader } from "@/components/canopy-loader";
 import { Icon } from "@/components/icon";
 import { createClient } from "@/lib/supabase/client";
 
@@ -89,11 +90,7 @@ export function CourseSourcesDialog({ courseId, open, onOpenChange }: { courseId
       <DialogTitle sx={{ pb: 1 }}>Source library</DialogTitle>
       <DialogContent>
         <Box sx={{ pt: 0.5 }}>
-          {loading ? (
-            <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
-              <CircularProgress size={28} />
-            </Box>
-          ) : null}
+          {loading ? <CanopyLoader label="Loading sources…" size={44} py={3} /> : null}
           {error ? <Alert severity="error" sx={{ mb: 1.5 }}>{error}</Alert> : null}
           {!loading && sources && sources.length === 0 ? (
             <Typography color="text.secondary">This course has no attached source documents.</Typography>

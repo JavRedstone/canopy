@@ -26,8 +26,9 @@ import DialogContentText from "@mui/material/DialogContentText";
 import DialogActions from "@mui/material/DialogActions";
 import Button from "@mui/material/Button";
 import { alpha, darken } from "@mui/material/styles";
-import { CoursePlanningNotStartedError, CourseMapResponse, CoursePointsResponse, CourseProgressResponse, CourseSummary, DemoAutoCompleteOptions, DemoJobStatus, cancelDemoAutoComplete, clearDemoProgress, deleteCourse, exportCoursebook, getCourse, getCourseMap, getCoursePoints, getCourseProgress, getDemoAutoCompleteStatus, regenerateCourse, resumeCourseLessons, startDemoAutoComplete } from "@/lib/api";
+import { CoursePlanningNotStartedError, CourseMapResponse, CourseProgressResponse, CourseSummary, DemoAutoCompleteOptions, DemoJobStatus, cancelDemoAutoComplete, clearDemoProgress, deleteCourse, exportCoursebook, getCourse, getCourseMap, getCourseProgress, getDemoAutoCompleteStatus, regenerateCourse, resumeCourseLessons, startDemoAutoComplete } from "@/lib/api";
 import { Breadcrumbs } from "@/components/breadcrumbs";
+import { CanopyLoader } from "@/components/canopy-loader";
 import { CertificateDialog } from "@/components/certificate-dialog";
 import { CourseCategoryBadge } from "@/components/course-category-badge";
 import { CourseProgressSteps } from "@/components/course-progress";
@@ -52,7 +53,6 @@ export function CourseDetail({ courseId }: { courseId: string }) {
   const [course, setCourse] = useState<CourseSummary>();
   const [progress, setProgress] = useState<CourseProgressResponse>();
   const [map, setMap] = useState<CourseMapResponse>();
-  const [points, setPoints] = useState<CoursePointsResponse>();
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState<string>();
   const [refreshError, setRefreshError] = useState<string>();
@@ -83,10 +83,9 @@ export function CourseDetail({ courseId }: { courseId: string }) {
       if (!data.session) return;
       try {
         const token = data.session.access_token;
-        const [courseSummary, courseProgress, coursePoints] = await Promise.all([
+        const [courseSummary, courseProgress] = await Promise.all([
           getCourse(courseId, token),
-          getCourseProgress(courseId, token),
-          getCoursePoints(courseId, token)
+          getCourseProgress(courseId, token)
         ]);
         if (cancelled) return;
         // Right after creating or regenerating a course, the active version has no concept
@@ -105,7 +104,6 @@ export function CourseDetail({ courseId }: { courseId: string }) {
         setCourse(courseSummary);
         setProgress(courseProgress);
         setMap(courseMap);
-        setPoints(coursePoints);
         setRefreshError(undefined);
         setState("ready");
       } catch (caught) {
@@ -172,7 +170,7 @@ export function CourseDetail({ courseId }: { courseId: string }) {
 
   // Mirrors what a real learner's own actions already trigger elsewhere (a mastery/course-map
   // refresh after answering a quiz or submitting a lab) -- as the demo finishes each concept,
-  // pull the course's own checkmarks/points/mastery back in so the page visibly updates while
+  // pull the course's own checkmarks/mastery back in so the page visibly updates while
   // it runs, not just the dialog's own results list.
   useEffect(() => {
     if (!demoJob) return;
@@ -292,13 +290,7 @@ export function CourseDetail({ courseId }: { courseId: string }) {
     }
   }
 
-  if (state === "loading") {
-    return (
-      <Stack direction="row" sx={{ alignItems: "center", gap: 1.5, color: "text.secondary" }}>
-        <CircularProgress size={18} /> <Typography>Loading course…</Typography>
-      </Stack>
-    );
-  }
+  if (state === "loading") return <CanopyLoader label="Loading your course…" />;
   if (state === "error") return <Alert severity="error">{errorMessage ?? "We could not load this course."}</Alert>;
   if (!course || !progress || !map) return null;
 
@@ -355,15 +347,6 @@ export function CourseDetail({ courseId }: { courseId: string }) {
           </Box>
         </Stack>
         <Stack direction="row" sx={{ alignItems: "center", gap: 1, flexShrink: 0 }}>
-          {points && points.points_total > 0 ? (
-            <Chip
-              icon={<Icon name="star" />}
-              label={`${points.points_earned} / ${points.points_total} pts`}
-              title={`${points.points_per_lesson} points per lesson`}
-              variant="outlined"
-              sx={{ "& .MuiChip-icon": { color: "#f5c518" } }}
-            />
-          ) : null}
           <Button size="small" variant="outlined" startIcon={<Icon name="folder_open" />} onClick={() => setSourcesOpen(true)}>Sources</Button>
           {course.lessons_total > 0 && course.lessons_completed >= course.lessons_total ? (
             <Button
@@ -411,7 +394,7 @@ export function CourseDetail({ courseId }: { courseId: string }) {
           sx={{ mb: 2 }}
         >
           Demo auto-complete still running in the background: {demoJob.completed}/{demoJob.total} concepts done
-          {demoJob.current_concept_title ? ` — currently "${demoJob.current_concept_title}"` : ""}.
+          {demoJob.current_concept_title ? `, currently on "${demoJob.current_concept_title}"` : ""}.
         </Alert>
       ) : null}
 

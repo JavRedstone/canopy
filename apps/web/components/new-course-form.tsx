@@ -15,9 +15,47 @@ import List from "@mui/material/List";
 import ListItem from "@mui/material/ListItem";
 import ListItemText from "@mui/material/ListItemText";
 import IconButton from "@mui/material/IconButton";
+import Collapse from "@mui/material/Collapse";
+import Paper from "@mui/material/Paper";
+import { alpha } from "@mui/material/styles";
 import { Icon } from "@/components/icon";
 import { createClient } from "@/lib/supabase/client";
-import { APPLY_COLOR, UNDERSTAND_COLOR } from "@/lib/palette";
+import { CANOPY_GREEN } from "@/lib/palette";
+
+/** One titled group of related controls, so the form reads as a few decisions rather than
+ *  one long undifferentiated column of inputs. */
+function Section({ step, title, caption, children }: { step: number; title: string; caption?: string; children: React.ReactNode }) {
+  return (
+    <Paper
+      variant="outlined"
+      sx={{ p: { xs: 2, sm: 2.5 }, borderRadius: 2, bgcolor: "background.paper", position: "relative", zIndex: 1 }}
+    >
+      <Stack direction="row" sx={{ gap: 1.5, alignItems: "flex-start", mb: 2 }}>
+        <Box
+          sx={{
+            width: 26,
+            height: 26,
+            borderRadius: "50%",
+            flexShrink: 0,
+            display: "grid",
+            placeItems: "center",
+            bgcolor: CANOPY_GREEN,
+            color: "#fff",
+            fontSize: "0.78rem",
+            fontWeight: 700
+          }}
+        >
+          {step}
+        </Box>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography sx={{ fontWeight: 700, lineHeight: 1.3 }}>{title}</Typography>
+          {caption ? <Typography variant="body2" color="text.secondary">{caption}</Typography> : null}
+        </Box>
+      </Stack>
+      {children}
+    </Paper>
+  );
+}
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const maxSourceBytes = 6 * 1024 * 1024;
@@ -66,6 +104,9 @@ export function NewCourseForm() {
   const [lessonMax, setLessonMax] = useState(20);
   const [quizMaxAttempts, setQuizMaxAttempts] = useState(3);
   const [sourceTab, setSourceTab] = useState<"file" | "text">("file");
+  // Quiz attempts has a sensible default, so it starts folded rather than competing with
+  // the goal for attention.
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [error, setError] = useState<string>();
   const [progress, setProgress] = useState<string>();
   const [loading, setLoading] = useState(false);
@@ -141,23 +182,27 @@ export function NewCourseForm() {
   }
 
   return (
-    <Stack component="form" sx={{ gap: 3, maxWidth: 560, mt: 3 }} onSubmit={handleSubmit}>
-      <TextField label="Course title" id="course-title" value={title} onChange={(event) => setTitle(event.target.value)} autoComplete="off" required fullWidth />
-      <TextField
-        label="What do you want to learn?"
-        id="course-goal"
-        multiline
-        rows={4}
-        value={goal}
-        onChange={(event) => setGoal(event.target.value)}
-        autoComplete="off"
-        required
-        fullWidth
-      />
+    <Stack component="form" sx={{ gap: 2.5 }} onSubmit={handleSubmit}>
+      <Section step={1} title="What you want to learn" caption="This is what the whole course is generated from.">
+        <Stack sx={{ gap: 2.5 }}>
+          <TextField label="Course title" id="course-title" value={title} onChange={(event) => setTitle(event.target.value)} autoComplete="off" required fullWidth />
+          <TextField
+            label="What do you want to learn?"
+            id="course-goal"
+            multiline
+            rows={4}
+            value={goal}
+            onChange={(event) => setGoal(event.target.value)}
+            autoComplete="off"
+            required
+            fullWidth
+          />
+        </Stack>
+      </Section>
 
-      <Box>
+      <Section step={2} title="Course length" caption="Each course mixes short lectures, focused labs, and a final assessment.">
         <Typography gutterBottom>
-          Activity range <Typography component="span" sx={{ fontWeight: 700 }}>{lessonMin}–{lessonMax} activities</Typography>
+          <Typography component="span" sx={{ fontWeight: 700 }}>{lessonMin}–{lessonMax}</Typography> activities
         </Typography>
         <Slider
           value={[lessonMin, lessonMax]}
@@ -167,29 +212,51 @@ export function NewCourseForm() {
           step={1}
           disableSwap
           getAriaLabel={(index) => (index === 0 ? "Minimum lessons" : "Maximum lessons")}
-          sx={{ mt: 2 }}
+          sx={{
+            mt: 1,
+            color: CANOPY_GREEN,
+            "& .MuiSlider-thumb:hover, & .MuiSlider-thumb.Mui-focusVisible": {
+              boxShadow: `0 0 0 8px ${alpha(CANOPY_GREEN, 0.16)}`
+            }
+          }}
         />
+        {/* Both ends say "activities" -- the right-hand label used to say "lessons" for the
+            same unit the slider and heading call activities. */}
         <Stack direction="row" sx={{ justifyContent: "space-between", color: "text.secondary", fontSize: "0.75rem" }}>
           <span>One topic<br />6 activities</span>
-          <span>Deep dive<br />24 lessons</span>
+          <span style={{ textAlign: "right" }}>Deep dive<br />24 activities</span>
         </Stack>
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>Each topic includes several short lectures, focused labs, and a final assessment.</Typography>
-      </Box>
 
-      <TextField
-        label="Quiz attempts per question"
-        id="quiz-max-attempts"
-        type="number"
-        slotProps={{ htmlInput: { min: 1, max: 10 } }}
-        value={quizMaxAttempts}
-        onChange={(event) => setQuizMaxAttempts(Math.max(1, Math.min(10, Number(event.target.value) || 1)))}
-        helperText="How many tries a learner gets on each mastery-check question before it locks. Default 3."
-        fullWidth
-      />
+        <Box sx={{ mt: 2, pt: 2, borderTop: 1, borderColor: "divider" }}>
+          <Button
+            type="button"
+            size="small"
+            onClick={() => setAdvancedOpen((open) => !open)}
+            startIcon={<Icon name={advancedOpen ? "expand_less" : "expand_more"} />}
+            sx={{ color: "text.secondary" }}
+          >
+            Advanced
+          </Button>
+          <Collapse in={advancedOpen} unmountOnExit>
+            <Box sx={{ pt: 2 }}>
+              <TextField
+                label="Quiz attempts per question"
+                id="quiz-max-attempts"
+                type="number"
+                slotProps={{ htmlInput: { min: 1, max: 10 } }}
+                value={quizMaxAttempts}
+                onChange={(event) => setQuizMaxAttempts(Math.max(1, Math.min(10, Number(event.target.value) || 1)))}
+                helperText="How many tries a learner gets on each mastery-check question before it locks. Default 3."
+                fullWidth
+              />
+            </Box>
+          </Collapse>
+        </Box>
+      </Section>
 
+      <Section step={3} title="Sources (optional)" caption="Every lesson cites the material it was generated from.">
       {sources.length > 0 ? (
-        <Box>
-          <Typography gutterBottom>Sources added</Typography>
+        <Box sx={{ mb: 2 }}>
           <List disablePadding sx={{ display: "grid", gap: 1 }}>
             {sources.map((source) => (
               <ListItem
@@ -209,10 +276,11 @@ export function NewCourseForm() {
       ) : null}
 
       <Box>
-        <Typography gutterBottom>Add sources (optional)</Typography>
+        {/* Plain theme colours: the indigo/teal here were the mastery-model accents, which
+            carry a specific meaning that has nothing to do with picking a file. */}
         <Tabs value={sourceTab} onChange={(_event: SyntheticEvent, value: "file" | "text") => setSourceTab(value)}>
-          <Tab value="file" icon={<Icon name="upload_file" />} iconPosition="start" label="Upload file" sx={{ color: sourceTab === "file" ? UNDERSTAND_COLOR : undefined }} />
-          <Tab value="text" icon={<Icon name="article" />} iconPosition="start" label="Paste text" sx={{ color: sourceTab === "text" ? APPLY_COLOR : undefined }} />
+          <Tab value="file" icon={<Icon name="upload_file" />} iconPosition="start" label="Upload file" />
+          <Tab value="text" icon={<Icon name="article" />} iconPosition="start" label="Paste text" />
         </Tabs>
         {sourceTab === "file" ? (
           <Stack direction="row" sx={{ alignItems: "center", gap: 1.5, mt: 2 }}>
@@ -243,6 +311,7 @@ export function NewCourseForm() {
           </Stack>
         )}
       </Box>
+      </Section>
 
       {progress ? <Alert severity="info" role="status">{progress}</Alert> : null}
       {error ? <Alert severity="error" role="alert">{error}</Alert> : null}

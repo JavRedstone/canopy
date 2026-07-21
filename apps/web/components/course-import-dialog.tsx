@@ -83,7 +83,7 @@ export function ImportCourseButton() {
         <DialogContent>
           <Stack sx={{ gap: 1.5, pt: 0.5 }}>
             <Typography variant="body2" color="text.secondary">
-              Paste a course ID or share link. You&apos;ll get your own copy of its content — lessons, quizzes, and labs — starting from fresh progress.
+              Paste a course ID or share link. You&apos;ll get your own copy of its content (lessons, quizzes, and labs), starting from fresh progress.
             </Typography>
             <TextField
               label="Course ID or share link"

@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import CircularProgress from "@mui/material/CircularProgress";
 import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
@@ -12,6 +11,7 @@ import DialogTitle from "@mui/material/DialogTitle";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { CitationExcerptResponse, getCitationExcerpt } from "@/lib/api";
+import { CanopyLoader } from "@/components/canopy-loader";
 import { createClient } from "@/lib/supabase/client";
 
 /** Shows the real source excerpt behind a lesson citation marker -- the "concrete, not
@@ -65,11 +65,7 @@ export function CitationExcerptDialog({
       <DialogContent>
         <Stack sx={{ gap: 1.5, pt: 0.5 }}>
           {meta ? <Typography variant="caption" color="text.secondary">{meta}</Typography> : null}
-          {loading ? (
-            <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
-              <CircularProgress size={28} />
-            </Box>
-          ) : null}
+          {loading ? <CanopyLoader label="Loading excerpt…" size={44} py={3} /> : null}
           {error ? <Alert severity="error">{error}</Alert> : null}
           {excerpt ? (
             <Box

@@ -7,6 +7,7 @@ import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
 import { BrandLink } from "@/components/brand-link";
 import { CertificateCard } from "@/components/certificate-card";
+import { CanopyLoader } from "@/components/canopy-loader";
 import { Icon } from "@/components/icon";
 import { CertificateResponse, exportPublicCertificate, getPublicCertificate } from "@/lib/api";
 
@@ -54,11 +55,7 @@ export function PublicCertificateView({ certificateId }: { certificateId: string
     <Box sx={{ mt: 1 }}>
       <BrandLink />
       <Box sx={{ mt: 4 }}>
-        {loading ? (
-          <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
-            <CircularProgress size={28} />
-          </Box>
-        ) : null}
+        {loading ? <CanopyLoader label="Loading certificate…" /> : null}
         {error ? <Alert severity="error">{error}</Alert> : null}
         {certificate ? (
           <>
