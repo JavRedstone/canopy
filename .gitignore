@@ -1,6 +1,8 @@
 # Environment and local tooling
 .env
 .env.local
+# Production secrets live on the server only. .env.prod.example is the committed template.
+.env.prod
 .venv/
 **/.venv/
 

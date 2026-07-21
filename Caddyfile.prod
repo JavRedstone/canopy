@@ -1,0 +1,31 @@
+# PRODUCTION ONLY -- not used by `npm run dev`. Local development talks to the API
+# directly on http://localhost:8000 with no proxy and no TLS.
+#
+# TLS termination for the API. The web app runs on Vercel over HTTPS and calls this
+# host directly from the browser, so plain HTTP would be blocked as mixed content --
+# this is what makes the frontend able to talk to the backend at all.
+#
+# API_DOMAIN and ACME_EMAIL come from the environment (see docker-compose.prod.yml).
+# Caddy obtains and renews the certificate automatically; nothing to run by hand.
+#
+# API_DOMAIN must already resolve to this host before first start. Caddy proves control
+# of the name over port 80, so a missing A record fails the challenge, and repeated
+# failed attempts count against Let's Encrypt rate limits.
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$API_DOMAIN} {
+	encode zstd gzip
+
+	# Course generation is a slow, LLM-bound path and a coding-lab submit waits on a real
+	# container run. The sandbox's own APP_SANDBOX_TIMEOUT_SECONDS (20s, 60s for python-ml)
+	# is the real bound -- keep this comfortably above it so a legitimate slow run is never
+	# cut off by the proxy first.
+	reverse_proxy api:8000 {
+		transport http {
+			response_header_timeout 120s
+		}
+	}
+}

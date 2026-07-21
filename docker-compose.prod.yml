@@ -1,0 +1,113 @@
+# PRODUCTION stack. Local development uses docker-compose.yml / `npm run dev` and is
+# untouched by anything in this file.
+#
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+#
+# --env-file .env.prod is REQUIRED on every command. Compose otherwise falls back to
+# .env -- the local development file -- and would start the prod stack pointed at
+# localhost Supabase without complaining. The APP_DEPLOY_TARGET guard below turns that
+# mistake into an immediate hard failure instead of a subtly broken deploy.
+#
+# It is deliberately standalone rather than an override layer. Compose merges `ports`
+# by *appending* the two lists, so an override file cannot un-publish 8010/8020 -- the
+# dev file's mappings would survive and leave the LLM gateway and the sandbox runner
+# listening on the public internet. Only `api` is reachable from outside, and only
+# through Caddy; `llm-gateway` and `sandbox-runner` publish nothing and are addressable
+# solely on the compose network.
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile.prod:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      # Wrong-env-file guard, deliberately the FIRST interpolation in the file so its
+      # message is the one you see. APP_DEPLOY_TARGET exists only in .env.prod, so running
+      # this file against the dev .env aborts here instead of starting a stack wired to
+      # localhost Supabase.
+      APP_DEPLOY_TARGET: ${APP_DEPLOY_TARGET:?refusing to start -- pass --env-file .env.prod}
+      # The public hostname the browser calls, e.g. api.yourdomain.com. Caddy provisions
+      # and renews the certificate for exactly this name, so it must already resolve to
+      # this host before the first start or the ACME challenge fails.
+      API_DOMAIN: ${API_DOMAIN:?set API_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL}
+    depends_on:
+      - api
+
+  api:
+    build:
+      context: ./services/api
+    restart: unless-stopped
+    # No published ports: Caddy reaches this over the compose network.
+    environment:
+      APP_ENVIRONMENT: ${APP_ENVIRONMENT:-production}
+      APP_AUTH_MODE: ${APP_AUTH_MODE:-supabase}
+      APP_REPOSITORY_BACKEND: ${APP_REPOSITORY_BACKEND:-supabase}
+      APP_SUPABASE_URL: ${APP_SUPABASE_URL:?}
+      APP_SUPABASE_SERVICE_ROLE_KEY: ${APP_SUPABASE_SERVICE_ROLE_KEY:?}
+      APP_DATABASE_URL: ${APP_DATABASE_URL:-}
+      # The Vercel origin, e.g. https://canopy.vercel.app. The browser calls this API
+      # cross-origin from there, so a wrong value here surfaces as every request failing
+      # CORS preflight rather than as an obvious server error.
+      APP_CORS_ORIGINS: ${APP_CORS_ORIGINS:?set APP_CORS_ORIGINS}
+      APP_SANDBOX_TIMEOUT_SECONDS: ${APP_SANDBOX_TIMEOUT_SECONDS:-20}
+      APP_SANDBOX_RUNNER_URL: http://sandbox-runner:8020
+      APP_LLM_GATEWAY_URL: http://llm-gateway:8010
+      # Required outside development: with APP_ENVIRONMENT=production and no token, every
+      # gateway and sandbox call answers 503 and course generation hangs silently.
+      APP_INTERNAL_SERVICE_TOKEN: ${APP_INTERNAL_SERVICE_TOKEN:?set APP_INTERNAL_SERVICE_TOKEN}
+
+  worker:
+    build:
+      context: ./services/worker
+    restart: unless-stopped
+    environment:
+      APP_ENVIRONMENT: ${APP_ENVIRONMENT:-production}
+      APP_SUPABASE_URL: ${APP_SUPABASE_URL:?}
+      APP_SUPABASE_SERVICE_ROLE_KEY: ${APP_SUPABASE_SERVICE_ROLE_KEY:?}
+      APP_QUEUE_VISIBILITY_SECONDS: ${APP_QUEUE_VISIBILITY_SECONDS:-300}
+      APP_QUEUE_POLL_SECONDS: ${APP_QUEUE_POLL_SECONDS:-2}
+      APP_SANDBOX_TIMEOUT_SECONDS: ${APP_SANDBOX_TIMEOUT_SECONDS:-20}
+      APP_LLM_GATEWAY_URL: http://llm-gateway:8010
+      APP_SANDBOX_RUNNER_URL: http://sandbox-runner:8020
+      APP_INTERNAL_SERVICE_TOKEN: ${APP_INTERNAL_SERVICE_TOKEN:?set APP_INTERNAL_SERVICE_TOKEN}
+
+  llm-gateway:
+    build:
+      context: ./services/llm_gateway
+    restart: unless-stopped
+    # No published ports: holds the OpenAI key and must never be reachable off-host.
+    environment:
+      APP_ENVIRONMENT: ${APP_ENVIRONMENT:-production}
+      APP_INTERNAL_SERVICE_TOKEN: ${APP_INTERNAL_SERVICE_TOKEN:?set APP_INTERNAL_SERVICE_TOKEN}
+      APP_LLM_PROVIDER: ${APP_LLM_PROVIDER:-openai}
+      APP_OPENAI_API_KEY: ${APP_OPENAI_API_KEY:-}
+      APP_OPENAI_OUTLINE_MODEL: ${APP_OPENAI_OUTLINE_MODEL:-gpt-5.6-sol}
+      APP_OPENAI_CONCEPTS_MODEL: ${APP_OPENAI_CONCEPTS_MODEL:-gpt-5.6-luna}
+      APP_OPENAI_EMBEDDING_MODEL: ${APP_OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+      APP_OPENAI_BUILDER_MODEL: ${APP_OPENAI_BUILDER_MODEL:-gpt-5.6-luna}
+      APP_OPENAI_REPAIR_MODEL: ${APP_OPENAI_REPAIR_MODEL:-gpt-5.6-sol}
+      APP_OPENAI_HELPER_MODEL: ${APP_OPENAI_HELPER_MODEL:-gpt-5.6-luna}
+
+  sandbox-runner:
+    build:
+      context: ./services/sandbox_runner
+    restart: unless-stopped
+    # No published ports. This service has docker.sock and can start containers; it is the
+    # single most sensitive endpoint in the stack and is compose-network-only by design.
+    environment:
+      APP_ENVIRONMENT: ${APP_ENVIRONMENT:-production}
+      APP_INTERNAL_SERVICE_TOKEN: ${APP_INTERNAL_SERVICE_TOKEN:?set APP_INTERNAL_SERVICE_TOKEN}
+      APP_SANDBOX_TIMEOUT_SECONDS: ${APP_SANDBOX_TIMEOUT_SECONDS:-20}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  caddy_data:
+  caddy_config:

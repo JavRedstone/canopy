@@ -1,0 +1,9 @@
+# Shell scripts must keep LF endings regardless of the committer's platform. A .sh file
+# checked in with CRLF fails on Linux with "bad interpreter: /usr/bin/env bash^M", which
+# on a deploy script surfaces as a broken server rather than a local annoyance.
+*.sh text eol=lf
+
+# Same reasoning for the files the production stack reads on the server.
+Caddyfile* text eol=lf
+docker-compose*.yml text eol=lf
+*.env.example text eol=lf
