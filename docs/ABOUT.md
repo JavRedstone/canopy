@@ -1,5 +1,7 @@
 # Canopy
 
+**Demo video:** [https://www.youtube.com/watch?v=5FqJQYg25RM](https://www.youtube.com/watch?v=5FqJQYg25RM)
+
 ## Inspiration
 
 Technical knowledge is everywhere — papers, docs, textbooks, internal engineering
@@ -19,9 +21,9 @@ experience — lessons, a real editor, checkpoint exercises — generated from *
 source, on demand, and adaptive to what you've actually demonstrated instead of what
 you've merely scrolled past. That's Canopy.
 
-<!-- SCREENSHOT: hero shot of the app — the course dashboard or a lesson mid-lab, whichever reads best at a glance -->
-![Canopy hero screenshot placeholder](./assets/screenshots/hero.png)
-*Space reserved: hero screenshot (course dashboard or an in-progress lab).*
+![Canopy course dashboard — generated coursebook, module outline, and content/practice/mastery tabs](./assets/course_landing_page.png)
+*A generated course: the coursebook hero, module outline, and the Content / Practice /
+Mastery tabs a learner moves between.*
 
 ## What it does
 
@@ -53,6 +55,11 @@ loop Canopy runs, not a linear course you finish once.*
   and completion certificate to keep, and free one-click course sharing — anyone with
   the link gets their own independent copy at zero regeneration cost.
 
+![Lesson with the AI learning helper open](./assets/lesson_with_helper.png)
+*A source-grounded lesson (numbered citations, worked examples) with the learning
+helper open mid-conversation — asked to "explain this more simply," it does, without
+ever just handing over the answer to a quiz or lab.*
+
 **What's actually different, and why it matters:** generic AI chat can explain a
 concept but has no model of what you've demonstrated, so it can't tell you when you've
 actually got it. Fixed-catalog platforms (Codecademy, Coursera) solve verification but
@@ -62,14 +69,15 @@ team's docs. Canopy is the combination neither offers: generated from *your* mat
 every lab sandbox-checked before it ships, every mastery signal earned from a real
 graded observation, not a checkbox.
 
-<!-- SCREENSHOT: the coding lab workspace — Monaco editor, Run/Submit, test results -->
-![Coding lab workspace placeholder](./assets/screenshots/coding-lab.png)
-*Space reserved: coding lab workspace (editor, Run/Submit, live test results).*
+![Coding lab workspace with a prerequisite-review nudge](./assets/course_lab.png)
+*The coding lab workspace — Monaco editor, Run/Submit, live test results — with a
+prerequisite-review nudge surfaced inline ("Review recommended first... 18%
+understand") the moment it's relevant, not buried in a separate report.*
 
-<!-- SCREENSHOT: mastery dashboard with the prerequisite-review nudge visible -->
-![Mastery dashboard and prerequisite nudge placeholder](./assets/screenshots/mastery-dashboard.png)
-*Space reserved: mastery dashboard showing per-concept understand/apply meters and a
-prerequisite-review nudge in context.*
+![Mastery dashboard with per-concept Understand/Apply meters](./assets/mastery_landing.png)
+*Every concept in a course, two independent tracks each — this is a real run: 6/16
+concepts mastered, individual understand/apply percentages, observation counts per
+concept. Not a completion checkbox.*
 
 Full feature list: [`docs/product/FEATURES.md`](./product/FEATURES.md).
 
@@ -91,35 +99,33 @@ it.
 LLM Gateway + Sandbox Runner) — generate, run for real, feed back the actual failure,
 repair, re-verify, bounded retries, never trusted on one attempt.*
 
-**Built for real deployment, not just a demo run:** every generated lab executes in a
-resource-limited, network-disabled, non-root, all-capabilities-dropped container, so
-untrusted model-authored code can never touch the host or reach the network; every
-learner-facing table is behind Postgres row-level security, and tables carrying answer
-keys (`practice_items`, `lesson_revisions`) have no public policy at all — service-role
-only; the LLM gateway abstracts three provider backends behind one interface, so a
-provider outage or pricing change is a config change, not a rewrite; and dev-only
-tooling (the demo auto-complete/clear commands used to drive a course to a finished
-state for testing) is environment-gated and 404s outside local development rather than
-merely being hidden in the UI.
+**Built for real deployment, not just a demo run:**
+
+- Every generated lab executes in a resource-limited, network-disabled, non-root,
+  all-capabilities-dropped container, so untrusted model-authored code can never touch
+  the host or reach the network.
+- Every learner-facing table is behind Postgres row-level security, and tables
+  carrying answer keys (`practice_items`, `lesson_revisions`) have no public policy at
+  all — service-role only.
+- The LLM gateway abstracts three provider backends behind one interface, so a
+  provider outage or pricing change is a config change, not a rewrite.
+- Dev-only tooling (the demo auto-complete/clear commands used to drive a course to a
+  finished state for testing) is environment-gated and 404s outside local development
+  rather than merely being hidden in the UI.
 
 ### What GPT-5.6 actually does at runtime
 
 It's not a bolt-on chat feature — it's the thing generating and grading the product's
-actual content, every time:
+actual content, every time, routed per-task between two tiers so cost matches stakes:
 
-- **Plans and writes every course.** Outline planning, per-module concept generation,
-  and per-lesson content/lab authoring are all GPT-5.6 structured-output calls
-  (`services/worker/`) — including inferring which coding-lab language (Python,
-  Python ML/DL, or C++) fits a given source and goal, a decision the learner never
-  makes by hand.
-- **Generates and grades every assessment** — quiz items, the practice question pool,
-  and rubric-based short-answer grading (`services/api/app/quiz.py`).
-- **Drives the self-healing lab-repair loop.** When a generated lab's starter or
-  reference solution fails its own sandbox run, GPT-5.6 gets the real pytest/doctest
-  output back and repairs the specific files at fault, re-verified against the sandbox
-  again before it ships — never trusted on a single attempt.
-- **Powers the in-lesson learning helper**, prompted to guide toward an answer without
-  ever handing it over.
+| Task | Tier | Why |
+|---|---|---|
+| Course outline planning | Sol (flagship) | One high-stakes call per course — sets the whole plan, including which coding-lab language fits the source and goal |
+| Per-module concept generation | Luna (fast) | Fills in the outline already fixed by Sol |
+| Lesson & lab content authoring | Luna (fast) | Runs on every concept in every course — volume, not one-shot stakes |
+| Lab repair loop | Sol (flagship) | The last line of defense before a lab ships — worth paying for |
+| Quiz & practice-pool generation, short-answer grading | Luna (fast) | High-volume, per-question work (`services/api/app/quiz.py`) |
+| In-lesson learning helper | Luna (fast) | In-context Q&A, prompted to guide without ever revealing the answer |
 
 ### How Codex actually collaborated on the build
 
@@ -159,7 +165,24 @@ Used throughout as an active collaborator, not a one-off code generator:
   reference solution actually passing its own hidden tests. We built a real repair
   loop — generate, run in the actual sandbox, feed the real failure output back to the
   model, regenerate, re-verify — so a lab never reaches a learner on the strength of
-  the model's first attempt or its own claim of correctness.
+  the model's first attempt or its own claim of correctness. That loop has a bounded
+  retry budget for a reason — it doesn't always win. On our own "Attention Is All You
+  Need" course, a beam-search decoding lab's reference solution kept missing one
+  specific hidden case after every repair attempt:
+
+  ```
+  FAILED test_beam_search_hidden.py::test_beam_search_uses_length_penalty_when_ranking_candidates
+      out = beam_search_decode(model, [7], beam_size=2, length_penalty=0.6, ...)
+  >   assert out == [2, 3, 0]
+  E   AssertionError: assert [1, 0] == [2, 3, 0]
+  ```
+
+  Length-penalized beam ranking is a genuinely fiddly implementation detail, and the
+  model kept landing on the same wrong ranking across attempts. The lab correctly
+  landed in a terminal `failed` state instead of quietly shipping broken — exactly the
+  fail-closed behavior the loop is designed for — and the product's own "Regenerate"
+  action (a fresh generation attempt, not a repair of the broken one) is the real
+  recovery path from there.
 - **Making the prerequisite nudge fire on real evidence, not noise.** It only
   triggers when a learner is genuinely struggling on the current concept *and* a
   prerequisite it builds on has actually been practiced and is measurably shaky —
@@ -177,26 +200,26 @@ Canopy is pre-launch, so we don't have real-user metrics yet — but every accom
 below is a concrete mechanism designed to produce a measurable outcome the moment it's
 in front of learners, not a hoped-for one:
 
-- A self-healing lab-generation loop that actually earns the word "agentic": generate,
-  verify against a real sandbox, repair from the real failure, re-verify — no lab ships
-  unverified. The direct, measurable consequence: zero unverified labs can reach a
-  learner, by construction, not by review effort.
-- A mastery model with teeth — dual-track BKT and prerequisite-aware review that
-  responds to demonstrated evidence, not time spent clicking through pages. The
-  measurable consequence: a learner (or a hiring manager looking at a certificate) gets
-  a signal tied to graded evidence, not a completion percentage that only measures
-  clicking through.
+- **Canopy verifies. It doesn't trust, assume, or ship-and-hope.** Every lab is
+  generated, run against a real sandbox, and repaired from the real failure before a
+  learner ever sees it — an agentic loop that earns the word, not a single-shot
+  generation trusted at face value. Zero unverified labs reach a learner, by
+  construction, not by review effort.
+- **Canopy measures applying, not clicking.** Dual-track BKT and prerequisite-aware
+  review respond to demonstrated evidence — a quiz answered, a lab actually passed —
+  not time spent on the page. A learner, or a hiring manager reading a certificate,
+  gets a signal tied to graded evidence instead of a completion percentage.
 - Three real, curated, resource-tuned sandbox environments that the generation prompts
   know how to target correctly, instead of one generic Python box.
 - Free, instant course cloning via a link — a genuine product answer to not having a
-  team/org layer yet, that costs nothing per additional learner. The measurable
-  consequence: sharing a course to ten more people costs the same as sharing it to one.
+  team/org layer yet. Sharing a course with ten people costs exactly what sharing it
+  with one does.
 - The whole loop actually works end to end, live: source → generated course →
   sandbox-verified labs → mastery tracking → PDF certificate.
 
-<!-- SCREENSHOT: the completion certificate (in-app dialog or exported PDF) -->
-![Certificate placeholder](./assets/screenshots/certificate.png)
-*Space reserved: completion certificate — in-app dialog or the exported PDF.*
+![Canopy completion certificate](./assets/certificate_completion.png)
+*Completion certificate, issued once every lesson in a course is done — verifiable at
+its own public link.*
 
 ## What we learned
 
@@ -227,5 +250,3 @@ infrastructure that's already shipped rather than starting from scratch:
 - **Repository/codebase ingestion** — point a course at a GitHub repo instead of
   uploading files by hand.
 - Multiple content languages, and a broader UI polish pass.
-
-Full roadmap: [`docs/product/ROADMAP.md`](./product/ROADMAP.md).
