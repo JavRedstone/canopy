@@ -24,8 +24,9 @@ Canopy's pedagogy is a stack of well-known moves:
 differentiator, "the course reshapes itself around your mastery," is mostly still on
 paper. Verified against the code:
 
-- **Built:** dual-track BKT (`understand` from quizzes, `apply` from coding submissions),
-  run/submit split, the mastery dashboard, prerequisite-review flagging
+- **Built:** dual-track BKT (`understand` from quizzes and positive-only practice,
+  `apply` from coding submissions), a non-repeating practice pool capped below the mastery
+  threshold, the run/submit split, the mastery dashboard, prerequisite-review flagging
   (`REVIEW_THRESHOLD = 0.6`), and a struggle-triggered prerequisite *nudge* that is the
   first writer of `adaptation_events`.
 - **Not built (or write-only):** nothing yet *consumes* `adaptation_events`; remediation

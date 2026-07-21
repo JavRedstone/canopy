@@ -30,6 +30,7 @@
 
 ## [`archive/`](./archive/)
 
-Superseded, point-in-time documents kept for history: each has a banner explaining what
-replaced it. Not part of the current-docs reading path; skip unless you specifically want
-project history.
+Shelved research that is useful for future work but does not describe the current product:
+
+- [`DIAGRAM_GENERATION.md`](./archive/DIAGRAM_GENERATION.md): the evaluated diagram-as-code
+  design, preserved so its parser, rendering, security, and AI-image findings are not repeated.

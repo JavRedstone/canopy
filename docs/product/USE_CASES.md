@@ -19,11 +19,14 @@ Read this first: it's the ground truth every use case below is checked against.
   attached to a course by `source_ids` (`services/api/app/routers/sources.py`). Multiple
   files per course is normal; a live repo or "watch this folder" integration doesn't
   exist; every packet is uploaded by hand.
-- **Three coding-lab environments, not one.** `python-basic` (numpy/pandas/scikit-learn,
+- **Three course coding-lab environments, backed by a six-environment registry.** Courses
+  currently generate labs for `python-basic` (numpy/pandas/scikit-learn,
   implement-it-yourself framing), `python-ml` (numpy/pandas/scipy/scikit-learn/
   matplotlib/seaborn/PyTorch/torchvision, GPU-accelerated where the host has one, CPU
-  otherwise, no TensorFlow), and `cpp-basic` (g++ 17 + doctest). A course picks one at
-  creation (`courses.language`) and every lab in it targets that environment
+  otherwise, no TensorFlow), and `cpp-basic` (g++ 17 + doctest). The same sandbox registry
+  also provides `javascript-basic`, `go-basic`, and `c-basic` to the standalone playground;
+  those three are not yet course-generation targets. A course picks one of the supported
+  course environments at creation (`courses.language`) and every lab targets it
   (`services/worker/worker/lesson_agent.py`, `services/sandbox_runner/`). Each lab is
   sandbox-verified before it's ever shown to a learner: hidden + visible pytest/doctest
   suites, a starter that's confirmed to fail, and a real repair loop that iterates
@@ -35,6 +38,10 @@ Read this first: it's the ground truth every use case below is checked against.
   Tracing (`p(understand)` from quizzes, `p(apply)` from labs) with prerequisite-review
   nudges when a learner is struggling and the concept it builds on is shaky
   (`services/api/app/mastery.py`, `PrerequisiteRecommendation` in `schemas.py`).
+- **Low-stakes, non-repeating practice.** Each concept has a generated question pool.
+  Practice prefers unseen and least-recently-seen items, reveals feedback immediately,
+  and gives correct answers positive-only `p(understand)` credit capped below mastery
+  (`services/api/app/practice.py`, `apps/web/components/practice-drill.tsx`).
 - **A takeaway artifact.** The full course (lessons, worked examples, quizzes, cited
   references) exports as a real PDF "coursebook"
   (`export_coursebook`/`render_textbook_pdf`), not just a web page that stops existing

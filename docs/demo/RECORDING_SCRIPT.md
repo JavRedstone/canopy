@@ -14,6 +14,20 @@ longer judging narrative, preparation checklist, and rationale, see [DEMO.md](./
 - Keep Docker, the worker, sandbox runner, API, gateway, and web app running.
 - Keep one real Codex-assisted diff or test result ready for the technical proof beat.
 
+## Recording order
+
+Capture clips in an order that preserves one-shot app states, then assemble them into the
+timeline below:
+
+1. Record the static assets first: the paper, prepared failed attempt, Codex evidence,
+   and final slide.
+2. Record the New Course screen before that course has generated modules.
+3. Record the prepared course tour and cited lesson.
+4. Record the lab's failing state before applying the fix.
+5. Continue in the same session with the helper hint, fix, and passing result.
+6. Record mastery and prerequisite recommendations last, after the lab has produced the
+   required evidence.
+
 ## Three-minute walkthrough
 
 ### 0:00 - 0:30: The learner problem
