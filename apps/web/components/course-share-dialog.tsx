@@ -116,7 +116,7 @@ export function CourseShareDialog({
           ) : null}
 
           <Typography variant="caption" color="text.secondary">
-            Sharing copies the course content only — your progress, mastery, and points stay private.
+            Sharing copies the course content only. Your progress and mastery stay private.
           </Typography>
 
           {error ? <Alert severity="error">{error}</Alert> : null}

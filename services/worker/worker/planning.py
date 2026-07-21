@@ -14,6 +14,9 @@ from supabase import Client
 
 from worker.context import chunk_label_map, course_version_ids, format_chunk_context, retrieve_relevant_chunks
 from worker.errors import RETRYABLE_ERRORS
+# Concept summaries render through the same Markdown/KaTeX pipeline as lesson bodies, so they
+# need the same math rules. Without this, summaries came back with formulas in backticks.
+from worker.lesson_agent import MATH_FORMATTING_INSTRUCTION
 from worker.llm import LLMGatewayClient
 from worker.planner import CourseOutline, ModuleConcepts, OutlineModule, PlannerConcept, validate_course_outline, validate_module_concepts
 from worker.settings import WorkerSettings
@@ -64,7 +67,7 @@ MODULE_CONCEPTS_SYSTEM_PROMPT = (
     "should just cover its focus directly rather than padding to fit the pattern. At most one 'assessment' "
     "concept per module. The assessment, if present, is a no-workspace, integrative mastery check. Keep each "
     "summary_markdown to one concise sentence; detailed teaching belongs in the individual lesson, not the "
-    "course overview."
+    "course overview. " + MATH_FORMATTING_INSTRUCTION
 )
 
 

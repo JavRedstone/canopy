@@ -15,6 +15,7 @@ import CircularProgress from "@mui/material/CircularProgress";
 import Alert from "@mui/material/Alert";
 import { CourseSummary, getCourses } from "@/lib/api";
 import { CourseCategoryBadge } from "@/components/course-category-badge";
+import { CanopyLoader } from "@/components/canopy-loader";
 import { Icon } from "@/components/icon";
 import { LinkButton } from "@/components/link-button";
 import { UNDERSTAND_COLOR } from "@/lib/palette";
@@ -61,13 +62,7 @@ export function CourseDashboard() {
     };
   }, []);
 
-  if (state === "loading") {
-    return (
-      <Stack direction="row" sx={{ alignItems: "center", gap: 1.5, color: "text.secondary" }}>
-        <CircularProgress size={18} /> <Typography>Loading your courses…</Typography>
-      </Stack>
-    );
-  }
+  if (state === "loading") return <CanopyLoader label="Loading your courses…" />;
   if (state === "error") return <Alert severity="error">{errorMessage ?? "We could not load courses."}</Alert>;
   if (courses.length === 0) {
     return (

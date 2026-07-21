@@ -115,7 +115,7 @@ export function CourseSettingsDialog({
                 getAriaLabel={(index) => (index === 0 ? "Minimum lessons" : "Maximum lessons")}
               />
               <Typography variant="caption" color="text.secondary">
-                Takes effect the next time you regenerate this course — it won&apos;t retroactively add or remove lessons that already exist.
+                Takes effect the next time you regenerate this course. It won&apos;t retroactively add or remove lessons that already exist.
               </Typography>
             </Box>
             {error ? <Alert severity="error">{error}</Alert> : null}

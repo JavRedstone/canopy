@@ -1,3 +1,4 @@
+import { DesktopOnly } from "@/components/desktop-only";
 import { PageShell } from "@/components/page-shell";
 import { PublicCertificateView } from "@/components/public-certificate-view";
 
@@ -5,8 +6,10 @@ export default async function PublicCertificatePage({ params }: { params: Promis
   const { id } = await params;
 
   return (
-    <PageShell maxWidth={720}>
-      <PublicCertificateView certificateId={id} />
-    </PageShell>
+    <DesktopOnly>
+      <PageShell maxWidth={720}>
+        <PublicCertificateView certificateId={id} />
+      </PageShell>
+    </DesktopOnly>
   );
 }

@@ -69,7 +69,7 @@ export function PrerequisiteReview({ courseId, slug }: { courseId: string; slug:
                 {/* minWidth: 0 on the text itself, not just its ancestors, is what lets a flex
                     child actually shrink below its content width -- without it `noWrap`'s
                     ellipsis never gets room to kick in, and the row (and everything above it,
-                    up to the lab's ~420px instructions column) is forced to the title's full
+                    up to the lab's instructions column) is forced to the title's full
                     unwrapped width instead, which is what caused the horizontal scroll. */}
                 <Typography variant="body2" sx={{ fontWeight: 600, minWidth: 0 }} noWrap title={prerequisite.title}>
                   {prerequisite.title}

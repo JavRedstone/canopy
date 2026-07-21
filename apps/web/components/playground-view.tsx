@@ -111,7 +111,7 @@ export function PlaygroundView() {
         <Typography variant="overline" color="text.secondary">Sandbox playground</Typography>
         <Typography variant="h4" sx={{ letterSpacing: "-0.02em", my: 0.25 }}>Try the sandbox in any supported language</Typography>
         <Typography color="text.secondary">
-          The same hardened, network-disabled Docker sandbox that runs coding labs -- not tied to any course, nothing here is saved.
+          The same hardened, network-disabled Docker sandbox that runs coding labs. Nothing here is tied to a course, and nothing is saved.
         </Typography>
       </Stack>
 

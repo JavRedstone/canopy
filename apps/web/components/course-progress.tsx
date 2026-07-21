@@ -1,17 +1,17 @@
 import { motion } from "motion/react";
 import Stack from "@mui/material/Stack";
 import Box from "@mui/material/Box";
+import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
-import Stepper from "@mui/material/Stepper";
-import Step from "@mui/material/Step";
-import StepLabel from "@mui/material/StepLabel";
 import Alert from "@mui/material/Alert";
-import CircularProgress from "@mui/material/CircularProgress";
 import Button from "@mui/material/Button";
+import LinearProgress from "@mui/material/LinearProgress";
+import { alpha } from "@mui/material/styles";
+import { CanopyGrowMark } from "@/components/canopy-loader";
 import { Icon } from "@/components/icon";
 import { CourseProgressResponse } from "@/lib/api";
 import { useStallDetector } from "@/lib/use-stall-detector";
-import { UNDERSTAND_COLOR } from "@/lib/palette";
+import { CANOPY_GREEN } from "@/lib/palette";
 
 // A lesson build can include an LLM call, a sandbox run, and a repair pass. The
 // generation queue keeps its claim for five minutes, so showing Resume after
@@ -21,20 +21,30 @@ const stallThresholdMs = 6 * 60_000;
 
 type StepState = "done" | "active" | "pending" | "failed";
 
-interface Step {
+interface BuildStep {
   key: string;
   label: string;
+  /** What this stage actually does. The bare counts never explained the work being done. */
+  detail: string;
   state: StepState;
 }
 
-function buildSteps(progress: CourseProgressResponse): Step[] {
-  const steps: Step[] = [];
+function plural(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+function buildSteps(progress: CourseProgressResponse): BuildStep[] {
+  const steps: BuildStep[] = [];
 
   if (progress.sources_total > 0) {
+    const active = progress.stage === "ingesting_sources";
     steps.push({
       key: "sources",
-      label: `Sources ready (${progress.sources_ready}/${progress.sources_total})`,
-      state: progress.stage === "ingesting_sources" ? "active" : "done"
+      label: active ? "Reading your sources" : "Sources ready",
+      detail: active
+        ? `${progress.sources_ready} of ${progress.sources_total} read and split into searchable passages`
+        : `${plural(progress.sources_total, "document")} split into searchable passages`,
+      state: active ? "active" : "done"
     });
   }
 
@@ -51,17 +61,32 @@ function buildSteps(progress: CourseProgressResponse): Step[] {
         ? "Course plan generation failed"
         : planningState === "done"
           ? "Course plan generated"
-          : "Generating course plan…",
+          : "Generating course plan",
+    detail:
+      planningState === "failed"
+        ? "Stopped before the plan was complete."
+        : planningState === "done"
+          ? progress.lessons_total > 0
+            ? `${plural(progress.lessons_total, "concept")} mapped out in teaching order`
+            : "Concepts mapped out in teaching order"
+          : "Working out which concepts to cover, and the order to teach them in",
     state: planningState
   });
 
   if (progress.lessons_total > 0) {
-    const lessonsState: StepState = progress.stage === "building_lessons" ? "active" : progress.stage === "ready" ? "done" : "pending";
-    const currentLesson = lessonsState === "active" && progress.current_lesson_title ? `, now building "${progress.current_lesson_title}"` : "";
+    const state: StepState = progress.stage === "building_lessons" ? "active" : progress.stage === "ready" ? "done" : "pending";
     steps.push({
       key: "lessons",
-      label: `Lessons built (${progress.lessons_built}/${progress.lessons_total})${currentLesson}`,
-      state: lessonsState
+      label: state === "done" ? "Lessons built" : "Building lessons",
+      detail:
+        state === "done"
+          ? "Every lesson written and its exercises validated"
+          : state === "active"
+            ? progress.current_lesson_title
+              ? `Now on "${progress.current_lesson_title}"`
+              : "Working through the remaining lessons"
+            : "Each lesson is written, then its exercises are checked against their own tests",
+      state
     });
   }
 
@@ -81,14 +106,20 @@ function StepMarker({ state, index }: { state: StepState; index: number }) {
     flexShrink: 0,
     ...(state === "done" && { bgcolor: "success.main", color: "success.contrastText" }),
     ...(state === "failed" && { bgcolor: "error.main", color: "error.contrastText" }),
-    ...(state === "active" && { border: 2, borderColor: UNDERSTAND_COLOR, color: UNDERSTAND_COLOR }),
+    ...(state === "active" && { border: 2, borderColor: CANOPY_GREEN, color: CANOPY_GREEN }),
     ...(state === "pending" && { border: 1, borderColor: "divider", color: "text.secondary" })
   } as const;
 
   if (state === "active") {
     return (
       <motion.div
-        animate={{ boxShadow: ["0 0 0 0 rgba(129,140,248,0.35)", "0 0 0 6px rgba(129,140,248,0)", "0 0 0 0 rgba(129,140,248,0)"] }}
+        animate={{
+          boxShadow: [
+            `0 0 0 0 ${alpha(CANOPY_GREEN, 0.35)}`,
+            `0 0 0 6px ${alpha(CANOPY_GREEN, 0)}`,
+            `0 0 0 0 ${alpha(CANOPY_GREEN, 0)}`
+          ]
+        }}
         transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
         style={{ borderRadius: "50%" }}
       >
@@ -100,6 +131,13 @@ function StepMarker({ state, index }: { state: StepState; index: number }) {
   return <Box sx={markerSx}>{state === "done" ? <Icon name="check" /> : state === "failed" ? <Icon name="close" /> : index + 1}</Box>;
 }
 
+function headline(progress: CourseProgressResponse): string {
+  if (progress.stage === "failed") return "Course generation failed";
+  if (progress.stage === "building_lessons") return "Writing your lessons";
+  if (progress.stage === "planning") return "Planning your course";
+  return "Preparing your sources";
+}
+
 export function CourseProgressSteps({ progress, onResume }: { progress: CourseProgressResponse; onResume?: () => void }) {
   const steps = buildSteps(progress);
   const isActive = progress.stage !== "ready" && progress.stage !== "failed";
@@ -107,53 +145,66 @@ export function CourseProgressSteps({ progress, onResume }: { progress: CoursePr
     ? `${progress.stage}:${progress.sources_ready}:${progress.lessons_built}:${progress.current_lesson_title ?? ""}`
     : null;
   const stalled = useStallDetector(stallSignature, stallThresholdMs);
-  const activeIndex = Math.max(steps.findIndex((step) => step.state === "active"), 0);
+  const showBar = progress.lessons_total > 0;
+  const percent = showBar ? Math.min((progress.lessons_built / progress.lessons_total) * 100, 100) : 0;
 
   return (
-    <Stack sx={{ gap: 2, my: 2 }}>
-      {isActive ? (
-        <Alert severity="info" icon={false}>
-          <Stack direction="row" sx={{ alignItems: "center", gap: 1.5 }}>
-            <CircularProgress size={20} />
-            <Box>
-              <Typography sx={{ fontWeight: 600 }}>
-                {progress.stage === "building_lessons" && progress.current_lesson_title
-                  ? `Building "${progress.current_lesson_title}"…`
-                  : progress.stage === "building_lessons"
-                    ? "Building remaining lessons…"
-                  : progress.stage === "planning"
-                    ? "Generating course plan…"
-                    : "Preparing your sources…"}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {progress.lessons_total > 0
-                  ? `${progress.lessons_built} of ${progress.lessons_total} lessons built so far`
-                  : "This updates automatically as work completes."}
-              </Typography>
-            </Box>
+    <Paper variant="outlined" sx={{ my: 2, p: { xs: 2, sm: 3 }, borderRadius: 2 }}>
+      <Stack direction="row" sx={{ alignItems: "center", gap: 2 }}>
+        {isActive ? <CanopyGrowMark size={44} /> : null}
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="h6" sx={{ letterSpacing: "-0.01em" }}>{headline(progress)}</Typography>
+          <Typography variant="body2" color="text.secondary">
+            {isActive
+              ? "This updates on its own. It is safe to close this page, and building carries on."
+              : "Nothing already built is lost. Use Regenerate to try again."}
+          </Typography>
+        </Box>
+      </Stack>
+
+      {showBar ? (
+        <Box sx={{ mt: 2.5 }}>
+          <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "baseline", mb: 0.75 }}>
+            <Typography variant="body2" color="text.secondary">Lessons built</Typography>
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>{progress.lessons_built} of {progress.lessons_total}</Typography>
           </Stack>
-        </Alert>
+          <LinearProgress
+            variant="determinate"
+            value={percent}
+            sx={{ height: 6, borderRadius: 999, bgcolor: "action.hover", "& .MuiLinearProgress-bar": { borderRadius: 999 } }}
+          />
+        </Box>
       ) : null}
 
-      <Stepper activeStep={activeIndex} orientation="vertical" connector={null}>
-        {steps.map((step, index) => (
-          <Step key={step.key} completed={step.state === "done"}>
-            <StepLabel error={step.state === "failed"} slots={{ stepIcon: () => <StepMarker state={step.state} index={index} /> }}>
-              <Typography sx={{ fontWeight: step.state === "active" ? 600 : 400 }}>{step.label}</Typography>
-            </StepLabel>
-          </Step>
-        ))}
-      </Stepper>
+      <Box sx={{ mt: 3 }}>
+        {steps.map((step, index) => {
+          const last = index === steps.length - 1;
+          return (
+            <Stack key={step.key} direction="row" sx={{ gap: 1.75, alignItems: "stretch" }}>
+              {/* Marker plus a connecting rail. The old Stepper passed connector={null}, which
+                  left these reading as unordered circles rather than one sequence. */}
+              <Stack sx={{ alignItems: "center" }}>
+                <StepMarker state={step.state} index={index} />
+                {!last ? (
+                  <Box sx={{ flex: 1, width: 2, my: 0.5, borderRadius: 1, bgcolor: step.state === "done" ? "success.main" : "divider" }} />
+                ) : null}
+              </Stack>
+              <Box sx={{ pb: last ? 0 : 2.5, minWidth: 0 }}>
+                <Typography sx={{ fontWeight: step.state === "active" ? 600 : 500, lineHeight: 1.4 }}>{step.label}</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>{step.detail}</Typography>
+              </Box>
+            </Stack>
+          );
+        })}
+      </Box>
 
-      {progress.stage === "failed" ? (
-        <Alert severity="error">Course generation failed. Use the Regenerate button to try again.</Alert>
-      ) : null}
-
+      {/* No separate failure alert: the headline, its sub-line and the failed step already
+          say it. A third copy was the same redundancy this card set out to remove. */}
       {stalled && onResume ? (
-        <Alert severity="warning" action={<Button color="inherit" size="small" onClick={onResume}>Resume remaining lessons</Button>}>
+        <Alert severity="warning" sx={{ mt: 2 }} action={<Button color="inherit" size="small" onClick={onResume}>Resume</Button>}>
           This is taking longer than expected. Resuming only requeues incomplete lessons; it keeps every completed lesson.
         </Alert>
       ) : null}
-    </Stack>
+    </Paper>
   );
 }
