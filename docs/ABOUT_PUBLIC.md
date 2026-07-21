@@ -125,6 +125,27 @@ When a learner struggles, Canopy looks at the prerequisite relationships between
 
 The result is not simply an AI-generated course. It is a learning system that turns any source into structured instruction, hands-on practice, and measurable evidence of what the learner can actually do.
 
+## A few more things you can do
+
+Beyond the main course experience, we added a number of smaller features to make Canopy feel complete.
+
+* Upload PDFs, Markdown, plain text, pasted notes, or multiple sources for the same course.
+* Set your own learning goal, so the same source can produce a completely different course depending on what you want to learn.
+* Watch course generation happen live, with progress updates for source processing, planning, and lesson creation.
+* Resume a stalled course without losing the lessons that were already generated.
+* Regenerate an entire course or just one lesson.
+* Open any citation to view the exact source passage, page, and file it came from.
+* Use a scratch console inside Python labs to test ideas without affecting your grade.
+* Reveal a reference solution without overwriting your own code.
+* Practise by weakest concept, course order, or shuffled questions, with sessions that avoid repeating the same material too often.
+* Accept, defer, or dismiss review recommendations.
+* Share a course through a link so someone else can create their own independent copy without copying your progress.
+* Export the course as a PDF coursebook and earn a publicly verifiable completion certificate.
+* Use the standalone playground to run Python, machine learning, JavaScript, Go, C++, or C without creating a course.
+* Edit your course name, activity length, and quiz attempt limits after the course has already been created.
+
+These features are not the main idea behind Canopy, but they helped us turn it from a prototype into something that feels much closer to a real learning platform.
+
 ## Built on learning science
 
 Canopy's learning loop is built around active learning, retrieval practice, worked examples, productive struggle, and mastery based on demonstrated performance.
