@@ -19,6 +19,32 @@ site_url = "http://localhost:3000"
 additional_redirect_urls = ["http://localhost:3000/auth/callback"]
 jwt_expiry = 3600
 
+# Magic link is the only sign-in method (apps/web/components/login-form.tsx),
+# so every login is an email send. The built-in SMTP provider caps sends
+# project-wide and is not raisable -- production must use custom SMTP,
+# configured in the dashboard under Auth > SMTP Settings.
+#
+# Left disabled locally on purpose: local dev should keep using the CLI's
+# built-in mail catcher (http://localhost:54324) rather than sending real
+# mail and consuming the provider quota during testing.
+[auth.email.smtp]
+enabled = false
+host = "env(SMTP_HOST)"
+port = 587
+user = "env(SMTP_USER)"
+pass = "env(SMTP_PASS)"
+admin_email = "env(SMTP_ADMIN_EMAIL)"
+sender_name = "Canopy"
+
+# Rate limits, version-controlled so the intended values are reviewable.
+# email_sent only takes effect once custom SMTP is configured above;
+# on the built-in provider the much lower project-wide cap wins.
+[auth.rate_limit]
+email_sent = 30
+token_refresh = 150
+sign_in_sign_ups = 30
+token_verifications = 30
+
 [storage]
 enabled = true
 file_size_limit = "6MiB"

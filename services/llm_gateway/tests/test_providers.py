@@ -67,6 +67,9 @@ def test_settings_model_for_splits_openai_generation_and_repair() -> None:
     # Repair is the other Sol task: the last line of defense before a lab is declared failed.
     assert settings.model_for("lesson_repair") == settings.openai_repair_model
     assert settings.model_for("lesson_helper") == settings.openai_helper_model
+    # The practice pool is builder-tier work behind its own task, so it can be dialled up on
+    # answer-key quality without dragging lesson generation with it.
+    assert settings.model_for("practice_pool") == settings.openai_practice_pool_model
     # The tiers are genuinely distinct models, or this test would pass by coincidence.
     assert settings.openai_outline_model != settings.openai_builder_model
 
@@ -88,6 +91,9 @@ def test_settings_model_for_uses_bedrock_models_when_aws() -> None:
     # An explicit repair model overrides that fallback.
     assert settings.model_copy(update={"aws_bedrock_repair_model": "repair-bedrock"}).model_for("lesson_repair") == "repair-bedrock"
     assert settings.model_copy(update={"aws_bedrock_helper_model": "helper-bedrock"}).model_for("lesson_helper") == "helper-bedrock"
+    # The practice pool follows the same fallback-then-override shape on every provider.
+    assert settings.model_for("practice_pool") == "builder-bedrock"
+    assert settings.model_copy(update={"aws_bedrock_practice_pool_model": "pool-bedrock"}).model_for("practice_pool") == "pool-bedrock"
 
 
 def test_bedrock_openai_targets_mantle_endpoint_and_uses_titan_for_embeddings() -> None:

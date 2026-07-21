@@ -77,6 +77,14 @@ class FakeResponses:
         return SimpleNamespace(output_parsed=self.outputs.pop(0))
 
 
+class FakeQueue:
+    def __init__(self) -> None:
+        self.practice_pool_builds: list[str] = []
+
+    def enqueue_practice_pool_build(self, lesson_definition_id: str) -> None:
+        self.practice_pool_builds.append(lesson_definition_id)
+
+
 def _builder(responses: FakeResponses) -> LessonBuilder:
     builder = LessonBuilder.__new__(LessonBuilder)
     builder.settings = SimpleNamespace(
@@ -85,6 +93,7 @@ def _builder(responses: FakeResponses) -> LessonBuilder:
     builder.client = FakeClient()
     builder.openai = SimpleNamespace(responses=responses)
     builder.sandbox = ExplodingSandbox()
+    builder.queue = FakeQueue()
     return builder
 
 
@@ -99,6 +108,28 @@ def test_conceptual_lesson_builds_without_sandbox_and_stores_validated_bundle() 
     assert applied["p_validation_status"] == "validated"
     assert applied["p_bundle"]["workspace"] is None
     assert applied["p_bundle"]["assessment"]["quiz_items"][0]["id"] == "expiry-check"
+
+
+def test_a_built_lesson_kicks_off_its_practice_pool() -> None:
+    builder = _builder(FakeResponses([LessonContentBundle.model_validate(_conceptual_content_dict())]))
+
+    builder.build_lesson("lesson-id")
+
+    assert builder.queue.practice_pool_builds == ["lesson-id"]
+
+
+def test_a_queue_failure_never_fails_a_lesson_that_already_built() -> None:
+    class ExplodingQueue:
+        def enqueue_practice_pool_build(self, lesson_definition_id: str) -> None:
+            raise RuntimeError("queue unavailable")
+
+    builder = _builder(FakeResponses([LessonContentBundle.model_validate(_conceptual_content_dict())]))
+    builder.queue = ExplodingQueue()
+
+    # The lesson is already stored and served by this point; the pool is a backfill.
+    builder.build_lesson("lesson-id")
+
+    assert dict(builder.client.rpc_calls)["apply_lesson_bundle"]["p_validation_status"] == "validated"
 
 
 def test_conceptual_content_with_out_of_context_citation_is_regenerated_with_feedback() -> None:

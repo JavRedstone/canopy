@@ -41,3 +41,9 @@ class QueueAdapter:
             "enqueue_course_planning",
             {"p_course_id": course_id, "p_owner_id": owner_id},
         ).execute()
+
+    def enqueue_practice_pool_build(self, lesson_definition_id: str) -> None:
+        self.client.rpc(
+            "enqueue_practice_pool_build",
+            {"p_lesson_definition_id": lesson_definition_id},
+        ).execute()
