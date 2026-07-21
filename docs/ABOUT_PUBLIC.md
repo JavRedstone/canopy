@@ -167,16 +167,7 @@ The source is ingested and indexed for retrieval. GPT-5.6 then uses the learner'
 
 Planning happens once at the course level. Once the concept graph is fixed, the worker generates lessons, quizzes, worked examples, practice items, and coding labs through separate jobs.
 
-```mermaid
-flowchart LR
-    A[Upload source] --> B[Retrieve relevant material]
-    B --> C[Plan course and concept graph]
-    C --> D[Generate lessons and quizzes]
-    C --> E[Generate coding labs]
-    E --> F[Verify in sandbox]
-    D --> G[Publish course]
-    F --> G
-```
+![How Canopy turns an uploaded source into a verified course](assets/diagrams/generation-pipeline.png)
 
 This separates high-stakes planning from high-volume content generation and keeps every lesson grounded in the learner's original material.
 
@@ -186,25 +177,7 @@ GPT-5.6 is not a chatbot added beside Canopy. It generates and evaluates the pro
 
 Canopy routes each task based on its stakes and volume. High-stakes decisions use the flagship **Sol** tier, while high-volume generation and interaction use the faster **Luna** tier.
 
-```mermaid
-flowchart TD
-    G[GPT-5.6 Runtime] --> P[Course planning]
-    G --> C[Concept generation]
-    G --> L[Lessons and coding labs]
-    G --> Q[Quizzes and practice]
-    G --> A[Short-answer grading]
-    G --> H[In-lesson learning helper]
-    G --> R[Lab repair]
-
-    P --> S[Sol: flagship]
-    R --> S
-
-    C --> F[Luna: fast]
-    L --> F
-    Q --> F
-    A --> F
-    H --> F
-```
+![GPT-5.6 task routing: planning and lab repair on the Sol tier, generation and the learning helper on the Luna tier](assets/diagrams/model-routing.png)
 
 | Task                          | Model tier        | Why                                                                                         |
 | ----------------------------- | ----------------- | ------------------------------------------------------------------------------------------- |
@@ -224,17 +197,7 @@ The hardest engineering problem was safely generating coding labs that learners 
 
 Canopy uses a bounded generate, execute, repair, and re-verify loop:
 
-```mermaid
-flowchart TD
-    A[Generate lab] --> B[Run reference solution]
-    B --> C{Tests pass?}
-    C -- Yes --> D[Publish lab]
-    C -- No --> E[Capture real failure]
-    E --> F[Repair with GPT-5.6]
-    F --> G{Retries remain?}
-    G -- Yes --> B
-    G -- No --> H[Fail closed]
-```
+![The bounded generate, execute, repair and re-verify loop that every coding lab passes through before a learner sees it](assets/diagrams/lab-repair-loop.png)
 
 The model receives the actual traceback, compiler error, or failed assertion from the sandbox rather than a synthetic description of the problem.
 
@@ -264,14 +227,7 @@ Low-stakes practice can improve the learner's estimate, but it is capped below t
 
 When a learner repeatedly struggles, Canopy checks the prerequisite graph and recommends earlier concepts that have already been attempted but remain weak.
 
-```mermaid
-flowchart LR
-    A[Quiz results] --> U[Understand]
-    B[Coding submissions] --> P[Apply]
-    U --> M[Per-concept mastery]
-    P --> M
-    M --> R[Prerequisite-aware review]
-```
+![Quiz results feed the Understand track and coding submissions feed Apply; together they drive per-concept mastery and prerequisite-aware review](assets/diagrams/mastery-model.png)
 
 Together, these systems allow Canopy to generate learning content, verify the work it creates, and adapt recommendations using evidence from the learner's actual performance.
 

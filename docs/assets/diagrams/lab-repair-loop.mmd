@@ -1,0 +1,9 @@
+flowchart LR
+    A[Generate lab] --> B[Run reference solution]
+    B --> C{Tests pass?}
+    C -- Yes --> D[Publish lab]
+    C -- No --> E[Capture real failure]
+    E --> F[Repair with GPT-5.6]
+    F --> G{Retries remain?}
+    G -- Yes --> B
+    G -- No --> H[Fail closed]
