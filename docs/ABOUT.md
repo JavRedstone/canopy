@@ -2,6 +2,11 @@
 
 **Demo video:** [https://www.youtube.com/watch?v=5FqJQYg25RM](https://www.youtube.com/watch?v=5FqJQYg25RM)
 
+**About the demo course:** every screenshot and sample PDF in this document is the
+same real, generated course — built end to end from Vaswani et al.,
+[*Attention Is All You Need*](https://arxiv.org/abs/1706.03762) (arXiv:1706.03762),
+the Transformer paper — not a mockup or a curated demo dataset.
+
 ## Inspiration
 
 Technical knowledge is everywhere — papers, docs, textbooks, internal engineering
@@ -21,9 +26,9 @@ experience — lessons, a real editor, checkpoint exercises — generated from *
 source, on demand, and adaptive to what you've actually demonstrated instead of what
 you've merely scrolled past. That's Canopy.
 
-![Canopy course dashboard — generated coursebook, module outline, and content/practice/mastery tabs](./assets/course_landing_page.png)
-*A generated course: the coursebook hero, module outline, and the Content / Practice /
-Mastery tabs a learner moves between.*
+![Canopy course dashboard — the "Attention Is All You Need" course generated from the actual paper](./assets/course_landing_page.png)
+*The "Attention Is All You Need" course: the coursebook hero, module outline, and the
+Content / Practice / Mastery tabs a learner moves between.*
 
 ## What it does
 
@@ -52,13 +57,18 @@ loop Canopy runs, not a linear course you finish once.*
   identifies the shaky earlier concept it builds on and points you back to it.
 - **A low-stakes practice pool** to drill a concept without it counting against you,
   an AI learning helper that hints without handing over the answer, a PDF coursebook
-  and completion certificate to keep, and free one-click course sharing — anyone with
-  the link gets their own independent copy at zero regeneration cost.
+  and completion certificate to keep — sample PDFs from this same
+  [*Attention Is All You Need*](https://arxiv.org/abs/1706.03762) course:
+  [coursebook](./assets/Attention-is-All-You-Need-coursebook.pdf),
+  [certificate](./assets/Attention-is-All-You-Need-certificate.pdf) — and free
+  one-click course sharing — anyone with the link gets their own independent copy at
+  zero regeneration cost.
 
-![Lesson with the AI learning helper open](./assets/lesson_with_helper.png)
-*A source-grounded lesson (numbered citations, worked examples) with the learning
-helper open mid-conversation — asked to "explain this more simply," it does, without
-ever just handing over the answer to a quiz or lab.*
+![Lesson with the AI learning helper open, from the "Attention Is All You Need" course](./assets/lesson_with_helper.png)
+*A source-grounded lesson from the "Attention Is All You Need" course (numbered
+citations, worked examples) with the learning helper open mid-conversation — asked to
+"explain this more simply," it does, without ever just handing over the answer to a
+quiz or lab.*
 
 **What's actually different, and why it matters:** generic AI chat can explain a
 concept but has no model of what you've demonstrated, so it can't tell you when you've
@@ -69,15 +79,16 @@ team's docs. Canopy is the combination neither offers: generated from *your* mat
 every lab sandbox-checked before it ships, every mastery signal earned from a real
 graded observation, not a checkbox.
 
-![Coding lab workspace with a prerequisite-review nudge](./assets/course_lab.png)
-*The coding lab workspace — Monaco editor, Run/Submit, live test results — with a
-prerequisite-review nudge surfaced inline ("Review recommended first... 18%
-understand") the moment it's relevant, not buried in a separate report.*
+![Coding lab workspace with a prerequisite-review nudge, from the "Attention Is All You Need" course](./assets/course_lab.png)
+*A lab from the "Attention Is All You Need" course — multi-head attention tensor
+operations. Monaco editor, Run/Submit, live test results — with a prerequisite-review
+nudge surfaced inline ("Review recommended first... 18% understand") the moment it's
+relevant, not buried in a separate report.*
 
-![Mastery dashboard with per-concept Understand/Apply meters](./assets/mastery_landing.png)
-*Every concept in a course, two independent tracks each — this is a real run: 6/16
-concepts mastered, individual understand/apply percentages, observation counts per
-concept. Not a completion checkbox.*
+![Mastery dashboard with per-concept Understand/Apply meters, for the "Attention Is All You Need" course](./assets/mastery_landing.png)
+*Every concept in the "Attention Is All You Need" course, two independent tracks each
+— this is a real run: 6/16 concepts mastered, individual understand/apply
+percentages, observation counts per concept. Not a completion checkbox.*
 
 Full feature list: [`docs/product/FEATURES.md`](./product/FEATURES.md).
 
@@ -166,9 +177,10 @@ Used throughout as an active collaborator, not a one-off code generator:
   loop — generate, run in the actual sandbox, feed the real failure output back to the
   model, regenerate, re-verify — so a lab never reaches a learner on the strength of
   the model's first attempt or its own claim of correctness. That loop has a bounded
-  retry budget for a reason — it doesn't always win. On our own "Attention Is All You
-  Need" course, a beam-search decoding lab's reference solution kept missing one
-  specific hidden case after every repair attempt:
+  retry budget for a reason — it doesn't always win. On our own
+  [*Attention Is All You Need*](https://arxiv.org/abs/1706.03762) course, a
+  beam-search decoding lab's reference solution kept missing one specific hidden case
+  after every repair attempt:
 
   ```
   FAILED test_beam_search_hidden.py::test_beam_search_uses_length_penalty_when_ranking_candidates
@@ -217,9 +229,11 @@ in front of learners, not a hoped-for one:
 - The whole loop actually works end to end, live: source → generated course →
   sandbox-verified labs → mastery tracking → PDF certificate.
 
-![Canopy completion certificate](./assets/certificate_completion.png)
-*Completion certificate, issued once every lesson in a course is done — verifiable at
-its own public link.*
+![Canopy completion certificate for the "Attention Is All You Need" course](./assets/certificate_completion.png)
+*Completion certificate for the "Attention Is All You Need" course, issued once every
+lesson is done — verifiable at its own public link. Sample PDF:
+[certificate](./assets/Attention-is-All-You-Need-certificate.pdf),
+[coursebook](./assets/Attention-is-All-You-Need-coursebook.pdf).*
 
 ## What we learned
 
