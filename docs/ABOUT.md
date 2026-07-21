@@ -7,7 +7,10 @@ notes — and AI can explain any of it on demand. But explanation was never the 
 part. The hard part is finding out, honestly, whether you can *do* the thing the
 material describes. A chat window will happily walk you through the Transformer
 architecture and leave you feeling like you understand it; it won't tell you that your
-own implementation of scaled dot-product attention silently transposes two axes.
+own implementation of scaled dot-product attention silently transposes two axes. That
+gap — confident-sounding explanation standing in for verified capability — is where
+real cost shows up: in an interview, in a code review, in production, at exactly the
+moment it's most expensive to discover.
 
 Codecademy proved people will work through structured, hands-on courses when the
 content is curated for them. But curation doesn't scale to "the paper I'm actually
@@ -16,12 +19,24 @@ experience — lessons, a real editor, checkpoint exercises — generated from *
 source, on demand, and adaptive to what you've actually demonstrated instead of what
 you've merely scrolled past. That's Canopy.
 
+<!-- SCREENSHOT: hero shot of the app — the course dashboard or a lesson mid-lab, whichever reads best at a glance -->
+![Canopy hero screenshot placeholder](./assets/screenshots/hero.png)
+*Space reserved: hero screenshot (course dashboard or an in-progress lab).*
+
 ## What it does
 
 Canopy turns a source you provide — a paper, docs, a textbook chapter, your own pasted
 notes — into a full, hands-on course: structured lessons cited back to the exact
 passage they came from, coding labs, and quizzes, generated specifically for the goal
-you state in your own words.
+you state in your own words. It doesn't stop at telling you what you got wrong — it
+takes action on it: it generates the lab, runs it, repairs it if it's broken, and the
+moment you're struggling on a concept it identifies the exact shaky prerequisite behind
+that struggle and routes you back to it, rather than just flagging a low score and
+leaving you to figure out why.
+
+![Canopy learner journey](./demo/learner-journey-diagram.png)
+*Source → course → practice → evidence of mastery → the next concept to review — the
+loop Canopy runs, not a linear course you finish once.*
 
 - **Source-grounded lessons.** Every claim can carry an inline citation that resolves
   to the real excerpt it came from — verifiable, not an opaque summary.
@@ -38,6 +53,24 @@ you state in your own words.
   and completion certificate to keep, and free one-click course sharing — anyone with
   the link gets their own independent copy at zero regeneration cost.
 
+**What's actually different, and why it matters:** generic AI chat can explain a
+concept but has no model of what you've demonstrated, so it can't tell you when you've
+actually got it. Fixed-catalog platforms (Codecademy, Coursera) solve verification but
+only for content someone already curated, so they can't touch your paper or your
+team's docs. Canopy is the combination neither offers: generated from *your* material,
+*and* held to the same verify-before-you-move-on standard as a hand-built course —
+every lab sandbox-checked before it ships, every mastery signal earned from a real
+graded observation, not a checkbox.
+
+<!-- SCREENSHOT: the coding lab workspace — Monaco editor, Run/Submit, test results -->
+![Coding lab workspace placeholder](./assets/screenshots/coding-lab.png)
+*Space reserved: coding lab workspace (editor, Run/Submit, live test results).*
+
+<!-- SCREENSHOT: mastery dashboard with the prerequisite-review nudge visible -->
+![Mastery dashboard and prerequisite nudge placeholder](./assets/screenshots/mastery-dashboard.png)
+*Space reserved: mastery dashboard showing per-concept understand/apply meters and a
+prerequisite-review nudge in context.*
+
 Full feature list: [`docs/product/FEATURES.md`](./product/FEATURES.md).
 
 ## How we built it
@@ -52,6 +85,22 @@ access — that executes every generated lab in a locked-down, single-use, no-ne
 non-root container across six language environments. **Supabase** (Postgres +
 pgvector + pgmq + Auth + Storage) is the data, queue, and auth layer underneath all of
 it.
+
+![Canopy runtime architecture](./architecture/architecture-diagram.png)
+*The five-service runtime, including the agentic lab-repair loop in detail (Worker +
+LLM Gateway + Sandbox Runner) — generate, run for real, feed back the actual failure,
+repair, re-verify, bounded retries, never trusted on one attempt.*
+
+**Built for real deployment, not just a demo run:** every generated lab executes in a
+resource-limited, network-disabled, non-root, all-capabilities-dropped container, so
+untrusted model-authored code can never touch the host or reach the network; every
+learner-facing table is behind Postgres row-level security, and tables carrying answer
+keys (`practice_items`, `lesson_revisions`) have no public policy at all — service-role
+only; the LLM gateway abstracts three provider backends behind one interface, so a
+provider outage or pricing change is a config change, not a rewrite; and dev-only
+tooling (the demo auto-complete/clear commands used to drive a course to a finished
+state for testing) is environment-gated and 404s outside local development rather than
+merely being hidden in the UI.
 
 ### What GPT-5.6 actually does at runtime
 
@@ -124,17 +173,30 @@ Used throughout as an active collaborator, not a one-off code generator:
 
 ## Accomplishments that we're proud of
 
+Canopy is pre-launch, so we don't have real-user metrics yet — but every accomplishment
+below is a concrete mechanism designed to produce a measurable outcome the moment it's
+in front of learners, not a hoped-for one:
+
 - A self-healing lab-generation loop that actually earns the word "agentic": generate,
   verify against a real sandbox, repair from the real failure, re-verify — no lab ships
-  unverified.
+  unverified. The direct, measurable consequence: zero unverified labs can reach a
+  learner, by construction, not by review effort.
 - A mastery model with teeth — dual-track BKT and prerequisite-aware review that
-  responds to demonstrated evidence, not time spent clicking through pages.
+  responds to demonstrated evidence, not time spent clicking through pages. The
+  measurable consequence: a learner (or a hiring manager looking at a certificate) gets
+  a signal tied to graded evidence, not a completion percentage that only measures
+  clicking through.
 - Three real, curated, resource-tuned sandbox environments that the generation prompts
   know how to target correctly, instead of one generic Python box.
 - Free, instant course cloning via a link — a genuine product answer to not having a
-  team/org layer yet, that costs nothing per additional learner.
+  team/org layer yet, that costs nothing per additional learner. The measurable
+  consequence: sharing a course to ten more people costs the same as sharing it to one.
 - The whole loop actually works end to end, live: source → generated course →
   sandbox-verified labs → mastery tracking → PDF certificate.
+
+<!-- SCREENSHOT: the completion certificate (in-app dialog or exported PDF) -->
+![Certificate placeholder](./assets/screenshots/certificate.png)
+*Space reserved: completion certificate — in-app dialog or the exported PDF.*
 
 ## What we learned
 
@@ -152,12 +214,16 @@ pytest traceback — rather than an abstract instruction.
 
 ## What's next for Canopy
 
+Canopy is built as a platform, not a single feature — every item below extends
+infrastructure that's already shipped rather than starting from scratch:
+
 - **Spaced re-retrieval of already-mastered concepts** — the highest-confidence
   pedagogy fix per our own evaluation, and it reuses the quiz engine already built.
 - **An adaptive remediation trigger**, replacing the current fixed "N failed
   attempts" constant with something sensitive to the learner's actual level.
 - **A real cohort/team layer** — a shared progress dashboard for a group, not just
-  Google-Docs-style link sharing. The single biggest structural gap today.
+  Google-Docs-style link sharing. The single biggest structural gap today, and the
+  clearest path to broader (classroom, team, org) adoption.
 - **Repository/codebase ingestion** — point a course at a GitHub repo instead of
   uploading files by hand.
 - Multiple content languages, and a broader UI polish pass.
