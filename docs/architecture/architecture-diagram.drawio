@@ -1,109 +1,139 @@
-<mxfile host="app.diagrams.net">
-  <diagram name="Page-1" id="gyhKympvkju5uV6ZK8nE">
-    <mxGraphModel grid="1" page="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" pageScale="1" pageWidth="1700" pageHeight="1100" math="0" shadow="0">
+<mxfile host="Electron" agent="Codex">
+  <diagram id="canopy-runtime" name="Canopy runtime architecture">
+    <mxGraphModel dx="1885" dy="1055" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1920" pageHeight="1080" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
-        <mxCell id="PHaJc5-IfKH5OD-_IDpn-35" parent="1" style="whiteSpace=wrap;html=1;aspect=fixed;" value="" vertex="1">
-          <mxGeometry height="760" width="760" as="geometry" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=36;fontStyle=1;fontColor=#1A1A1A;" value="Canopy: Source-Grounded Adaptive Learning Platform" vertex="1">
+          <mxGeometry height="45" width="1380" x="270" y="18" as="geometry" />
         </mxCell>
-        <mxCell id="IzvpqjJyVz1lPJqtnfYa-8" edge="1" parent="1" source="IzvpqjJyVz1lPJqtnfYa-1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="IzvpqjJyVz1lPJqtnfYa-7" value="">
+        <mxCell id="boundary" parent="1" style="rounded=2;whiteSpace=wrap;html=1;fillColor=#EBF5FF;strokeColor=#0066CC;strokeWidth=2.5;dashed=1;dashPattern=8 4;verticalAlign=top;align=right;fontSize=14;fontStyle=1;fontColor=#0066CC;arcSize=2;" value="" vertex="1">
+          <mxGeometry height="790" width="1260" x="300" y="85" as="geometry" />
+        </mxCell>
+        <mxCell id="boundary-label" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=right;verticalAlign=middle;whiteSpace=wrap;fontSize=22;" value="&lt;span style=&quot;color: rgb(0, 102, 204); font-weight: 700;&quot;&gt;Canopy application platform&lt;/span&gt;" vertex="1">
+          <mxGeometry height="35" width="340" x="1200" y="87" as="geometry" />
+        </mxCell>
+        <mxCell id="browser" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FF6B35;fontColor=#FFFFFF;strokeColor=#CC4400;fontSize=14;fontStyle=1;arcSize=12;" value="Learner Browser" vertex="1">
+          <mxGeometry height="60" width="175" x="65" y="430" as="geometry" />
+        </mxCell>
+        <mxCell id="browser-note" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=bottom;whiteSpace=wrap;fontSize=11;fontColor=#1A1A1A;fontStyle=2;" value="Supabase Auth session&lt;br&gt;Local editor and learner input" vertex="1">
+          <mxGeometry height="40" width="235" x="35" y="385" as="geometry" />
+        </mxCell>
+        <mxCell id="web" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FF6B35;fontColor=#FFFFFF;strokeColor=#CC4400;fontSize=14;fontStyle=1;arcSize=12;" value="Next.js Web App" vertex="1">
+          <mxGeometry height="60" width="180" x="345" y="430" as="geometry" />
+        </mxCell>
+        <mxCell id="web-note" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=bottom;whiteSpace=wrap;fontSize=11;fontColor=#1A1A1A;fontStyle=2;" value="Courses · labs · progress&lt;br&gt;Sharing · certificates" vertex="1">
+          <mxGeometry height="40" width="230" x="320" y="385" as="geometry" />
+        </mxCell>
+        <mxCell id="api" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FF6B35;fontColor=#FFFFFF;strokeColor=#CC4400;fontSize=14;fontStyle=1;arcSize=12;" value="FastAPI API" vertex="1">
+          <mxGeometry height="60" width="180" x="620" y="430" as="geometry" />
+        </mxCell>
+        <mxCell id="api-note" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=bottom;whiteSpace=wrap;fontSize=11;fontColor=#1A1A1A;fontStyle=2;" value="Auth · authorization · REST&lt;br&gt;Course, progress, upload, export" vertex="1">
+          <mxGeometry height="40" width="260" x="580" y="385" as="geometry" />
+        </mxCell>
+        <mxCell id="supabase" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0066CC;fontColor=#FFFFFF;strokeColor=#004499;fontSize=14;fontStyle=1;arcSize=12;" value="Supabase&lt;br&gt;Postgres + pgvector" vertex="1">
+          <mxGeometry height="60" width="200" x="900" y="430" as="geometry" />
+        </mxCell>
+        <mxCell id="supabase-note" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=bottom;whiteSpace=wrap;fontSize=11;fontColor=#1A1A1A;fontStyle=2;" value="Auth · private Storage · RLS&lt;br&gt;PGMQ queues · server-side RPC" vertex="1">
+          <mxGeometry height="40" width="270" x="865" y="385" as="geometry" />
+        </mxCell>
+        <mxCell id="worker" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FF6B35;fontColor=#FFFFFF;strokeColor=#CC4400;fontSize=14;fontStyle=1;arcSize=12;" value="Worker Service" vertex="1">
+          <mxGeometry height="60" width="190" x="1240" y="250" as="geometry" />
+        </mxCell>
+        <mxCell id="worker-note" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=bottom;whiteSpace=wrap;fontSize=11;fontColor=#1A1A1A;fontStyle=2;" value="Polls ingestion + generation queues&lt;br&gt;Parse · embed · plan · build · validate" vertex="1">
+          <mxGeometry height="40" width="280" x="1195" y="205" as="geometry" />
+        </mxCell>
+        <mxCell id="gateway" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FF6B35;fontColor=#FFFFFF;strokeColor=#CC4400;fontSize=14;fontStyle=1;arcSize=12;" value="LLM Gateway" vertex="1">
+          <mxGeometry height="60" width="190" x="1240" y="430" as="geometry" />
+        </mxCell>
+        <mxCell id="gateway-note" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=bottom;whiteSpace=wrap;fontSize=11;fontColor=#1A1A1A;fontStyle=2;" value="Structured generation · responses&lt;br&gt;Embeddings · provider credentials" vertex="1">
+          <mxGeometry height="40" width="280" x="1195" y="385" as="geometry" />
+        </mxCell>
+        <mxCell id="sandbox" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FF6B35;fontColor=#FFFFFF;strokeColor=#CC4400;fontSize=14;fontStyle=1;arcSize=12;" value="Sandbox Runner" vertex="1">
+          <mxGeometry height="60" width="190" x="1240" y="610" as="geometry" />
+        </mxCell>
+        <mxCell id="sandbox-note" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=bottom;whiteSpace=wrap;fontSize=11;fontColor=#1A1A1A;fontStyle=2;" value="Validated workspaces · bounded output&lt;br&gt;Only service with Docker access" vertex="1">
+          <mxGeometry height="40" width="280" x="1195" y="675" as="geometry" />
+        </mxCell>
+        <mxCell id="providers" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0066CC;fontColor=#FFFFFF;strokeColor=#004499;fontSize=14;fontStyle=1;arcSize=12;" value="Model Providers" vertex="1">
+          <mxGeometry height="60" width="190" x="1650" y="430" as="geometry" />
+        </mxCell>
+        <mxCell id="providers-note" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=bottom;whiteSpace=wrap;fontSize=11;fontColor=#1A1A1A;fontStyle=2;" value="OpenAI · Azure OpenAI&lt;br&gt;AWS Bedrock" vertex="1">
+          <mxGeometry height="40" width="240" x="1625" y="385" as="geometry" />
+        </mxCell>
+        <mxCell id="docker" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0066CC;fontColor=#FFFFFF;strokeColor=#004499;fontSize=14;fontStyle=1;arcSize=12;" value="Ephemeral Docker&lt;br&gt;Environments" vertex="1">
+          <mxGeometry height="60" width="190" x="1650" y="610" as="geometry" />
+        </mxCell>
+        <mxCell id="docker-note" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=bottom;whiteSpace=wrap;fontSize=11;fontColor=#1A1A1A;fontStyle=2;" value="python · python-ml · C/C++&lt;br&gt;Go · JavaScript" vertex="1">
+          <mxGeometry height="40" width="240" x="1625" y="675" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="browser" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;strokeColor=#666666;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#1A1A1A;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" target="web" value="HTTPS">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="IzvpqjJyVz1lPJqtnfYa-10" edge="1" parent="1" source="IzvpqjJyVz1lPJqtnfYa-1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="IzvpqjJyVz1lPJqtnfYa-9" value="">
+        <mxCell id="e2" edge="1" parent="1" source="web" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;strokeColor=#666666;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#1A1A1A;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" target="api" value="REST + bearer token">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="IzvpqjJyVz1lPJqtnfYa-12" edge="1" parent="1" source="IzvpqjJyVz1lPJqtnfYa-1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="IzvpqjJyVz1lPJqtnfYa-11" value="">
+        <mxCell id="e3" edge="1" parent="1" source="api" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;strokeColor=#666666;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#1A1A1A;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" target="supabase" value="server-side data + RPC">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="PHaJc5-IfKH5OD-_IDpn-15" edge="1" parent="1" source="IzvpqjJyVz1lPJqtnfYa-1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="IzvpqjJyVz1lPJqtnfYa-9" value="">
+        <mxCell id="e4" edge="1" parent="1" source="supabase" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;strokeColor=#666666;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#1A1A1A;exitX=0.75;exitY=0;entryX=0;entryY=0.5;" target="worker" value="queue polling">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="IzvpqjJyVz1lPJqtnfYa-1" parent="1" style="shape=hexagon;perimeter=hexagonPerimeter2;whiteSpace=wrap;html=1;fixedSize=1;fontStyle=1" value="Curriculum&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;span style=&quot;font-weight: 400;&quot;&gt;Source of Truth&lt;/span&gt;&lt;/div&gt;" vertex="1">
-          <mxGeometry height="120" width="180" x="290" y="160" as="geometry" />
-        </mxCell>
-        <mxCell id="PHaJc5-IfKH5OD-_IDpn-11" edge="1" parent="1" source="IzvpqjJyVz1lPJqtnfYa-3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="IzvpqjJyVz1lPJqtnfYa-1" value="Upload to PgVector database">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="IzvpqjJyVz1lPJqtnfYa-3" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="Curriculum Generation&lt;div&gt;(Document Upload)&lt;/div&gt;" vertex="1">
-          <mxGeometry height="60" width="120" x="320" y="40" as="geometry" />
-        </mxCell>
-        <mxCell id="IzvpqjJyVz1lPJqtnfYa-14" edge="1" parent="1" source="IzvpqjJyVz1lPJqtnfYa-7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="PHaJc5-IfKH5OD-_IDpn-12">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="IzvpqjJyVz1lPJqtnfYa-7" parent="1" style="whiteSpace=wrap;html=1;fontStyle=1;" value="Mastery Tracking" vertex="1">
-          <mxGeometry height="60" width="120" x="60" y="190" as="geometry" />
-        </mxCell>
-        <mxCell id="PHaJc5-IfKH5OD-_IDpn-13" edge="1" parent="1" source="IzvpqjJyVz1lPJqtnfYa-9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="PHaJc5-IfKH5OD-_IDpn-12" value="">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="IzvpqjJyVz1lPJqtnfYa-9" parent="1" style="whiteSpace=wrap;html=1;fontStyle=1;" value="Sandbox Exercises" vertex="1">
-          <mxGeometry height="60" width="120" x="320" y="390" as="geometry" />
-        </mxCell>
-        <mxCell id="IzvpqjJyVz1lPJqtnfYa-13" edge="1" parent="1" source="IzvpqjJyVz1lPJqtnfYa-11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="PHaJc5-IfKH5OD-_IDpn-12">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="IzvpqjJyVz1lPJqtnfYa-11" parent="1" style="whiteSpace=wrap;html=1;fontStyle=1;" value="Content Curation + Presentation" vertex="1">
-          <mxGeometry height="60" width="120" x="580" y="190" as="geometry" />
-        </mxCell>
-        <mxCell id="PHaJc5-IfKH5OD-_IDpn-12" parent="1" style="whiteSpace=wrap;html=1;fontStyle=1;" value="Really Pretty UI" vertex="1">
-          <mxGeometry height="60" width="120" x="320" y="560" as="geometry" />
-        </mxCell>
-        <mxCell id="IzvpqjJyVz1lPJqtnfYa-17" edge="1" parent="1" source="PHaJc5-IfKH5OD-_IDpn-20" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="IzvpqjJyVz1lPJqtnfYa-16" value="">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="PHaJc5-IfKH5OD-_IDpn-20" parent="1" style="whiteSpace=wrap;html=1;fontStyle=1;" value="Mastery Tracking&lt;div&gt;&lt;span style=&quot;font-weight: normal;&quot;&gt;Updating flow&lt;/span&gt;&lt;/div&gt;" vertex="1">
-          <mxGeometry height="60" width="120" x="1520" y="40" as="geometry" />
-        </mxCell>
-        <mxCell id="PHaJc5-IfKH5OD-_IDpn-23" edge="1" parent="1" source="IzvpqjJyVz1lPJqtnfYa-15" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="PHaJc5-IfKH5OD-_IDpn-22" value="">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="IzvpqjJyVz1lPJqtnfYa-15" parent="1" style="whiteSpace=wrap;html=1;fontStyle=1;" value="Content Curation + Presentation&lt;div&gt;&lt;span style=&quot;font-weight: normal;&quot;&gt;Creation flow&lt;/span&gt;&lt;/div&gt;" vertex="1">
-          <mxGeometry height="60" width="120" x="1080" y="40" as="geometry" />
-        </mxCell>
-        <mxCell id="PHaJc5-IfKH5OD-_IDpn-29" edge="1" parent="1" source="PHaJc5-IfKH5OD-_IDpn-22" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="PHaJc5-IfKH5OD-_IDpn-31" value="">
+        <mxCell id="e5" edge="1" parent="1" source="api" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;strokeColor=#666666;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#1A1A1A;exitX=0.5;exitY=1;entryX=0.5;entryY=1;" target="gateway" value="internal HTTP">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="1140" y="300" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="710" y="540" />
+              <mxPoint x="1335" y="540" />
+            </Array>
           </mxGeometry>
         </mxCell>
-        <mxCell id="PHaJc5-IfKH5OD-_IDpn-41" edge="1" parent="1" source="PHaJc5-IfKH5OD-_IDpn-22" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="PHaJc5-IfKH5OD-_IDpn-39">
+        <mxCell id="e6" edge="1" parent="1" source="worker" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;strokeColor=#666666;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#1A1A1A;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" target="gateway" value="generation + embeddings">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="PHaJc5-IfKH5OD-_IDpn-42" edge="1" parent="1" source="PHaJc5-IfKH5OD-_IDpn-22" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="PHaJc5-IfKH5OD-_IDpn-37">
+        <mxCell id="e7" edge="1" parent="1" source="gateway" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;strokeColor=#666666;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#1A1A1A;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" target="providers" value="provider API">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="PHaJc5-IfKH5OD-_IDpn-22" parent="1" style="whiteSpace=wrap;html=1;fontStyle=1;" value="&lt;div&gt;RAG&lt;/div&gt;&lt;span style=&quot;font-weight: normal;&quot;&gt;PgVector&lt;/span&gt;" vertex="1">
-          <mxGeometry height="60" width="120" x="1080" y="160" as="geometry" />
+        <mxCell id="e8" edge="1" parent="1" source="api" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;strokeColor=#666666;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#1A1A1A;exitX=0.75;exitY=1;entryX=0.25;entryY=0;" target="sandbox" value="run + submit">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="755" y="550" />
+              <mxPoint x="1288" y="550" />
+            </Array>
+          </mxGeometry>
         </mxCell>
-        <mxCell id="PHaJc5-IfKH5OD-_IDpn-31" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="For every topic in the curriculum, generate a lesson" vertex="1">
-          <mxGeometry height="60" width="120" x="1080" y="280" as="geometry" />
+        <mxCell id="e9" edge="1" parent="1" source="worker" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;strokeColor=#666666;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#1A1A1A;exitX=1;exitY=0.5;entryX=1;entryY=0.25;" target="sandbox" value="validate lesson bundles">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1510" y="280" />
+              <mxPoint x="1510" y="625" />
+            </Array>
+          </mxGeometry>
         </mxCell>
-        <mxCell id="PHaJc5-IfKH5OD-_IDpn-36" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="Plan, Implement, Review loop" vertex="1">
-          <mxGeometry height="30" width="230" x="265" y="690" as="geometry" />
-        </mxCell>
-        <mxCell id="IzvpqjJyVz1lPJqtnfYa-19" edge="1" parent="1" source="IzvpqjJyVz1lPJqtnfYa-16" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="IzvpqjJyVz1lPJqtnfYa-18" value="">
+        <mxCell id="e10" edge="1" parent="1" source="sandbox" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;strokeColor=#666666;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#1A1A1A;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" target="docker" value="Docker socket">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="IzvpqjJyVz1lPJqtnfYa-16" parent="1" style="whiteSpace=wrap;html=1;fontStyle=1;" value="&lt;span style=&quot;font-weight: normal;&quot;&gt;Track user and store in mongodb&lt;/span&gt;" vertex="1">
-          <mxGeometry height="60" width="120" x="1520" y="160" as="geometry" />
+        <mxCell id="e11" edge="1" parent="1" source="web" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;strokeColor=#AAAAAA;strokeWidth=1.5;dashed=1;dashPattern=6 3;endArrow=block;endFill=1;fontSize=10;fontColor=#666666;fontStyle=2;exitX=0.5;exitY=0;entryX=0.5;entryY=0;" target="supabase" value="Auth + signed uploads">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="435" y="350" />
+              <mxPoint x="1000" y="350" />
+            </Array>
+          </mxGeometry>
         </mxCell>
-        <mxCell id="IzvpqjJyVz1lPJqtnfYa-18" parent="1" style="whiteSpace=wrap;html=1;fontStyle=1;" value="&lt;span style=&quot;font-weight: 400;&quot;&gt;Update the &quot;next&quot; lesson/sandbox based on user performance&lt;/span&gt;" vertex="1">
-          <mxGeometry height="60" width="120" x="1520" y="280" as="geometry" />
+        <mxCell id="legend-blue" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0066CC;strokeColor=#004499;arcSize=12;" value="" vertex="1">
+          <mxGeometry height="22" width="28" x="450" y="950" as="geometry" />
         </mxCell>
-        <mxCell id="PHaJc5-IfKH5OD-_IDpn-37" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="Generate small exercises in each lesson" vertex="1">
-          <mxGeometry height="60" width="120" x="1280" y="160" as="geometry" />
+        <mxCell id="legend-blue-text" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=12;fontColor=#1A1A1A;" value="Durable platform or external managed service" vertex="1">
+          <mxGeometry height="22" width="280" x="488" y="950" as="geometry" />
         </mxCell>
-        <mxCell id="PHaJc5-IfKH5OD-_IDpn-39" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="Generate sandbox content for each lesson" vertex="1">
-          <mxGeometry height="60" width="120" x="880" y="160" as="geometry" />
+        <mxCell id="legend-orange" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FF6B35;strokeColor=#CC4400;arcSize=12;" value="" vertex="1">
+          <mxGeometry height="22" width="28" x="805" y="950" as="geometry" />
         </mxCell>
-        <mxCell id="PHaJc5-IfKH5OD-_IDpn-45" edge="1" parent="1" source="PHaJc5-IfKH5OD-_IDpn-43" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" target="PHaJc5-IfKH5OD-_IDpn-44">
-          <mxGeometry relative="1" as="geometry" />
+        <mxCell id="legend-orange-text" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=12;fontColor=#1A1A1A;" value="Canopy application or processing service" vertex="1">
+          <mxGeometry height="22" width="280" x="843" y="950" as="geometry" />
         </mxCell>
-        <mxCell id="PHaJc5-IfKH5OD-_IDpn-43" parent="1" style="whiteSpace=wrap;html=1;fontStyle=1;" value="Sandbox" vertex="1">
-          <mxGeometry height="60" width="120" x="1080" y="440" as="geometry" />
-        </mxCell>
-        <mxCell id="PHaJc5-IfKH5OD-_IDpn-44" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="&lt;div&gt;&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp;Next.js&lt;/div&gt;&lt;div&gt;&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; |&lt;/div&gt;&lt;div&gt;&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp;REST / WebSocket API&lt;/div&gt;&lt;div&gt;&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; |&lt;/div&gt;&lt;div&gt;&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; FastAPI&lt;/div&gt;&lt;div&gt;&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; ┌─────────┴─────────┐&lt;/div&gt;&lt;div&gt;&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; │&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp;│&lt;/div&gt;&lt;div&gt;&amp;nbsp; &amp;nbsp;Azure OpenAI&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp;Docker SDK&lt;/div&gt;&lt;div&gt;&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; │&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp;│&lt;/div&gt;&lt;div&gt;&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; └─────────┬─────────┘&lt;/div&gt;&lt;div&gt;&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; │&lt;/div&gt;&lt;div&gt;&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp;Sandbox Containers&lt;/div&gt;" vertex="1">
-          <mxGeometry height="210" width="310" x="985" y="560" as="geometry" />
+        <mxCell id="legend-dashed-text" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=12;fontColor=#666666;" value="—:—  limited browser-to-Supabase access (Auth + signed uploads)" vertex="1">
+          <mxGeometry height="22" width="420" x="1180" y="950" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>

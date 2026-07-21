@@ -30,3 +30,7 @@ supabase/.temp/
 .DS_Store
 Thumbs.db
 .vscode/
+
+# draw.io editor auto-backups
+*.bkp
+.\$*.dtmp
