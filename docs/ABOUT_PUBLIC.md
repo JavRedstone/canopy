@@ -188,7 +188,7 @@ The source is ingested and indexed for retrieval. GPT-5.6 then uses the learner'
 
 Planning happens once at the course level. Once the concept graph is fixed, the worker generates lessons, quizzes, worked examples, practice items, and coding labs through separate jobs.
 
-![How Canopy turns an uploaded source into a verified course](assets/diagrams/generation-pipeline.png)
+![How Canopy turns an uploaded source into a verified course](https://github.com/JavRedstone/canopy/raw/main/docs/assets/diagrams/generation-pipeline.png)
 
 This separates high-stakes planning from high-volume content generation and keeps every lesson grounded in the learner's original material.
 
@@ -198,7 +198,7 @@ GPT-5.6 is not a chatbot added beside Canopy. It generates and evaluates the pro
 
 Canopy routes each task based on its stakes and volume. High-stakes decisions use the flagship **Sol** tier, while high-volume generation and interaction use the faster **Luna** tier.
 
-![GPT-5.6 task routing: planning and lab repair on the Sol tier, generation and the learning helper on the Luna tier](assets/diagrams/model-routing.png)
+![GPT-5.6 task routing: planning and lab repair on the Sol tier, generation and the learning helper on the Luna tier](https://github.com/JavRedstone/canopy/raw/main/docs/assets/diagrams/model-routing.png)
 
 | Task                          | Model tier        | Why                                                                                         |
 | ----------------------------- | ----------------- | ------------------------------------------------------------------------------------------- |
@@ -218,7 +218,7 @@ The hardest engineering problem was safely generating coding labs that learners 
 
 Canopy uses a bounded generate, execute, repair, and re-verify loop:
 
-![The bounded generate, execute, repair and re-verify loop that every coding lab passes through before a learner sees it](assets/diagrams/lab-repair-loop.png)
+![The bounded generate, execute, repair and re-verify loop that every coding lab passes through before a learner sees it](https://github.com/JavRedstone/canopy/raw/main/docs/assets/diagrams/lab-repair-loop.png)
 
 The model receives the actual traceback, compiler error, or failed assertion from the sandbox rather than a synthetic description of the problem.
 
@@ -248,7 +248,7 @@ Low-stakes practice can improve the learner's estimate, but it is capped below t
 
 When a learner repeatedly struggles, Canopy checks the prerequisite graph and recommends earlier concepts that have already been attempted but remain weak.
 
-![Quiz results feed the Understand track and coding submissions feed Apply; together they drive per-concept mastery and prerequisite-aware review](assets/diagrams/mastery-model.png)
+![Quiz results feed the Understand track and coding submissions feed Apply; together they drive per-concept mastery and prerequisite-aware review](https://github.com/JavRedstone/canopy/raw/main/docs/assets/diagrams/mastery-model.png)
 
 Together, these systems allow Canopy to generate learning content, verify the work it creates, and adapt recommendations using evidence from the learner's actual performance.
 
